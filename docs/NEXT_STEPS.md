@@ -2,17 +2,26 @@
 
 This document outlines the pending improvements and optimizations for the R Quadrant VS Code extension to be tackled in the next development session.
 
-## 1. Terminal State Retention (Session Continuity)
+## 1. Session Continuity
 **Current Behavior:**
-When deactivating the quadrant layout (returning to normal view), the existing "R Console" and shell terminals are retained. However, when re-activating the quadrant layout, the extension currently creates brand new terminal instances, causing the user to lose their current R session progress and shell history.
+When deactivating the quadrant layout, the extension currently disposes of all custom panels (Plots, Data Viewer, Help, etc.) and creates brand new terminal instances upon re-activation. This causes the user to lose their current R session progress, shell history, and the state of their analysis panels.
 
 **Goal:**
-Ensure that users never lose their active session state when toggling the quadrant view.
+Ensure that users never lose their active session state when toggling the quadrant view. All tabs should be preserved and relocated rather than recreated.
 
-**Proposed Implementation:**
-- Before creating new terminals during layout activation, scan `vscode.window.terminals` for existing instances of the "R Console" and the default shell.
-- If they exist, **reuse them** instead of calling `vscode.window.createTerminal()`.
-- Because we cannot pass `location: { viewColumn: Two }` to an already existing terminal, we will need to programmatically focus the preserved terminal's tab and use VS Code's layout commands (e.g., `workbench.action.moveEditorToSecondGroup`) to relocate it into the bottom-left quadrant.
+**Implementation Phases:**
+- [ ] **Phase 1: Terminal Retention (Priority)**
+    - Scan `vscode.window.terminals` for "R Console" and default "Terminal".
+    - Reuse existing instances and relocate them to `ViewColumn.Two` using layout commands.
+- [ ] **Phase 2: Analysis Panel Retention**
+    - Modify `deactivateLayout` to stop disposing of `PlotsPanel`, `DataViewerPanel`, and `HelpPanel`.
+    - Update `activateLayout` to check for existing panels and relocate them to their respective quadrants.
+- [ ] **Phase 3: State Syncing**
+    - Ensure that panels retained from previous sessions correctly sync with the current R environment state.
+
+**Proposed Technical Approach:**
+- For existing terminals/panels, use `vscode.commands.executeCommand` (e.g., `workbench.action.moveEditorToSecondGroup`) to reposition them.
+- Use `vscode.window.tabGroups` to track tab locations during transitions.
 
 ## 2. Layout Activation Speed Optimization
 **Current Behavior:**
