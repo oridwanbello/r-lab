@@ -1,0 +1,90 @@
+{
+  "name": "r-quadrant",
+  "displayName": "R Quadrant",
+  "description": "An RStudio-style 4-pane layout orchestrator for data scientists.",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.107.0"
+  },
+  "categories": [
+    "Other",
+    "Data Science"
+  ],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "R Quadrant",
+      "properties": {
+        "r-quadrant.rConsolePath": {
+          "type": "string",
+          "default": "R",
+          "description": "Path or command for the R Console terminal. Examples: 'R', 'radian', or a full path to the Ark kernel."
+        },
+        "r-quadrant.useArkInteractiveConsole": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, launches a VS Code Jupyter Interactive Window as the R Console instead of a standard terminal. Ideal for using the Ark kernel."
+        },
+        "r-quadrant.plotOutputDir": {
+          "type": "string",
+          "default": ".r-quadrant/plots",
+          "description": "Relative path (from workspace root) to the directory where plot images are saved. The Plot Gallery watches this directory for new files."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "r-quadrant.toggleLayout",
+        "title": "R Quadrant: Toggle Layout",
+        "category": "View"
+      },
+      {
+        "command": "r-quadrant.plotGallery.clear",
+        "title": "R Quadrant: Clear Plot Gallery",
+        "category": "View"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "workbench.action.focusSecondEditorGroup",
+        "key": "cmd+j",
+        "when": "r-quadrant.layoutActive"
+      },
+      {
+        "command": "workbench.action.focusThirdEditorGroup",
+        "key": "cmd+alt+b",
+        "when": "r-quadrant.layoutActive"
+      },
+      {
+        "command": "r-quadrant.noop",
+        "key": "cmd+shift+i",
+        "when": "r-quadrant.layoutActive"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "package": "webpack --mode production --devtool hidden-source-map",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.107.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "typescript-eslint": "^8.56.1",
+    "eslint": "^9.39.3",
+    "typescript": "^5.9.3",
+    "ts-loader": "^9.5.4",
+    "webpack": "^5.105.3",
+    "webpack-cli": "^6.0.1",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}
