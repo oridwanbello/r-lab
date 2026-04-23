@@ -1,0 +1,33 @@
+name: Branch-Logic-Check
+on:
+    pull_request:
+        branches: [ dev, staging, main ]
+
+jobs:
+    enforce-logic:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Check PR Source
+              run: |
+                  echo "Target Branch: ${{ github.base_ref }}"
+                  echo "Source Branch: ${{ github.head_ref }}"
+
+                  # Rule: Only feature/* or bugfix/* can go into dev
+                  if [[ "${{ github.base_ref }}" == "dev" ]]; then
+                    if [[ ! "${{ github.head_ref }}" =~ ^(feature|bugfix)/ ]]; then
+                      echo "ERROR: Only feature/ or bugfix/ branches can be merged into dev."
+                      exit 1
+                    fi
+                  fi
+
+                  # Rule: Only dev can go into staging
+                  if [[ "${{ github.base_ref }}" == "staging" && "${{ github.head_ref }}" != "dev" ]]; then
+                    echo "ERROR: Only the 'dev' branch can be merged into 'staging'."
+                    exit 1
+                  fi
+
+                  # Rule: Only staging can go into main
+                  if [[ "${{ github.base_ref }}" == "main" && "${{ github.head_ref }}" != "staging" ]]; then
+                    echo "ERROR: Only the 'staging' branch can be merged into 'main'."
+                    exit 1
+                  fi
