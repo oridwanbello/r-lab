@@ -88,6 +88,10 @@ export class WorkspacePanel {
         this._onRequestDataView = callback;
     }
 
+    public reveal(): void {
+        this._panel.reveal(undefined, true);
+    }
+
     private _toggleAutoRefresh(): void {
         if (this._autoRefreshInterval) {
             clearInterval(this._autoRefreshInterval);

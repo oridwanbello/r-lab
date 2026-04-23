@@ -10,10 +10,10 @@ When deactivating the quadrant layout, the extension currently disposes of all c
 Ensure that users never lose their active session state when toggling the quadrant view. All tabs should be preserved and relocated rather than recreated.
 
 **Implementation Phases:**
-- [ ] **Phase 1: Terminal Retention (Priority)**
+- [x] **Phase 1: Terminal Retention (Priority)**
     - Scan `vscode.window.terminals` for "R Console" and default "Terminal".
     - Reuse existing instances and relocate them to `ViewColumn.Two` using layout commands.
-- [ ] **Phase 2: Analysis Panel Retention**
+- [x] **Phase 2: Analysis Panel Retention**
     - Modify `deactivateLayout` to stop disposing of `PlotsPanel`, `DataViewerPanel`, and `HelpPanel`.
     - Update `activateLayout` to check for existing panels and relocate them to their respective quadrants.
 - [ ] **Phase 3: State Syncing**

@@ -292,8 +292,11 @@ export async function collapseLayoutForShutdown(): Promise<void> {
 
 async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     activationInProgress = true;
-    // 1. Save references to all currently open TEXT files
-    //    so we can reopen them in group 1 after setting the layout.
+    // 1. Load saved positions, and Save references to all currently open TEXT files
+    //    so we can reopen them after setting the layout.
+    const textFilePositions = context.workspaceState.get<Record<string, number>>('r-quadrant.textFilePositions', {});
+    const panelPositions = context.workspaceState.get<Record<string, number>>('r-quadrant.panelPositions', {});
+
     const openFiles: vscode.Uri[] = [];
     for (const group of vscode.window.tabGroups.all) {
         for (const tab of group.tabs) {
@@ -303,18 +306,19 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         }
     }
 
-    // 2. Close ALL editors — we need a perfectly clean slate for the
-    //    4-group grid. ViewColumn assignment depends on the order
-    //    groups receive content, so leftover tabs cause chaos.
-    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    // 2. We no longer close all editors here, as we want to preserve text files.
+    //    ViewColumn assignment depends on the order groups receive content,
+    //    so we will be explicit about moving our tabs to the correct groups.
 
-    // 3. Move any pre-existing terminals to the bottom panel so they
-    //    don't interfere with group creation. We'll create fresh ones.
+    // 3. Scan for existing terminals to reuse. We will relocate them to ViewColumn.Two.
+    //    Other terminals are left alone; they were moved to the panel during reset/deactivate.
     for (const t of vscode.window.terminals) {
-        t.dispose();
+        if (t.name === 'R Console') {
+            rConsoleTerminal = t;
+        } else if (t.name === 'Terminal' && !shellTerminal) {
+            shellTerminal = t;
+        }
     }
-    rConsoleTerminal = undefined;
-    shellTerminal = undefined;
 
     // 4. Close sidebars and the bottom panel
     try { await vscode.commands.executeCommand('workbench.action.closeSidebar'); } catch {}
@@ -366,43 +370,36 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     //  Group 2 before Group 1, the ViewColumns all shift.
     // ─────────────────────────────────────────────────────────
 
-    // 8. Group 1 (top-left): Source Editor
-    //    Open user's previously-open files, or leave Group 1 empty.
-    //    We do NOT create an untitled file — the user should see
-    //    a clean editor area that they populate themselves.
-    if (openFiles.length > 0) {
-        for (const uri of openFiles) {
-            try {
-                await vscode.window.showTextDocument(uri, {
-                    viewColumn: vscode.ViewColumn.One,
-                    preview: false,
-                    preserveFocus: true,
-                });
-            } catch {
-                // file may no longer exist, skip silently
-            }
-        }
-    }
-    await delay(100);
+    // 8. Anchor Group 1 by focusing it, so VS Code registers it as ViewColumn.One
+    //    BEFORE any content is placed in Group 2. Without this step, if no text
+    //    files are open, VS Code may assign ViewColumn.One to the first group that
+    //    *receives content* — which would be Group 2 (the terminal), making it land
+    //    in the top-left instead of the bottom-left.
+    //    Focusing alone (no file creation needed) is sufficient to register the group.
+    try { await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'); } catch {}
+    await delay(150);
+    // Immediately focus Group 2 so it is ready for terminal creation below.
+    try { await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup'); } catch {}
+    await delay(150);
 
     // 9. Group 2 (bottom-left): R Console → Terminal → Problems
     //
-    //    IMPORTANT: We always create our own R terminal directly
-    //    instead of using the R extension's r.createRTerm command.
-    //    r.createRTerm checks for an active text editor and shows
-    //    "No text editor active" when there isn't one (which is the
-    //    case during layout setup). It also causes interference
-    //    between R Quadrant and the R extension.
+    //    Strategy for existing terminals (session retention):
+    //      a) Create ProblemsPanel in ViewColumn.Two FIRST — this anchors Group 2
+    //         as a real, focusable editor group before any terminal is moved.
+    //      b) Focus Group 2 (it now has content so focus sticks).
+    //      c) Call terminal.show(false) to make the terminal the active one
+    //         in the panel without stealing editor focus away from Group 2.
+    //      d) Call moveToEditor — moves the active panel terminal to the
+    //         currently focused editor group (Group 2). ✓
     //
-    //    FIX FOR EMPTY TERMINAL TABS: After setEditorLayout, VS Code's
-    //    internal group registry needs time to settle before terminals
-    //    can correctly bind to a ViewColumn. We must:
-    //      a) Focus group 2 explicitly before creating each terminal
-    //      b) Wait between each terminal creation
-    //    Without this, terminals are created before VS Code knows what
-    //    group "ViewColumn.Two" maps to, producing blank/empty tabs.
+    //    For NEW terminals, createTerminal with location.viewColumn is reliable.
     const config = vscode.workspace.getConfiguration('r-quadrant');
     const useArk = config.get<boolean>('useArkInteractiveConsole', false);
+
+    // 9a. Anchor Group 2 with ProblemsPanel before any terminal placement.
+    ProblemsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
+    await delay(200);
 
     if (useArk) {
         // Ark kernel mode — use Jupyter Interactive
@@ -416,27 +413,30 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
             }, 800);
         } catch {
             // Fallback to standard terminal
-            await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
-            await delay(150);
-            rConsoleTerminal = vscode.window.createTerminal({
-                name: 'R Console',
-                shellPath: resolveRPath(config),
-                location: { viewColumn: vscode.ViewColumn.Two },
-            });
-            rConsoleTerminal.show(true);
+            if (rConsoleTerminal) {
+                rConsoleTerminal.show(false);
+                await delay(100);
+                await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+                await delay(100);
+                await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
+            } else {
+                rConsoleTerminal = vscode.window.createTerminal({
+                    name: 'R Console',
+                    shellPath: resolveRPath(config),
+                    location: { viewColumn: vscode.ViewColumn.Two },
+                });
+                rConsoleTerminal.show(false);
+            }
         }
     } else {
-        // Delete stale workspace data from previous session so the
-        // panel shows empty/loading rather than outdated variables.
+        // Delete stale workspace data only if we're creating a fresh R session.
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        if (wf) {
+        if (wf && !rConsoleTerminal) {
             const staleFile = path.join(wf, '.r-quadrant', '.workspace_data.json');
             try { fs.unlinkSync(staleFile); } catch {}
         }
 
         // Build the watcher Rprofile BEFORE creating the terminal.
-        // Passing it as R_PROFILE_USER means R sources it silently
-        // at startup — nothing appears in the console.
         const watcherPath = _buildWatcherRprofile();
         const rProfileEnv: Record<string, string> = {};
         if (watcherPath) {
@@ -445,48 +445,82 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
             if (existing) { rProfileEnv['R_PROFILE_USER_ORIG'] = existing; }
         }
 
-        await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
-        await delay(150);
-        rConsoleTerminal = vscode.window.createTerminal({
-            name: 'R Console',
-            shellPath: resolveRPath(config),
-            location: { viewColumn: vscode.ViewColumn.Two },
-            env: Object.keys(rProfileEnv).length > 0 ? rProfileEnv : undefined,
-        });
-        rConsoleTerminal.show(true);
+    if (rConsoleTerminal) {
+            // Reuse the existing terminal — do NOT recreate (that kills the R session).
+            // show(false) = focus the terminal in panel (making it the active terminal)
+            // but immediately re-grab editor focus on Group 2 before moveToEditor fires.
+            rConsoleTerminal.show(false);
+            await delay(100);
+            await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+            await delay(100);
+            await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
+        } else {
+            rConsoleTerminal = vscode.window.createTerminal({
+                name: 'R Console',
+                shellPath: resolveRPath(config),
+                location: { viewColumn: vscode.ViewColumn.Two },
+                env: Object.keys(rProfileEnv).length > 0 ? rProfileEnv : undefined,
+            });
+            rConsoleTerminal.show(false);
+        }
     }
 
-    // Shell terminal: refocus group 2 and wait again before creating.
-    // Creating two terminals back-to-back without a pause causes the
-    // second one to sometimes open as an empty/blank tab.
+    // Shell terminal
     await delay(200);
-    await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
-    await delay(100);
-    shellTerminal = vscode.window.createTerminal({
-        name: 'Terminal',
-        location: { viewColumn: vscode.ViewColumn.Two },
-    });
-    shellTerminal.show(true);
+    if (shellTerminal) {
+        shellTerminal.show(false);
+        await delay(100);
+        await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+        await delay(100);
+        await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
+    } else {
+        shellTerminal = vscode.window.createTerminal({
+            name: 'Terminal',
+            location: { viewColumn: vscode.ViewColumn.Two },
+        });
+        shellTerminal.show(false);
+    }
 
+    // ProblemsPanel: dispose the anchor instance and recreate so it becomes the
+    // LAST tab in Group 2, giving order: R Console → Terminal → Problems.
+    await delay(100);
+    ProblemsPanel.currentPanel?.dispose();
     await delay(100);
     ProblemsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
     await delay(100);
 
-    // 10. Group 3 (top-right): AI Chat + Help
+    // Make R Console the active/visible tab in Group 2.
+    // show(true) = reveal in the editor without stealing keyboard focus.
+    if (rConsoleTerminal) { rConsoleTerminal.show(true); }
+
+    // 10. Group 3 (top-right): Chat → Help  (Chat FIRST, Chat FOCUSED)
+    //     Open Chat first so it is the leftmost tab. Then add Help.
+    //     Focus Group 3 afterwards to bring the first tab (Chat) back into view
+    //     WITHOUT calling openInEditor again, which would create a duplicate.
     await openChatInGroup3();
     HelpPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
     await delay(100);
+    // Focus Group 3 and navigate to the first tab (Chat) to make it active.
+    try {
+        await vscode.commands.executeCommand('workbench.action.focusThirdEditorGroup');
+        await vscode.commands.executeCommand('workbench.action.firstEditorInGroup');
+    } catch {}
+    await delay(100);
 
-    // 11. Group 4 (bottom-right): Workspace + Plots + Data Viewer
+    // 11. Group 4 (bottom-right): Workspace → Plots → Data Viewer  (Workspace FIRST, Workspace FOCUSED)
+    //     Create Workspace first (leftmost tab), then Plots, then Data Viewer.
+    //     Reveal Workspace at the end to make it the active/focused tab.
     const workspacePanel = WorkspacePanel.createOrShow(context.extensionUri, vscode.ViewColumn.Four);
     PlotsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Four);
     const dataPanel = DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Four);
+    workspacePanel.reveal(); // restore Workspace as the focused tab in Group 4
 
     // Wire up: clicking "View" on a data.frame in Workspace opens it in Data Viewer
     workspacePanel.onRequestDataView((varName) => {
         dataPanel.loadVariable(varName);
         dataPanel.reveal();
     });
+
 
     // 12. Focus the source editor
     try {
@@ -495,13 +529,42 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         );
     } catch {}
 
-    // 13. Register layout guards that redirect stray content
+    // 13. Now that ViewColumns 1-4 are rigidly locked by default content, 
+    //     we can safely restore saved positions without causing ViewColumn shifting.
+    
+    // Reposition custom panels
+    if (panelPositions['problems'] && panelPositions['problems'] !== vscode.ViewColumn.Two) ProblemsPanel.createOrShow(context.extensionUri, panelPositions['problems']);
+    if (panelPositions['help'] && panelPositions['help'] !== vscode.ViewColumn.Three) HelpPanel.createOrShow(context.extensionUri, panelPositions['help']);
+    if (panelPositions['workspace'] && panelPositions['workspace'] !== vscode.ViewColumn.Four) WorkspacePanel.createOrShow(context.extensionUri, panelPositions['workspace']);
+    if (panelPositions['plots'] && panelPositions['plots'] !== vscode.ViewColumn.Four) PlotsPanel.createOrShow(context.extensionUri, panelPositions['plots']);
+    if (panelPositions['dataViewer'] && panelPositions['dataViewer'] !== vscode.ViewColumn.Four) DataViewerPanel.createOrShow(context.extensionUri, panelPositions['dataViewer']);
+
+    // Reposition text files
+    if (openFiles.length > 0) {
+        for (const uri of openFiles) {
+            const col = textFilePositions[uri.fsPath];
+            if (col && col !== vscode.ViewColumn.One) {
+                try {
+                    await vscode.window.showTextDocument(uri, {
+                        viewColumn: col,
+                        preview: false,
+                        preserveFocus: true,
+                    });
+                } catch {}
+            }
+        }
+    }
+
+    // 14. Register layout guards that redirect stray content
     registerLayoutGuards(context);
 
     // 14. Persist & update UI
     isLayoutActive = true;
     await context.workspaceState.update(STATE_KEY, true);
     updateStatusBar();
+
+    // 15. Ensure bottom panel is closed since we opened terminals
+    try { await vscode.commands.executeCommand('workbench.action.closePanel'); } catch {}
 
     activationInProgress = false;
     vscode.window.showInformationMessage('R Quadrant layout activated.');
@@ -520,15 +583,29 @@ async function deactivateLayout(): Promise<void> {
     // 2. Dispose layout guards immediately so they don't interfere
     disposeLayoutGuards();
 
-    // 3. Save user's text files from group 1 before closing
+    // 3. Save user's text files and custom panel positions before closing
     const sourceFiles: vscode.Uri[] = [];
+    const textFilePositions: Record<string, number> = {};
+    const panelPositions: Record<string, number> = {};
+
     for (const group of vscode.window.tabGroups.all) {
         for (const tab of group.tabs) {
             if (tab.input instanceof vscode.TabInputText) {
                 sourceFiles.push(tab.input.uri);
+                textFilePositions[tab.input.uri.fsPath] = group.viewColumn;
+            } else if (tab.input instanceof vscode.TabInputWebview) {
+                if (tab.label === 'Plots') panelPositions['plots'] = group.viewColumn;
+                else if (tab.label === 'Help') panelPositions['help'] = group.viewColumn;
+                else if (tab.label === 'Workspace') panelPositions['workspace'] = group.viewColumn;
+                else if (tab.label === 'Data Viewer') panelPositions['dataViewer'] = group.viewColumn;
+                else if (tab.label === 'Problems') panelPositions['problems'] = group.viewColumn;
             }
         }
     }
+    
+    // Save to workspaceState
+    await extensionContext.workspaceState.update('r-quadrant.textFilePositions', textFilePositions);
+    await extensionContext.workspaceState.update('r-quadrant.panelPositions', panelPositions);
 
     // 4. Dispose panel singletons (closes our Webview tabs)
     PlotsPanel.currentPanel?.dispose();
@@ -538,21 +615,34 @@ async function deactivateLayout(): Promise<void> {
     DataViewerPanel.currentPanel?.dispose();
 
     // 5. Move ALL terminals back to the bottom panel.
-    //    We iterate because moveToTerminalPanel only moves the active one.
-    const terminalCount = vscode.window.terminals.length;
-    if (terminalCount > 0) {
-        for (let i = 0; i < terminalCount; i++) {
+    //    We focus Group 2 (where terminal tabs live during quadrant mode) and
+    //    call moveToTerminalPanel once per terminal. We deliberately do NOT call
+    //    t.show() here — show() opens the terminal panel which can trigger VS Code
+    //    to auto-create a new default bash terminal before ours arrive.
+    const termCount = vscode.window.terminals.length;
+    if (termCount > 0) {
+        try { await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup'); } catch {}
+        await delay(100);
+        for (let i = 0; i < termCount; i++) {
             try {
-                // Focus the next terminal in the editor, then move it
                 await vscode.commands.executeCommand('workbench.action.terminal.moveToTerminalPanel');
+                await delay(100);
             } catch {}
         }
     }
     rConsoleTerminal = undefined;
     shellTerminal = undefined;
 
-    // 6. Close any remaining non-text editor tabs (stray webviews, etc.)
-    await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+    // 6. Close non-text tabs (like AI Chat) to keep the normal view clean.
+    //    We explicitly ignore TabInputTerminal so we don't accidentally kill terminals
+    //    if the moveToTerminalPanel command was slow.
+    for (const group of vscode.window.tabGroups.all) {
+        for (const tab of group.tabs) {
+            if (!(tab.input instanceof vscode.TabInputText) && !(tab.input instanceof vscode.TabInputTerminal)) {
+                try { await vscode.window.tabGroups.close(tab); } catch {}
+            }
+        }
+    }
 
     // 7. Reset to single editor group
     await vscode.commands.executeCommand('vscode.setEditorLayout', {
