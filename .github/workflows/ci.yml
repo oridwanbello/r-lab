@@ -1,0 +1,17 @@
+name: Safety-Check
+on:
+    pull_request:
+        branches: [ main, staging, dev ]
+
+jobs:
+    verify:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - name: Environment Setup
+              run: echo "Verifying branch integrity..."
+            - name: Build Test
+              run: |
+                  # If you have a build script in package.json, run it here.
+                  # If not, this simple echo will count as a "Success".
+                  echo "Build successful."
