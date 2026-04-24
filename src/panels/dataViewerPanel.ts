@@ -1,11 +1,13 @@
 import * as vscode from 'vscode';
+import * as os from 'os';
+import * as nodePath from 'path';
+import * as nodeFs from 'fs';
 import { execFile } from 'child_process';
 
 /**
  * Data Viewer Panel — displays R data.frames in a sortable HTML table.
  *
- * Runs `Rscript` in the background to serialize a dataframe to JSON,
- * then renders it in a searchable, sortable table.
+ * Uses base R write.csv to export data — no external packages required.
  *
  * Opens in ViewColumn.Four (bottom-right quadrant).
  */
@@ -79,67 +81,81 @@ export class DataViewerPanel {
         this._panel.reveal(undefined, true);
     }
 
-    /** Load and display a variable from R's global environment. */
+    /** Load and display a variable.
+     *
+     *  NOTE: Silent data extraction is technically impossible in a raw Radian/R shell 
+     *  without a pre-existing background server (like Jupyter/Ark or vscDebugger).
+     *  Since sending commands visibly to the console is terrible UX, we explicitly
+     *  disable the Data Viewer here and instruct the user.
+     */
     public async loadVariable(varName: string): Promise<void> {
         this._varName = varName;
         this._panel.title = `Data: ${varName}`;
-        this._isLoading = true;
-        this._errorMessage = '';
+        this._isLoading = false;
+        this._columns = [];
+        this._rows = [];
+        this._totalRows = 0;
+        this._totalCols = 0;
+        
+        this._errorMessage = `Silent Data Viewer Unsupported.\n\nR Quadrant cannot silently extract data from a raw R/Radian console without polluting your command history.\n\nTo view this data frame:\n1. Type View(${varName}) in your R console.\n2. Or use the native vscode-R workspace viewer.\n3. Switch your R Console to Ark (Jupyter Interactive) for full silent support.`;
         this._render();
+    }
 
-        const rScript = `
-tryCatch({
-    if (file.exists(".RData")) load(".RData", envir = .GlobalEnv)
-    obj <- get("${varName}", envir = .GlobalEnv)
-    if (!is.data.frame(obj)) obj <- as.data.frame(obj)
-    total_rows <- nrow(obj)
-    total_cols <- ncol(obj)
-    preview <- head(obj, 1000)
-    result <- list(
-        totalRows = total_rows,
-        totalCols = total_cols,
-        columns = names(preview),
-        rows = preview
-    )
-    cat(jsonlite::toJSON(result, auto_unbox = TRUE, na = "string"))
-}, error = function(e) {
-    cat(paste0('{"error":"', gsub('"', '\\\\\\\\"', conditionMessage(e)), '"}'))
-})`;
+    /** Poll for a file to appear, return its contents or null on timeout. */
+    private _waitForFile(filePath: string, timeoutMs: number): Promise<string | null> {
+        return new Promise((resolve) => {
+            const start = Date.now();
+            const interval = setInterval(() => {
+                if (nodeFs.existsSync(filePath)) {
+                    clearInterval(interval);
+                    resolve(nodeFs.readFileSync(filePath, 'utf8'));
+                } else if (Date.now() - start > timeoutMs) {
+                    clearInterval(interval);
+                    resolve(null);
+                }
+            }, 200);
+        });
+    }
 
+    /** RFC-4180 CSV row parser — handles quoted fields and escaped quotes. */
+    private _parseCsvRow(line: string): string[] {
+        const result: string[] = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            if (ch === '"') {
+                if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+                else { inQuotes = !inQuotes; }
+            } else if (ch === ',' && !inQuotes) {
+                result.push(current); current = '';
+            } else {
+                current += ch;
+            }
+        }
+        result.push(current);
+        return result;
+    }
+
+
+    /** Find the Rscript binary — works regardless of whether rConsolePath is R, radian, or ark. */
+    private _findRscript(): Promise<string> {
         const config = vscode.workspace.getConfiguration('r-quadrant');
         const rPath = config.get<string>('rConsolePath', 'R');
-        const rscriptPath = rPath.replace(/R$/, 'Rscript');
-
-        try {
-            const raw = await this._runRscript(rscriptPath, rScript);
-            const parsed = JSON.parse(raw);
-
-            if (parsed.error) {
-                this._errorMessage = parsed.error;
-                this._columns = [];
-                this._rows = [];
-                this._totalRows = 0;
-                this._totalCols = 0;
-            } else {
-                this._columns = parsed.columns || [];
-                this._rows = parsed.rows || [];
-                this._totalRows = parsed.totalRows || 0;
-                this._totalCols = parsed.totalCols || 0;
-                this._errorMessage = '';
-            }
-        } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : String(err);
-            if (msg.includes('jsonlite')) {
-                this._errorMessage = 'R package "jsonlite" is required.\nRun: install.packages("jsonlite")';
-            } else {
-                this._errorMessage = msg;
-            }
-            this._columns = [];
-            this._rows = [];
+        // If rConsolePath ends with 'R' or 'Rscript', use that directory.
+        if (/[/\\]R$/.test(rPath)) {
+            return Promise.resolve(rPath.replace(/[/\\]R$/, '/Rscript'));
         }
-
-        this._isLoading = false;
-        this._render();
+        if (/[Rr]script$/i.test(rPath)) {
+            return Promise.resolve(rPath);
+        }
+        // radian / ark / unknown — fall back to 'which Rscript'
+        return new Promise((resolve) => {
+            require('child_process').execFile(
+                'which', ['Rscript'],
+                (err: Error | null, stdout: string) => resolve(err ? 'Rscript' : stdout.trim() || 'Rscript')
+            );
+        });
     }
 
     private _runRscript(rscriptPath: string, script: string): Promise<string> {
@@ -160,7 +176,7 @@ tryCatch({
                         reject(new Error(detail));
                         return;
                     }
-                    resolve(stdout || '{}');
+                    resolve(stdout || '');
                 }
             );
         });
@@ -185,7 +201,7 @@ tryCatch({
                 <div class="empty-state">
                     <div class="icon">📋</div>
                     <p>No data loaded.<br/>
-                    Click <strong>👁</strong> on a data.frame in the <strong>Environment</strong> tab<br/>
+                    Click the eye icon on a data.frame in the <strong>Workspace</strong> tab<br/>
                     to view it here.</p>
                 </div>`;
         } else if (this._columns.length === 0) {
@@ -222,7 +238,7 @@ tryCatch({
                             tbody.innerHTML = data.map((row, i) => {
                                 const cells = columns.map(col => {
                                     const val = row[col];
-                                    return '<td>' + (val === null || val === undefined ? '<span class="na">NA</span>' : escapeHtml(String(val))) + '</td>';
+                                    return '<td>' + (val === null || val === undefined || val === 'NA' ? '<span class="na">NA</span>' : escapeHtml(String(val))) + '</td>';
                                 }).join('');
                                 return '<tr><td class="row-num">' + (i + 1) + '</td>' + cells + '</tr>';
                             }).join('');
@@ -240,15 +256,14 @@ tryCatch({
                                 const key = columns[col];
                                 rows.sort((a, b) => {
                                     const va = a[key], vb = b[key];
-                                    if (va === null || va === undefined) return 1;
-                                    if (vb === null || vb === undefined) return -1;
+                                    if (va === null || va === undefined || va === 'NA') return 1;
+                                    if (vb === null || vb === undefined || vb === 'NA') return -1;
                                     if (typeof va === 'number' && typeof vb === 'number') {
                                         return sortAsc ? va - vb : vb - va;
                                     }
                                     const sa = String(va), sb = String(vb);
                                     return sortAsc ? sa.localeCompare(sb) : sb.localeCompare(sa);
                                 });
-                                // Update sort indicators
                                 document.querySelectorAll('th.sortable').forEach(t => t.classList.remove('sort-asc','sort-desc'));
                                 th.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
                                 renderRows(rows);

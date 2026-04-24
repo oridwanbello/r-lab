@@ -39,6 +39,10 @@ let shellTerminal: vscode.Terminal | undefined;
 let statusBarItem: vscode.StatusBarItem;
 let extensionContext: vscode.ExtensionContext;
 
+export function getRConsoleTerminal(): vscode.Terminal | undefined {
+    return rConsoleTerminal;
+}
+
 const STATE_KEY = 'r-quadrant.layoutActive';
 
 // ── Registration ────────────────────────────────────────────
@@ -311,10 +315,12 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     //    so we will be explicit about moving our tabs to the correct groups.
 
     // 3. Scan for existing terminals to reuse. We will relocate them to ViewColumn.Two.
-    //    Other terminals are left alone; they were moved to the panel during reset/deactivate.
+    //    Track whether we are reusing to avoid wiping workspace data for live sessions.
+    let wasRConsoleReused = false;
     for (const t of vscode.window.terminals) {
-        if (t.name === 'R Console') {
+        if (t.name === 'R Console' && !rConsoleTerminal) {
             rConsoleTerminal = t;
+            wasRConsoleReused = true;
         } else if (t.name === 'Terminal' && !shellTerminal) {
             shellTerminal = t;
         }
@@ -429,9 +435,11 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
             }
         }
     } else {
-        // Delete stale workspace data only if we're creating a fresh R session.
+        // Only delete stale workspace data if we are creating a BRAND-NEW R session.
+        // If we found an existing R Console terminal (wasRConsoleReused), R is still
+        // running and its variables are still live — do NOT wipe the data file.
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        if (wf && !rConsoleTerminal) {
+        if (wf && !wasRConsoleReused) {
             const staleFile = path.join(wf, '.r-quadrant', '.workspace_data.json');
             try { fs.unlinkSync(staleFile); } catch {}
         }
@@ -511,7 +519,10 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     //     Create Workspace first (leftmost tab), then Plots, then Data Viewer.
     //     Reveal Workspace at the end to make it the active/focused tab.
     const workspacePanel = WorkspacePanel.createOrShow(context.extensionUri, vscode.ViewColumn.Four);
-    PlotsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Four);
+    // Note: forceRefresh() is deferred (see end of activation) to give the webview
+    // time to fully render before the message is posted.
+    const plotsPanel = PlotsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Four);
+    plotsPanel.syncPlots(); // catch up on any plots created while layout was closed
     const dataPanel = DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Four);
     workspacePanel.reveal(); // restore Workspace as the focused tab in Group 4
 
@@ -567,6 +578,10 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     try { await vscode.commands.executeCommand('workbench.action.closePanel'); } catch {}
 
     activationInProgress = false;
+    // Deferred refresh: give the Workspace webview ~500ms to fully render after
+    // all layout commands complete, then push the latest R environment state.
+    // Doing this earlier races the webview paint and the message is dropped.
+    setTimeout(() => { WorkspacePanel.currentPanel?.forceRefresh(); }, 500);
     vscode.window.showInformationMessage('R Quadrant layout activated.');
 }
 
@@ -630,8 +645,11 @@ async function deactivateLayout(): Promise<void> {
             } catch {}
         }
     }
-    rConsoleTerminal = undefined;
-    shellTerminal = undefined;
+    // Keep rConsoleTerminal / shellTerminal references alive so the next
+    // activateLayout() can immediately reuse them without re-scanning,
+    // and so Bug 1's `wasRConsoleReused` guard works correctly.
+    // The onDidCloseTerminal listener (registered in registerLayoutCommand)
+    // will null them out if the user manually closes a terminal.
 
     // 6. Close non-text tabs (like AI Chat) to keep the normal view clean.
     //    We explicitly ignore TabInputTerminal so we don't accidentally kill terminals
@@ -816,11 +834,16 @@ async function openChatInGroup3(): Promise<void> {
     }
 
     // ── Step 2: Open VS Code Chat in editor area (Copilot / Chat API) ──
-    await focusGroup3();
-    try {
-        await vscode.commands.executeCommand('workbench.action.chat.openInEditor');
-    } catch {
-        // No chat provider available — that's fine
+    const hasCopilot = aiReport.some(r => r.id.toLowerCase().includes('copilot'));
+    // Only attempt to open the chat in the editor if we actually have an active text editor context,
+    // otherwise VS Code will throw a noisy "No text editor active" popup.
+    if (hasCopilot && vscode.window.activeTextEditor) {
+        await focusGroup3();
+        try {
+            await vscode.commands.executeCommand('workbench.action.chat.openInEditor');
+        } catch {
+            // No chat provider available — that's fine
+        }
     }
 
     // ── Step 3: For non-Copilot AI extensions, try vscode.moveViews ──
@@ -1040,12 +1063,12 @@ function _buildWatcherRprofile(): string | undefined {
     const scriptPath = path.join(outDir, '.workspace_watcher.R');
 
     // Helper R code to snapshot the current workspace — used both at
-    // startup and in the task callback.
+    // startup and in the task callback. We use TSV to avoid base R JSON serialization issues.
     const snapshotCode = `
   tryCatch({
     dir.create(".r-quadrant", showWarnings = FALSE, recursive = TRUE)
     .vars <- ls(envir = .GlobalEnv)
-    .info <- if (length(.vars) == 0) list() else lapply(.vars, function(nm) {
+    .info <- if (length(.vars) == 0) character(0) else vapply(.vars, function(nm) {
       obj <- get(nm, envir = .GlobalEnv)
       cls <- paste(class(obj), collapse = ", ")
       dims <- if (!is.null(dim(obj))) paste(dim(obj), collapse = " x ") else as.character(length(obj))
@@ -1057,16 +1080,16 @@ function _buildWatcherRprofile(): string | undefined {
         else if (length(obj) <= 6) paste(head(obj, 6), collapse = " ")
         else paste0(length(obj), " elements")
       }, error = function(e) "?")
-      list(name = nm, type = cls, size = dims, preview = prev, isDataFrame = is.data.frame(obj))
-    })
-    if (requireNamespace("jsonlite", quietly = TRUE)) {
-      .json <- jsonlite::toJSON(
-        list(variables = .info, loadedNamespaces = loadedNamespaces(), attachedNamespaces = search()),
-        auto_unbox = TRUE
-      )
-      writeLines(as.character(.json), ".r-quadrant/.workspace_data.json")
-    }
+      prev <- gsub("\\\\t|\\\\n|\\\\r", " ", prev)
+      is_df <- if (is.data.frame(obj)) "true" else "false"
+      paste(nm, cls, dims, prev, is_df, sep = "\\t")
+    }, character(1))
+    writeLines(.info, ".r-quadrant/.workspace_vars.tsv")
+    writeLines(loadedNamespaces(), ".r-quadrant/.workspace_loaded.tsv")
+    writeLines(search(), ".r-quadrant/.workspace_attached.tsv")
   }, error = function(e) NULL)`;
+
+
 
     const rCode = `
 # R Quadrant workspace watcher — auto-loaded via R_PROFILE_USER

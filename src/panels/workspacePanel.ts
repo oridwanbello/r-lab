@@ -52,13 +52,25 @@ export class WorkspacePanel {
 
     private constructor(panel: vscode.WebviewPanel) {
         this._panel = panel;
-        this._render();
 
+        // ── Register ALL handlers BEFORE setting HTML ──────────────────────
+        // If _render() runs first, the webview JS executes and sends 'ready'
+        // before onDidReceiveMessage is registered, and the message is dropped.
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
+
+        this._panel.onDidChangeViewState(
+            (e) => { if (e.webviewPanel.visible) { this._refreshWorkspace(); } },
+            null,
+            this._disposables
+        );
 
         this._panel.webview.onDidReceiveMessage(
             async (msg: { type: string; varName?: string }) => {
                 switch (msg.type) {
+                    case 'ready':
+                        // Webview JS loaded — safe to postMessage now.
+                        await this._refreshWorkspace();
+                        break;
                     case 'refresh':
                         await this._refreshWorkspace();
                         break;
@@ -76,13 +88,15 @@ export class WorkspacePanel {
             this._disposables
         );
 
-        // Start auto-refresh by default (every 3 seconds)
+        // Auto-refresh every 3 s
         this._autoRefreshInterval = setInterval(() => {
             this._refreshWorkspace();
         }, 3000);
 
-        this._refreshWorkspace();
+        // Set HTML last — this starts the webview JS which will send 'ready'.
+        this._render();
     }
+
 
     public onRequestDataView(callback: (varName: string) => void): void {
         this._onRequestDataView = callback;
@@ -90,6 +104,11 @@ export class WorkspacePanel {
 
     public reveal(): void {
         this._panel.reveal(undefined, true);
+    }
+
+    /** Force an immediate workspace refresh — called on layout re-activation. */
+    public forceRefresh(): void {
+        this._refreshWorkspace();
     }
 
     private _toggleAutoRefresh(): void {
@@ -205,16 +224,57 @@ tryCatch({
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         if (!wf) { return null; }
 
-        const dataFile = path.join(wf, '.r-quadrant', '.workspace_data.json');
-        if (!fs.existsSync(dataFile)) { return null; }
+        const outDir = path.join(wf, '.r-quadrant');
+        const varsFile = path.join(outDir, '.workspace_vars.tsv');
+        const loadedFile = path.join(outDir, '.workspace_loaded.tsv');
+        const attachedFile = path.join(outDir, '.workspace_attached.tsv');
+
+        // Need at least one of these to exist to consider it a successful read
+        if (!fs.existsSync(varsFile) && !fs.existsSync(loadedFile) && !fs.existsSync(attachedFile)) {
+            return null;
+        }
 
         try {
-            const raw = fs.readFileSync(dataFile, 'utf8');
-            const parsed = JSON.parse(raw);
-            if (parsed.variables) { return parsed; }
-        } catch {}
+            const variables: VariableInfo[] = [];
+            if (fs.existsSync(varsFile)) {
+                const varsRaw = fs.readFileSync(varsFile, 'utf8').trim();
+                if (varsRaw) {
+                    const lines = varsRaw.split('\n');
+                    for (const line of lines) {
+                        const parts = line.split('\t');
+                        if (parts.length >= 5) {
+                            variables.push({
+                                name: parts[0],
+                                type: parts[1],
+                                size: parts[2],
+                                preview: parts[3],
+                                isDataFrame: parts[4] === 'true'
+                            });
+                        }
+                    }
+                }
+            }
 
-        return null;
+            const loadedNamespaces: string[] = [];
+            if (fs.existsSync(loadedFile)) {
+                const loadedRaw = fs.readFileSync(loadedFile, 'utf8').trim();
+                if (loadedRaw) {
+                    loadedNamespaces.push(...loadedRaw.split('\n'));
+                }
+            }
+
+            const attachedNamespaces: string[] = [];
+            if (fs.existsSync(attachedFile)) {
+                const attachedRaw = fs.readFileSync(attachedFile, 'utf8').trim();
+                if (attachedRaw) {
+                    attachedNamespaces.push(...attachedRaw.split('\n'));
+                }
+            }
+
+            return { variables, loadedNamespaces, attachedNamespaces };
+        } catch {
+            return null;
+        }
     }
 
     private _pollVscodeR(): {
@@ -504,11 +564,21 @@ tryCatch({
             font-size: 12px;
         }
         .view-btn {
-            background: none; border: none; cursor: pointer;
-            font-size: 14px; opacity: 0.5; padding: 0 4px;
-            float: right;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+            margin-left: 6px;
+            color: var(--vscode-foreground);
+            opacity: 0.4;
+            vertical-align: middle;
+            flex-shrink: 0;
         }
         .view-btn:hover { opacity: 1; }
+        .view-btn svg { display: block; }
         .status-msg { padding: 20px; text-align: center; opacity: 0.6; }
         .status-msg.error { color: var(--vscode-errorForeground); opacity: 0.9; white-space: pre-wrap; }
         .empty-state {
@@ -599,14 +669,17 @@ tryCatch({
                     if (!msg.variables || msg.variables.length === 0) {
                         globalEl.innerHTML = '<div class="empty-state"><div class="icon">📦</div><p>No variables in the global environment.<br/>Run R code to populate variables, then click <strong>Refresh</strong>.</p></div>';
                     } else {
+                        const EYE = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>';
                         let rows = msg.variables.map(v => {
-                            const viewBtn = v.isDataFrame ? \`<button class="view-btn" data-var="\${escapeHtml(v.name)}" title="View in Data Viewer">👁</button>\` : '';
-                            return \`<tr class="var-row">
-                                <td class="name-col"><span class="var-name">\${escapeHtml(v.name)}</span></td>
-                                <td class="type-col">\${escapeHtml(v.type)}</td>
-                                <td class="size-col">\${escapeHtml(v.size)}</td>
-                                <td class="preview-col">\${escapeHtml(v.preview)}\${viewBtn}</td>
-                                </tr>\`;
+                            const btn = v.isDataFrame
+                                ? '<button class="view-btn" data-var="' + escapeHtml(v.name) + '" title="View in Data Viewer">' + EYE + '</button>'
+                                : '';
+                            return '<tr class="var-row">'
+                                + '<td class="name-col"><span class="var-name">' + escapeHtml(v.name) + '</span>' + btn + '</td>'
+                                + '<td class="type-col">' + escapeHtml(v.type) + '</td>'
+                                + '<td class="size-col">' + escapeHtml(v.size) + '</td>'
+                                + '<td class="preview-col">' + escapeHtml(v.preview) + '</td>'
+                                + '</tr>';
                         }).join('');
                         globalEl.innerHTML = \`<table><thead><tr><th>Name</th><th>Type</th><th>Size</th><th>Value</th></tr></thead><tbody>\${rows}</tbody></table>\`;
                     }
@@ -633,6 +706,8 @@ tryCatch({
             document.getElementById('btn-auto')?.addEventListener('click', () => {
                 vscode.postMessage({ type: 'toggleAutoRefresh' });
             });
+            // Signal the extension that the webview JS is loaded and ready to receive data.
+            vscode.postMessage({ type: 'ready' });
         })();
     </script>
 </body>

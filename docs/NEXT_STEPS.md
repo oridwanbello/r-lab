@@ -16,8 +16,11 @@ Ensure that users never lose their active session state when toggling the quadra
 - [x] **Phase 2: Analysis Panel Retention**
     - Modify `deactivateLayout` to stop disposing of `PlotsPanel`, `DataViewerPanel`, and `HelpPanel`.
     - Update `activateLayout` to check for existing panels and relocate them to their respective quadrants.
-- [ ] **Phase 3: State Syncing**
-    - Ensure that panels retained from previous sessions correctly sync with the current R environment state.
+- [x] **Phase 3: State Syncing**
+    - Workspace data file is no longer deleted when an existing R Console terminal is reused.
+    - Plots panel syncs files created while layout was closed via `syncPlots()` on re-activation.
+    - Workspace panel force-refreshes immediately on re-activation, skipping the loading spinner.
+    - Terminal module-level references are preserved across deactivation so reuse works correctly.
 
 **Proposed Technical Approach:**
 - For existing terminals/panels, use `vscode.commands.executeCommand` (e.g., `workbench.action.moveEditorToSecondGroup`) to reposition them.

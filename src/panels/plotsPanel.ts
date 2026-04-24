@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * Plots Panel — a WebviewPanel (editor tab) that watches a directory
@@ -121,6 +123,38 @@ export class PlotsPanel {
         this._plots.push(uri);
         this._currentIndex = this._plots.length - 1;
         this._render();
+    }
+
+    /**
+     * Scan the plot directory and merge any files that were created while the
+     * layout was closed (i.e., not yet in `_plots`). Called on re-activation.
+     */
+    public syncPlots(): void {
+        const config = vscode.workspace.getConfiguration('r-quadrant');
+        const plotDir = config.get<string>('plotOutputDir', '.r-quadrant/plots');
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) { return; }
+
+        const dir = path.join(workspaceFolder.uri.fsPath, plotDir);
+        if (!fs.existsSync(dir)) { return; }
+
+        const exts = new Set(['.png', '.jpg', '.jpeg', '.svg', '.gif', '.bmp', '.webp']);
+        const existing = new Set(this._plots.map(u => u.fsPath));
+
+        let added = 0;
+        for (const file of fs.readdirSync(dir)) {
+            if (!exts.has(path.extname(file).toLowerCase())) { continue; }
+            const uri = vscode.Uri.file(path.join(dir, file));
+            if (!existing.has(uri.fsPath)) {
+                this._plots.push(uri);
+                added++;
+            }
+        }
+
+        if (added > 0) {
+            this._currentIndex = this._plots.length - 1;
+            this._render();
+        }
     }
 
     // ── Rendering ───────────────────────────────────────────
