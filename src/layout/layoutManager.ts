@@ -1161,9 +1161,13 @@ local({
 .rquad_meta <- ".r-quadrant/dv-meta.txt"
 .rquad_active_df_to_export <- NULL
 .rquad_last_plot_hash <- NULL
+.rquad_current_plot_id <- 0
 
 # Set default device to null pdf to enable invisible plot recording
 options(device = function(...) { pdf(file="/dev/null", ...); dev.control("enable") })
+
+# Hook plot.new to increment plot ID, so lines() etc. overwrite the same file
+setHook("before.plot.new", function() { .rquad_current_plot_id <<- .rquad_current_plot_id + 1 })
 
 # 4. Wipe stale R Quadrant data at startup so previous sessions don't bleed over.
 #    We hook into .First which runs immediately when the R session begins.
@@ -1217,7 +1221,9 @@ invisible(local({
           .hash <- sum(as.numeric(serialize(.p, NULL)))
           if (!identical(.hash, .rquad_last_plot_hash)) {
             .rquad_last_plot_hash <<- .hash
-            .file <- sprintf(".r-quadrant/plots/plot_%s.png", format(Sys.time(), "%Y%m%d_%H%M%S_%OS3"))
+            # If no plot ID yet (startup), start at 1
+            if (.rquad_current_plot_id == 0) .rquad_current_plot_id <<- 1
+            .file <- sprintf(".r-quadrant/plots/plot_%05d.png", .rquad_current_plot_id)
             png(filename = .file, width = 800, height = 600, res = 100)
             try(replayPlot(.p), silent = TRUE)
             dev.off()

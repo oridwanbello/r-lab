@@ -109,6 +109,20 @@ export class PlotsPanel {
             this._currentIndex = this._plots.length - 1;
             this._render();
         });
+        this._watcher.onDidChange(() => {
+            // Re-render current plot to pick up the updated file content
+            this._render();
+        });
+        this._watcher.onDidDelete((uri) => {
+            const idx = this._plots.findIndex(p => p.fsPath === uri.fsPath);
+            if (idx !== -1) {
+                this._plots.splice(idx, 1);
+                if (this._currentIndex >= this._plots.length) {
+                    this._currentIndex = this._plots.length - 1;
+                }
+                this._render();
+            }
+        });
         this._disposables.push(this._watcher);
     }
 
@@ -170,6 +184,8 @@ export class PlotsPanel {
         const plotUri = hasPlots
             ? this._panel.webview.asWebviewUri(this._plots[this._currentIndex])
             : '';
+        // Add cache-busting timestamp for the currently viewed image
+        const plotUrl = hasPlots ? `${plotUri.toString()}?t=${Date.now()}` : '';
         const counter = hasPlots
             ? `${this._currentIndex + 1} / ${this._plots.length}`
             : '—';
@@ -287,7 +303,7 @@ export class PlotsPanel {
     <div class="plot-area">
         ${
             hasPlots
-                ? `<img src="${plotUri}" alt="Plot ${this._currentIndex + 1}" />`
+                ? `<img src="${plotUrl}" alt="Plot ${this._currentIndex + 1}" />`
                 : `<div class="empty-state">
                        <div class="icon">📊</div>
                        <p>No plots yet.<br/>
