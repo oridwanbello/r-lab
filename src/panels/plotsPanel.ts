@@ -85,11 +85,27 @@ export class PlotsPanel {
                     case 'saveAs':
                         this._handleSaveAs();
                         break;
+                    case 'deleteCurrent':
+                        this._handleDeleteCurrent();
+                        break;
                 }
             },
             null,
             this._disposables
         );
+    }
+
+    private _handleDeleteCurrent(): void {
+        if (this._currentIndex < 0 || this._currentIndex >= this._plots.length) { return; }
+        const uri = this._plots[this._currentIndex];
+        try {
+            if (fs.existsSync(uri.fsPath)) {
+                fs.unlinkSync(uri.fsPath);
+            }
+            // The watcher will pick up the deletion and update the UI
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`Failed to delete plot: ${err.message}`);
+        }
     }
 
     private async _handleSaveAs(): Promise<void> {
@@ -318,12 +334,13 @@ export class PlotsPanel {
     <div class="toolbar">
         <span class="pane-title">Plots</span>
         <div class="nav-controls">
-            <button id="btn-prev" ${prevDisabled} title="Previous plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M10 12.796L4.854 7.65l.707-.707L10 11.382V12.796zM10 4.618L5.561 9.057l-.707-.707L10 3.204V4.618z" transform="rotate(90 8 8)"/></svg></button>
+            <button id="btn-prev" ${prevDisabled} title="Previous plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M11.354 1.646L12.061 2.354 6.414 8l5.647 5.646-.707.708L5 8l6.354-6.354z"/></svg></button>
             <span class="counter">${counter}</span>
-            <button id="btn-next" ${nextDisabled} title="Next plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M10 12.796L4.854 7.65l.707-.707L10 11.382V12.796zM10 4.618L5.561 9.057l-.707-.707L10 3.204V4.618z" transform="rotate(-90 8 8)"/></svg></button>
-            <button id="btn-copy" ${!hasPlots ? 'disabled' : ''} title="Copy to clipboard"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M4 4h7v7H4V4zm1 1v5h5V5H5z"/><path fill="currentColor" d="M6 3V2h7v7h-1V3H6z"/></svg></button>
-            <button id="btn-save" ${!hasPlots ? 'disabled' : ''} title="Save as..."><svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 11.5l-3.5-3.5h2V2h3v6h2L8 11.5z"/><path fill="currentColor" d="M2 12v2h12v-2h1v3H1v-3h1z"/></svg></button>
-            <button id="btn-clear" ${!hasPlots ? 'disabled' : ''} title="Clear all plots"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M13.2 2.5l-8.5 8.5V13h2l8.5-8.5-2-2zM4 14l-2 2-1-1 2-2h1v1z"/></svg></button>
+            <button id="btn-next" ${nextDisabled} title="Next plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M4.646 1.646L3.939 2.354 9.586 8l-5.647 5.646.707.708L11 8 4.646 1.646z"/></svg></button>
+            <button id="btn-copy" ${!hasPlots ? 'disabled' : ''} title="Copy"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M10,13.33H3.33V4.67c0-0.37-0.3-0.67-0.67-0.67h0C2.3,4,2,4.3,2,4.67v8.67c0,0.73,0.6,1.33,1.33,1.33h6.67c0.37,0,0.67-0.3,0.67-0.67v0C10.67,13.63,10.37,13.33,10,13.33z M13.33,10.67V2.67c0-0.73-0.6-1.33-1.33-1.33H6c-0.73,0-1.33,0.6-1.33,1.33v8c0,0.73,0.6,1.33,1.33,1.33h6c0.73,0,1.33-0.6,1.33-1.33z M12,10.67H6V2.67h6V10.67z"/></svg></button>
+            <button id="btn-save" ${!hasPlots ? 'disabled' : ''} title="Save as..."><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12,10v2H4v-2H2.67v2c0,0.73,0.6,1.33,1.33,1.33h8c0.73,0,1.33-0.6,1.33-1.33v-2H12z M11.33,7.33l-0.94-0.94L8.67,8.11V2.67h-1.33v5.45L5.61,6.39L4.67,7.33l3.33,3.33 L11.33,7.33z"/></svg></button>
+            <button id="btn-delete" ${!hasPlots ? 'disabled' : ''} title="Delete current plot"><svg viewBox="0 0 16 16"><path fill="none" d="M9.25,2H6.75a0.25,0.25,0,0,0-0.25,0.25V3h3V2.25A0.25,0.25,0,0,0,9.25,2Z"/><path fill="currentColor" d="M13.5,3H10.5V2.25A1.25,1.25,0,0,0,9.25,1H6.75A1.25,1.25,0,0,0,5.5,2.25V3H2.5a0.5,0.5,0,0,0,0,1H3L3.63,13.53C3.67,14.37,4.31,15,5.13,15h5.75c0.82,0,1.45-.62,1.5-1.47L13,4h0.5a0.5,0.5,0,0,0,0-1ZM6,13H6a0.5,0.5,0,0,1-.5-.48l-0.25-7a0.5,0.5,0,1,1,1-.04l0.25,7A0.5,0.5,0,0,1,6,13ZM8.5,12.5a0.5,0.5,0,0,1-1,0V5.5a0.5,0.5,0,0,1,1,0ZM9.5,3H6.5V2.25a0.25,0.25,0,0,1,.25-.25h2.5a0.25,0.25,0,0,1,.25.25Zm1,9.55a0.5,0.5,0,0,1-.5.45H10a0.5,0.5,0,0,1-.5-.52l0.25-7a0.5,0.5,0,1,1,1,.04Z"/></svg></button>
+            <button id="btn-clear" ${!hasPlots ? 'disabled' : ''} title="Clear all plots"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.91,1.81L13.85,2.76L10.04,6.57C10.75,7.59 10.85,8.83 10.25,9.63L6.04,5.41C6.84,4.81 8.07,4.91 9.1,5.63L12.91,1.81M3.95,11.71C2.61,10.37 1.79,8.77 1.57,7.28L4.82,5.89L9.78,10.85L8.39,14.1C6.89,13.87 5.29,13.05 3.95,11.71Z"/></svg></button>
         </div>
     </div>
     <div class="plot-area">
@@ -349,6 +366,9 @@ export class PlotsPanel {
             });
             document.getElementById('btn-clear')?.addEventListener('click', () => {
                 vscode.postMessage({ type: 'clear' });
+            });
+            document.getElementById('btn-delete')?.addEventListener('click', () => {
+                vscode.postMessage({ type: 'deleteCurrent' });
             });
             document.getElementById('btn-save')?.addEventListener('click', () => {
                 vscode.postMessage({ type: 'saveAs' });
