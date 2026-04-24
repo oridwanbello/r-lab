@@ -268,19 +268,25 @@ export class HelpPanel {
         code {
             font-family: var(--vscode-editor-font-family, monospace);
         }
+        /* Removed background on inline code blocks to prevent jarring highlights */
         p > code, li > code {
-            background: var(--vscode-textCodeBlock-background);
             padding: 2px 4px; border-radius: 3px;
         }
 
-        /* Native R Syntax Highlighting Colors */
-        .token.keyword { color: var(--vscode-symbolIcon-keywordForeground, #569cd6); }
-        .token.string { color: var(--vscode-debugTokenExpression-string, #ce9178); }
-        .token.number { color: var(--vscode-debugTokenExpression-number, #b5cea8); }
-        .token.comment { color: var(--vscode-editorLineNumber-foreground, #6a9955); font-style: italic; }
-        .token.boolean { color: var(--vscode-symbolIcon-keywordForeground, #569cd6); }
-        .token.function { color: var(--vscode-symbolIcon-methodForeground, #dcdcaa); }
-        .token.operator { color: var(--vscode-editor-foreground); }
+        /* Native R Syntax Highlighting Colors - RStudio inspired but theme adaptive */
+        body.vscode-light .token.keyword { color: #0000FF; }
+        body.vscode-light .token.string { color: #A31515; }
+        body.vscode-light .token.number { color: #098658; }
+        body.vscode-light .token.comment { color: #008000; font-style: italic; }
+        body.vscode-light .token.function { color: #795E26; }
+        body.vscode-light .token.operator { color: #000000; }
+
+        body.vscode-dark .token.keyword { color: #569cd6; }
+        body.vscode-dark .token.string { color: #ce9178; }
+        body.vscode-dark .token.number { color: #b5cea8; }
+        body.vscode-dark .token.comment { color: #6a9955; font-style: italic; }
+        body.vscode-dark .token.function { color: #dcdcaa; }
+        body.vscode-dark .token.operator { color: #d4d4d4; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: var(--vscode-font-family);
