@@ -273,6 +273,7 @@ export class PlotsPanel {
             max-width: 100%;
             max-height: 100%;
             object-fit: contain;
+            background: white;
             border-radius: 4px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
         }
