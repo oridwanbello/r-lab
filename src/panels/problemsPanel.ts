@@ -37,6 +37,7 @@ export class ProblemsPanel {
                 retainContextWhenHidden: true,
             }
         );
+        panel.iconPath = vscode.Uri.joinPath(extensionUri, 'resources', 'blank.svg');
 
         ProblemsPanel.currentPanel = new ProblemsPanel(panel);
         return ProblemsPanel.currentPanel;

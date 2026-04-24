@@ -39,6 +39,7 @@ export class PlotsPanel {
                 retainContextWhenHidden: true,
             }
         );
+        panel.iconPath = vscode.Uri.joinPath(extensionUri, 'resources', 'blank.svg');
 
         PlotsPanel.currentPanel = new PlotsPanel(panel);
         return PlotsPanel.currentPanel;

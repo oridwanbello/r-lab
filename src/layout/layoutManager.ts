@@ -310,9 +310,17 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         }
     }
 
-    // 2. We no longer close all editors here, as we want to preserve text files.
-    //    ViewColumn assignment depends on the order groups receive content,
-    //    so we will be explicit about moving our tabs to the correct groups.
+    // 2. Close stale R Quadrant panels from previous sessions.
+    //    We explicitly PRESERVE the Help tab and any Chat tabs so their sessions survive layout toggles.
+    //    We preserve TabInputText so the user's source files remain open.
+    for (const group of vscode.window.tabGroups.all) {
+        for (const tab of group.tabs) {
+            const disposablePanels = ['Workspace', 'Plots', 'Data Viewer', 'Problems'];
+            if (disposablePanels.includes(tab.label)) {
+                try { await vscode.window.tabGroups.close(tab); } catch {}
+            }
+        }
+    }
 
     // 3. Scan for existing terminals to reuse. We will relocate them to ViewColumn.Two.
     //    Track whether we are reusing to avoid wiping workspace data for live sessions.
@@ -376,16 +384,38 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     //  Group 2 before Group 1, the ViewColumns all shift.
     // ─────────────────────────────────────────────────────────
 
-    // 8. Anchor Group 1 by focusing it, so VS Code registers it as ViewColumn.One
-    //    BEFORE any content is placed in Group 2. Without this step, if no text
-    //    files are open, VS Code may assign ViewColumn.One to the first group that
-    //    *receives content* — which would be Group 2 (the terminal), making it land
-    //    in the top-left instead of the bottom-left.
-    //    Focusing alone (no file creation needed) is sufficient to register the group.
+    // 8. Anchor Group 1 with an active text editor.
+    //    The vscode-R extension's chunk-navigation shows a "No text editor active" warning
+    //    whenever window.activeTextEditor is null. We prevent this by ensuring Group 1
+    //    always has a visible text document during layout construction.
+    //    Priority: (a) reopen a previously saved source file, (b) open an untitled scratch.
     try { await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'); } catch {}
+    await delay(100);
+
+    let anchorEditor: vscode.TextEditor | undefined;
+    if (openFiles.length > 0) {
+        // Reopen the first saved file into Group 1 — this satisfies the R extension's check.
+        try {
+            anchorEditor = await vscode.window.showTextDocument(
+                openFiles[0],
+                { viewColumn: vscode.ViewColumn.One, preserveFocus: true, preview: false }
+            );
+        } catch {}
+    }
+    if (!anchorEditor) {
+        // No saved file open — create a tiny untitled doc to anchor Group 1.
+        try {
+            const doc = await vscode.workspace.openTextDocument({ content: '', language: 'plaintext' });
+            anchorEditor = await vscode.window.showTextDocument(
+                doc, { viewColumn: vscode.ViewColumn.One, preserveFocus: true }
+            );
+        } catch {}
+    }
     await delay(150);
-    // Immediately focus Group 2 so it is ready for terminal creation below.
-    try { await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup'); } catch {}
+    // NOTE: Do NOT call focusSecondEditorGroup here — it would set
+    // window.activeTextEditor to undefined and trigger the R extension's
+    // "No text editor active" warning. Terminal placement uses explicit
+    // viewColumn or moveToEditor + immediate Group 1 restore instead.
     await delay(150);
 
     // 9. Group 2 (bottom-left): R Console → Terminal → Problems
@@ -455,13 +485,17 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     if (rConsoleTerminal) {
             // Reuse the existing terminal — do NOT recreate (that kills the R session).
-            // show(false) = focus the terminal in panel (making it the active terminal)
-            // but immediately re-grab editor focus on Group 2 before moveToEditor fires.
+            // show(false) makes this terminal active in the panel so moveToEditor picks it up.
+            // We must focus Group 2 briefly for moveToEditor, then IMMEDIATELY restore
+            // Group 1 focus so window.activeTextEditor never becomes undefined — that
+            // would trigger the R extension's "No text editor active" warning.
             rConsoleTerminal.show(false);
             await delay(100);
             await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
             await delay(100);
             await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
+            await delay(50);
+            try { await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'); } catch {}
         } else {
             rConsoleTerminal = vscode.window.createTerminal({
                 name: 'R Console',
@@ -481,6 +515,8 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
         await delay(100);
         await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
+        await delay(50);
+        try { await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'); } catch {}
     } else {
         shellTerminal = vscode.window.createTerminal({
             name: 'Terminal',
@@ -505,10 +541,17 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     //     Open Chat first so it is the leftmost tab. Then add Help.
     //     Focus Group 3 afterwards to bring the first tab (Chat) back into view
     //     WITHOUT calling openInEditor again, which would create a duplicate.
+    //     NOTE: openChatInGroup3 may fail silently — HelpPanel is ALWAYS created regardless.
     await openChatInGroup3();
-    HelpPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
+    await delay(150);
+    
+    // Always ensure HelpPanel is open in Group 3, regardless of Chat success.
+    const helpPanel = HelpPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
+    const helpState = extensionContext.workspaceState.get<any>('r-quadrant.helpState');
+    if (helpState) { helpPanel.loadState(helpState); }
+    
     await delay(100);
-    // Focus Group 3 and navigate to the first tab (Chat) to make it active.
+    // Focus Group 3 and navigate to the first tab (Chat/Help) to make it active.
     try {
         await vscode.commands.executeCommand('workbench.action.focusThirdEditorGroup');
         await vscode.commands.executeCommand('workbench.action.firstEditorInGroup');
@@ -622,9 +665,16 @@ async function deactivateLayout(): Promise<void> {
     await extensionContext.workspaceState.update('r-quadrant.textFilePositions', textFilePositions);
     await extensionContext.workspaceState.update('r-quadrant.panelPositions', panelPositions);
 
+    // Save Help state before disposing
+    if (HelpPanel.currentPanel) {
+        const helpState = HelpPanel.currentPanel.saveState();
+        await extensionContext.workspaceState.update('r-quadrant.helpState', helpState);
+    }
+
     // 4. Dispose panel singletons (closes our Webview tabs)
-    PlotsPanel.currentPanel?.dispose();
+    //    We dispose HelpPanel here because we just serialized its state.
     HelpPanel.currentPanel?.dispose();
+    PlotsPanel.currentPanel?.dispose();
     ProblemsPanel.currentPanel?.dispose();
     WorkspacePanel.currentPanel?.dispose();
     DataViewerPanel.currentPanel?.dispose();
@@ -651,9 +701,10 @@ async function deactivateLayout(): Promise<void> {
     // The onDidCloseTerminal listener (registered in registerLayoutCommand)
     // will null them out if the user manually closes a terminal.
 
-    // 6. Close non-text tabs (like AI Chat) to keep the normal view clean.
-    //    We explicitly ignore TabInputTerminal so we don't accidentally kill terminals
-    //    if the moveToTerminalPanel command was slow.
+    // 6. Close non-text tabs (like Help and AI Chat) to keep the normal view clean.
+    //    We explicitly ignore TabInputTerminal so we don't accidentally kill terminals.
+    //    For Chat tabs, closing them here safely docks them back to the Sidebar.
+    //    For Help and Workspace, we will serialize their state before disposing them.
     for (const group of vscode.window.tabGroups.all) {
         for (const tab of group.tabs) {
             if (!(tab.input instanceof vscode.TabInputText) && !(tab.input instanceof vscode.TabInputTerminal)) {
@@ -662,7 +713,7 @@ async function deactivateLayout(): Promise<void> {
         }
     }
 
-    // 7. Reset to single editor group
+    // 8. Reset to single editor group
     await vscode.commands.executeCommand('vscode.setEditorLayout', {
         orientation: 0,
         groups: [{}],
@@ -833,32 +884,17 @@ async function openChatInGroup3(): Promise<void> {
         console.log(`[R Quadrant] AI: ${r.displayName} (${r.id}), views: ${r.viewIds.join(', ')}`);
     }
 
-    // ── Step 2: Open VS Code Chat in editor area (Copilot / Chat API) ──
-    const hasCopilot = aiReport.some(r => r.id.toLowerCase().includes('copilot'));
-    // Only attempt to open the chat in the editor if we actually have an active text editor context,
-    // otherwise VS Code will throw a noisy "No text editor active" popup.
-    if (hasCopilot && vscode.window.activeTextEditor) {
-        await focusGroup3();
-        try {
-            await vscode.commands.executeCommand('workbench.action.chat.openInEditor');
-        } catch {
-            // No chat provider available — that's fine
-        }
-    }
+    if (aiReport.length === 0) { return; }
 
-    // ── Step 3: For non-Copilot AI extensions, try vscode.moveViews ──
-    //    This is the only reliable method that doesn't trigger
-    //    "No text editor active" warnings.
-    const nonCopilotAi = aiReport.filter(
-        (r) => !r.id.toLowerCase().includes('copilot')
-    );
-
-    if (nonCopilotAi.length === 0) { return; }
-
+    // ── Step 2: Use vscode.moveViews to drag the native AI sidebar into the editor ──
+    //    This is the only reliable method that doesn't trigger "No text editor active" warnings,
+    //    and it prevents duplicate Chat tabs from spawning because it just moves the single,
+    //    persistent native sidebar view into the editor area.
     let movedAny = false;
 
-    for (const ai of nonCopilotAi) {
-        for (const viewId of ai.viewIds) {
+    for (const ai of aiReport) {
+        const viewsToTry = [...ai.viewIds, 'workbench.panel.chat', 'workbench.panel.chat.view.gemini', 'workbench.panel.chat.view.copilot', 'workbench.panel.chat.view.antigravity', 'antigravity.chat'];
+        for (const viewId of viewsToTry) {
             try {
                 await focusGroup3();
                 await vscode.commands.executeCommand('vscode.moveViews', {
@@ -869,15 +905,25 @@ async function openChatInGroup3(): Promise<void> {
                 movedAny = true;
                 break;
             } catch (e) {
-                console.log(`[R Quadrant] ✗ Couldn't move "${viewId}": ${e}`);
+                // Silently try next
             }
         }
         if (movedAny) { break; }
     }
+    // ── Step 3: Try native openInEditor command ──
+    if (!movedAny) {
+        try {
+            await focusGroup3();
+            await vscode.commands.executeCommand('workbench.action.chat.openInEditor');
+            movedAny = true;
+        } catch (e) {
+            // Silently fail
+        }
+    }
 
     // ── Step 4: If nothing worked, give guidance ──
-    if (!movedAny && nonCopilotAi.length > 0) {
-        const names = nonCopilotAi.map((r) => r.displayName).join(', ');
+    if (!movedAny && aiReport.length > 0) {
+        const names = aiReport.map((r) => r.displayName).join(', ');
         vscode.window.showInformationMessage(
             `R Quadrant detected: ${names}. To add to the top-right quadrant: ` +
             `open the sidebar → right-click the AI chat tab → ` +
@@ -917,6 +963,7 @@ function discoverAllAi(allCommands: string[]): {
         'claude', 'anthropic', 'codeium', 'tabnine',
         'amazonq', 'amazon-q', 'continue', 'cody',
         'sourcegraph', 'cursor', 'supermaven', 'windsurf',
+        'antigravity', 'google',
     ];
 
     for (const ext of vscode.extensions.all) {
@@ -1107,10 +1154,43 @@ local({
   if (nchar(orig) > 0 && file.exists(orig)) source(orig, echo = FALSE)
 })
 
-# 3. Install the task callback. It fires after every top-level R command,
-#    including R's own startup sequence (.First, default package loading).
-#    The stale data file is deleted at VS Code extension activation, so
-#    the workspace panel shows empty until the first callback fires.
+# 3. Pre-set fixed Data Viewer temp paths.
+#    These are defined ONCE here at startup — silently, via Rprofile — so the
+#    extension never needs to send a path-setting command to the R console.
+.rquad_csv  <- ".r-quadrant/dv.csv"
+.rquad_meta <- ".r-quadrant/dv-meta.txt"
+
+# 4. Wipe stale R Quadrant data at startup so previous sessions don't bleed over.
+#    We hook into .First which runs immediately when the R session begins.
+if (exists(".First", envir = .GlobalEnv)) {
+  .rquad_orig_First <- get(".First", envir = .GlobalEnv)
+  .First <- function() {
+    unlink(".r-quadrant/.workspace_*.tsv")
+    unlink(".r-quadrant/plots/*")
+    tryCatch(.rquad_orig_First(), error = function(e) {})
+  }
+} else {
+  .First <- function() {
+    unlink(".r-quadrant/.workspace_*.tsv")
+    unlink(".r-quadrant/plots/*")
+  }
+}
+
+# 5. Data Viewer export function.
+#    .rquad_csv and .rquad_meta are already set above — no paths needed at call time.
+.r_quadrant_export_data <- function(varName) {
+  tryCatch({
+    obj <- get(varName, envir = .GlobalEnv)
+    if (!is.data.frame(obj)) obj <- as.data.frame(obj)
+    writeLines(c(as.character(nrow(obj)), as.character(ncol(obj))), .rquad_meta)
+    write.csv(head(obj, 1000), .rquad_csv, row.names = FALSE, na = "NA")
+  }, error = function(e) {
+    writeLines(paste0("ERROR:", conditionMessage(e)), .rquad_meta)
+  })
+  invisible(NULL)
+}
+
+# 6. Install the task callback. It fires after every top-level R command.
 invisible(local({
   if (!any(vapply(getTaskCallbackNames(), function(n) n == ".r-quadrant.watcher", logical(1)))) {
     addTaskCallback(function(expr, value, ok, visible) {${snapshotCode}

@@ -45,6 +45,7 @@ export class WorkspacePanel {
                 retainContextWhenHidden: true,
             }
         );
+        panel.iconPath = vscode.Uri.joinPath(extensionUri, 'resources', 'blank.svg');
 
         WorkspacePanel.currentPanel = new WorkspacePanel(panel);
         return WorkspacePanel.currentPanel;

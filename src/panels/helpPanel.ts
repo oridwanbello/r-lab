@@ -32,7 +32,7 @@ export class HelpPanel {
 
         const panel = vscode.window.createWebviewPanel(
             HelpPanel.viewType,
-            'Help',
+            'R Help',
             { viewColumn: column, preserveFocus: true },
             {
                 enableScripts: true,
@@ -40,9 +40,29 @@ export class HelpPanel {
                 retainContextWhenHidden: true,
             }
         );
+        panel.iconPath = vscode.Uri.joinPath(extensionUri, 'resources', 'blank.svg');
 
         HelpPanel.currentPanel = new HelpPanel(panel);
         return HelpPanel.currentPanel;
+    }
+
+    // ── State Serialization ─────────────────────────────────
+
+    public saveState(): any {
+        return {
+            recentSearches: this._recentSearches,
+            helpText: this._helpText,
+            lastQuery: this._lastQuery
+        };
+    }
+
+    public loadState(state: any): void {
+        if (state) {
+            this._recentSearches = state.recentSearches || [];
+            this._helpText = state.helpText || '';
+            this._lastQuery = state.lastQuery || '';
+            this._render();
+        }
     }
 
     // ── Constructor ─────────────────────────────────────────
@@ -98,33 +118,51 @@ export class HelpPanel {
             helpExpr = `help("${query}")`;
         }
 
-        // R script that prints help text to stdout
+        // R script that prints HTML help text to stdout
         const rScript = [
             `h <- ${helpExpr}`,
             'if (length(h) == 0) {',
-            `  cat("No documentation found for: ${query}")`,
+            `  cat("<p>No documentation found for: <code>${query}</code></p>")`,
             '} else {',
             '  p <- utils:::.getHelpFile(h)',
-            '  tools::Rd2txt(p)',
-            '}',
+            '  tools::Rd2HTML(p, out="")',
+            '}'
         ].join('\n');
 
-        // Determine Rscript path from the configured R path
-        const config = vscode.workspace.getConfiguration('r-quadrant');
-        const rPath = config.get<string>('rConsolePath', 'R');
-        // Convert "R" → "Rscript", "/usr/bin/R" → "/usr/bin/Rscript"
-        const rscriptPath = rPath.replace(/R$/, 'Rscript');
-
         try {
+            const rscriptPath = await this._findRscript();
             const raw = await this._runRscript(rscriptPath, rScript);
-            this._helpText = stripTerminalFormatting(raw);
+            
+            // Extract the body content from the HTML output
+            const bodyMatch = raw.match(/<body>([\s\S]*?)<\/body>/i);
+            const content = bodyMatch ? bodyMatch[1] : raw;
+            
+            this._helpText = content;
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
-            this._helpText = `Error fetching help for "${query}":\n\n${msg}`;
+            this._helpText = `<p class="error">Error fetching help for "${query}":<br/><br/>${escapeHtml(msg)}</p>`;
         }
 
         this._isLoading = false;
         this._render();
+    }
+
+    /** Find the Rscript binary — works regardless of whether rConsolePath is R, radian, or ark. */
+    private _findRscript(): Promise<string> {
+        const config = vscode.workspace.getConfiguration('r-quadrant');
+        const rPath = config.get<string>('rConsolePath', 'R');
+        if (/[/\\]R$/.test(rPath)) {
+            return Promise.resolve(rPath.replace(/[/\\]R$/, '/Rscript'));
+        }
+        if (/[Rr]script$/i.test(rPath)) {
+            return Promise.resolve(rPath);
+        }
+        return new Promise((resolve) => {
+            execFile('which', ['Rscript'], (err, stdout) => {
+                if (!err && stdout) resolve(stdout.trim());
+                else resolve('Rscript');
+            });
+        });
     }
 
     /**
@@ -181,7 +219,7 @@ export class HelpPanel {
                 <div class="help-header">
                     <span class="help-topic">?${escapeHtml(this._lastQuery)}</span>
                 </div>
-                <pre class="help-text">${escapeHtml(this._helpText)}</pre>`;
+                <div class="help-html-content">${this._helpText}</div>`;
         } else {
             mainContent = `
                 <div class="empty-state">
@@ -220,6 +258,29 @@ export class HelpPanel {
                    script-src 'nonce-${nonce}';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style nonce="${nonce}">
+        /* Code Block Styling using VS Code theme variables */
+        pre {
+            background: var(--vscode-textCodeBlock-background);
+            color: var(--vscode-editor-foreground);
+            border-radius: 4px; padding: 10px; overflow-x: auto; margin: 10px 0;
+            font-family: var(--vscode-editor-font-family, monospace);
+        }
+        code {
+            font-family: var(--vscode-editor-font-family, monospace);
+        }
+        p > code, li > code {
+            background: var(--vscode-textCodeBlock-background);
+            padding: 2px 4px; border-radius: 3px;
+        }
+
+        /* Native R Syntax Highlighting Colors */
+        .token.keyword { color: var(--vscode-symbolIcon-keywordForeground, #569cd6); }
+        .token.string { color: var(--vscode-debugTokenExpression-string, #ce9178); }
+        .token.number { color: var(--vscode-debugTokenExpression-number, #b5cea8); }
+        .token.comment { color: var(--vscode-editorLineNumber-foreground, #6a9955); font-style: italic; }
+        .token.boolean { color: var(--vscode-symbolIcon-keywordForeground, #569cd6); }
+        .token.function { color: var(--vscode-symbolIcon-methodForeground, #dcdcaa); }
+        .token.operator { color: var(--vscode-editor-foreground); }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: var(--vscode-font-family);
@@ -273,12 +334,34 @@ export class HelpPanel {
             font-size: 12px; font-weight: 600;
             color: var(--vscode-textLink-foreground);
         }
-        .help-text {
-            padding: 12px 14px;
-            font-family: var(--vscode-editor-font-family, monospace);
-            font-size: 12px; line-height: 1.5;
-            white-space: pre-wrap; word-wrap: break-word;
+        .help-html-content {
+            padding: 16px 20px;
+            font-size: 13px; line-height: 1.6;
         }
+        .help-html-content h2, .help-html-content h3 {
+            margin-top: 1.5em; margin-bottom: 0.8em;
+            color: var(--vscode-editor-foreground);
+            font-weight: 600;
+            border-bottom: 3px double currentColor;
+            padding-bottom: 4px;
+        }
+        .help-html-content h2 { font-size: 16px; }
+        .help-html-content h3 { font-size: 14px; }
+        .help-html-content pre {
+            padding: 0;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        .help-html-content p { margin-bottom: 1em; }
+        .help-html-content a { color: var(--vscode-textLink-foreground); text-decoration: none; }
+        .help-html-content a:hover { text-decoration: underline; }
+        .help-html-content table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+        .help-html-content th, .help-html-content td {
+            text-align: left; padding: 6px 10px;
+            border-bottom: 1px solid var(--vscode-editorGroup-border);
+        }
+        .help-html-content th { font-weight: 600; }
         .empty-state { padding: 20px; }
         .tip { font-size: 13px; opacity: 0.6; line-height: 1.7; margin-bottom: 18px; }
         .tip code {
@@ -311,7 +394,7 @@ export class HelpPanel {
     </style>
 </head>
 <body>
-    <div class="toolbar"><span class="pane-title">Help</span></div>
+    <div class="toolbar"><span class="pane-title">R Help</span></div>
     <div class="search-bar">
         <input id="search-input" type="text"
                placeholder="Search R help… e.g. mean, dplyr::filter"
@@ -321,6 +404,27 @@ export class HelpPanel {
     <div class="content">${mainContent}</div>
     <script nonce="${nonce}">
         (function() {
+            // Minimal zero-dependency R syntax highlighter
+            function highlightR(code) {
+                const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const regex = /(#[^\\n]*)|((["'])(?:(?=(\\\\?))\\4.)*?\\3)|\\b(if|else|repeat|while|function|for|in|next|break|TRUE|FALSE|NULL|Inf|NaN|NA)\\b|\\b(\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\b|\\b([a-zA-Z._][a-zA-Z0-9._]*\\b)(?=\\s*\\()|(\\+|\\-|\\*|\\/|\\^|%%|%\\/%|%\\*%|%o%|%x%|%in%|&lt;-|&lt;&lt;-|-&gt;|-&gt;&gt;|=|==|!=|&lt;=|&gt;=|&lt;|&gt;|!|&|&&|\\||\\|\\|)/g;
+                return escaped.replace(regex, (match, comment, string, q1, q2, keyword, number, func, operator) => {
+                    if (comment) return '<span class="token comment">' + comment + '</span>';
+                    if (string) return '<span class="token string">' + string + '</span>';
+                    if (keyword) return '<span class="token keyword">' + keyword + '</span>';
+                    if (number) return '<span class="token number">' + number + '</span>';
+                    if (func) return '<span class="token function">' + func + '</span>';
+                    if (operator) return '<span class="token operator">' + operator + '</span>';
+                    return match;
+                });
+            }
+
+            document.querySelectorAll('pre').forEach((block) => {
+                // R's Rd2HTML output contains raw text in <pre>. We highlight it directly.
+                const raw = block.textContent || "";
+                block.innerHTML = highlightR(raw);
+            });
+
             const vscode = acquireVsCodeApi();
             const input = document.getElementById('search-input');
 

@@ -46,6 +46,7 @@ export class DataViewerPanel {
                 retainContextWhenHidden: true,
             }
         );
+        panel.iconPath = vscode.Uri.joinPath(extensionUri, 'resources', 'blank.svg');
 
         DataViewerPanel.currentPanel = new DataViewerPanel(panel);
         return DataViewerPanel.currentPanel;
@@ -81,23 +82,86 @@ export class DataViewerPanel {
         this._panel.reveal(undefined, true);
     }
 
-    /** Load and display a variable.
+    /** Load and display a variable from the LIVE R session.
      *
-     *  NOTE: Silent data extraction is technically impossible in a raw Radian/R shell 
-     *  without a pre-existing background server (like Jupyter/Ark or vscDebugger).
-     *  Since sending commands visibly to the console is terrible UX, we explicitly
-     *  disable the Data Viewer here and instruct the user.
+     *  We send a single short command (.r_quadrant_export_data) to the R terminal,
+     *  which avoids polluting the user's history with massive chunks of code.
      */
     public async loadVariable(varName: string): Promise<void> {
         this._varName = varName;
-        this._panel.title = `Data: ${varName}`;
+        // The user specifically requested the tab title never change from "Data Viewer"
+        this._panel.title = 'Data Viewer';
+        this._isLoading = true;
+        this._errorMessage = '';
+        this._render();
+
+        const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!wf) {
+            this._errorMessage = 'No workspace folder open.';
+            this._isLoading = false;
+            this._render();
+            return;
+        }
+
+        const outDir = nodePath.join(wf, '.r-quadrant');
+        if (!nodeFs.existsSync(outDir)) {
+            nodeFs.mkdirSync(outDir, { recursive: true });
+        }
+
+        const tmpCsv  = nodePath.join(outDir, 'dv.csv');
+        const tmpMeta = nodePath.join(outDir, 'dv-meta.txt');
+
+        // Delete stale output files so we can detect when the new ones appear.
+        try { nodeFs.unlinkSync(tmpCsv);  } catch {}
+        try { nodeFs.unlinkSync(tmpMeta); } catch {}
+
+        const rTerminal = require('../layout/layoutManager').getRConsoleTerminal();
+        if (!rTerminal) {
+            this._errorMessage = 'No R Console terminal found. Activate the R Quadrant layout first.';
+            this._isLoading = false;
+            this._render();
+            return;
+        }
+
+        // Send the clean command directly. The invisible path-setting is no longer needed
+        // because the paths are pre-set securely in the Rprofile hook.
+        rTerminal.sendText(`.r_quadrant_export_data("${varName}")`, true);
+
+        // Poll for the meta file (up to 10 s).
+        const metaRaw = await this._waitForFile(tmpMeta, 10000);
+        if (metaRaw === null) {
+            this._errorMessage = 'Timed out waiting for R to export data. Check the R Console for errors.';
+            this._isLoading = false;
+            this._render();
+            return;
+        }
+
+        try {
+            if (metaRaw.startsWith('ERROR:')) {
+                throw new Error(metaRaw.slice(6).trim());
+            }
+            const metaLines = metaRaw.trim().split('\n');
+            this._totalRows = parseInt(metaLines[0], 10) || 0;
+            this._totalCols = parseInt(metaLines[1], 10) || 0;
+            const csvRaw = nodeFs.readFileSync(tmpCsv, 'utf8');
+            const lines = csvRaw.trim().split('\n');
+            this._columns = this._parseCsvRow(lines[0]);
+            this._rows = lines.slice(1).map((line: string) => {
+                const vals = this._parseCsvRow(line);
+                const obj: Record<string, unknown> = {};
+                this._columns.forEach((col, i) => { obj[col] = vals[i] ?? null; });
+                return obj;
+            });
+            this._errorMessage = '';
+        } catch (err: unknown) {
+            this._errorMessage = err instanceof Error ? err.message : String(err);
+            this._columns = [];
+            this._rows = [];
+            this._totalRows = 0;
+            this._totalCols = 0;
+        }
+
         this._isLoading = false;
-        this._columns = [];
-        this._rows = [];
-        this._totalRows = 0;
-        this._totalCols = 0;
-        
-        this._errorMessage = `Silent Data Viewer Unsupported.\n\nR Quadrant cannot silently extract data from a raw R/Radian console without polluting your command history.\n\nTo view this data frame:\n1. Type View(${varName}) in your R console.\n2. Or use the native vscode-R workspace viewer.\n3. Switch your R Console to Ark (Jupyter Interactive) for full silent support.`;
         this._render();
     }
 
@@ -208,7 +272,7 @@ export class DataViewerPanel {
             mainContent = `<div class="status-msg">No data available for "${escapeHtml(this._varName)}".</div>`;
         } else {
             const headerCells = this._columns
-                .map((col, i) => `<th data-col="${i}" class="sortable">${escapeHtml(col)}</th>`)
+                .map((col, i) => `<th data-col="${i}" class="sortable"><span class="col-name">${escapeHtml(col)}</span><span class="sort-icon">⇅</span></th>`)
                 .join('');
 
             // Build row data as JSON for client-side sorting
@@ -264,8 +328,12 @@ export class DataViewerPanel {
                                     const sa = String(va), sb = String(vb);
                                     return sortAsc ? sa.localeCompare(sb) : sb.localeCompare(sa);
                                 });
-                                document.querySelectorAll('th.sortable').forEach(t => t.classList.remove('sort-asc','sort-desc'));
+                                document.querySelectorAll('th.sortable').forEach(t => {
+                                    t.classList.remove('sort-asc','sort-desc');
+                                    t.querySelector('.sort-icon').textContent = '⇅';
+                                });
                                 th.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
+                                th.querySelector('.sort-icon').textContent = sortAsc ? '▲' : '▼';
                                 renderRows(rows);
                             });
                         });
@@ -343,8 +411,9 @@ export class DataViewerPanel {
         }
         th.sortable { cursor: pointer; user-select: none; }
         th.sortable:hover { background: var(--vscode-list-hoverBackground); }
-        th.sort-asc::after { content: " ▲"; font-size: 9px; opacity: 0.7; }
-        th.sort-desc::after { content: " ▼"; font-size: 9px; opacity: 0.7; }
+        th.sortable .col-name { margin-right: 4px; }
+        th.sortable .sort-icon { font-size: 9px; opacity: 0.35; }
+        th.sort-asc .sort-icon, th.sort-desc .sort-icon { opacity: 1; color: var(--vscode-textLink-foreground); }
         .row-num {
             width: 40px; text-align: right; opacity: 0.35;
             font-size: 10px; padding-right: 8px !important;
