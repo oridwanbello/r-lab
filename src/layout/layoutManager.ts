@@ -544,12 +544,12 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     //     NOTE: openChatInGroup3 may fail silently — HelpPanel is ALWAYS created regardless.
     await openChatInGroup3();
     await delay(150);
-    
+
     // Always ensure HelpPanel is open in Group 3, regardless of Chat success.
     const helpPanel = HelpPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
     const helpState = extensionContext.workspaceState.get<any>('r-quadrant.helpState');
     if (helpState) { helpPanel.loadState(helpState); }
-    
+
     await delay(100);
     // Focus Group 3 and navigate to the first tab (Chat/Help) to make it active.
     try {
@@ -583,9 +583,9 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         );
     } catch {}
 
-    // 13. Now that ViewColumns 1-4 are rigidly locked by default content, 
+    // 13. Now that ViewColumns 1-4 are rigidly locked by default content,
     //     we can safely restore saved positions without causing ViewColumn shifting.
-    
+
     // Reposition custom panels
     if (panelPositions['problems'] && panelPositions['problems'] !== vscode.ViewColumn.Two) ProblemsPanel.createOrShow(context.extensionUri, panelPositions['problems']);
     if (panelPositions['help'] && panelPositions['help'] !== vscode.ViewColumn.Three) HelpPanel.createOrShow(context.extensionUri, panelPositions['help']);
@@ -660,7 +660,7 @@ async function deactivateLayout(): Promise<void> {
             }
         }
     }
-    
+
     // Save to workspaceState
     await extensionContext.workspaceState.update('r-quadrant.textFilePositions', textFilePositions);
     await extensionContext.workspaceState.update('r-quadrant.panelPositions', panelPositions);
@@ -1213,7 +1213,7 @@ invisible(local({
           write.csv(head(obj, 1000), .rquad_csv, row.names = FALSE, na = "NA")
         }, silent = TRUE)
       }
-      
+
       # 2. Capture plots quietly
       if (dev.cur() > 1) {
         .p <- recordPlot()
@@ -1224,13 +1224,13 @@ invisible(local({
             # If no plot ID yet (startup), start at 1
             if (.rquad_current_plot_id == 0) .rquad_current_plot_id <<- 1
             .file <- sprintf(".r-quadrant/plots/plot_%05d.png", .rquad_current_plot_id)
-            png(filename = .file, width = 800, height = 600, res = 100, bg = "white")
+            png(filename = .file, width = 800, height = 600, res = 100)
             try(replayPlot(.p), silent = TRUE)
             dev.off()
           }
         }
       }
-      
+
       # 3. Snapshot Workspace
       ${snapshotCode}
       TRUE
