@@ -82,11 +82,33 @@ export class PlotsPanel {
                     case 'clear':
                         this.clear();
                         break;
+                    case 'saveAs':
+                        this._handleSaveAs();
+                        break;
                 }
             },
             null,
             this._disposables
         );
+    }
+
+    private async _handleSaveAs(): Promise<void> {
+        if (this._currentIndex < 0) { return; }
+        const sourceUri = this._plots[this._currentIndex];
+        
+        const saveUri = await vscode.window.showSaveDialog({
+            defaultUri: vscode.Uri.file(path.basename(sourceUri.fsPath)),
+            filters: { 'Images': ['png'] }
+        });
+
+        if (saveUri) {
+            try {
+                fs.copyFileSync(sourceUri.fsPath, saveUri.fsPath);
+                vscode.window.showInformationMessage(`Plot saved to ${saveUri.fsPath}`);
+            } catch (err: any) {
+                vscode.window.showErrorMessage(`Failed to save plot: ${err.message}`);
+            }
+        }
     }
 
     // ── File System Watcher ─────────────────────────────────
@@ -261,6 +283,7 @@ export class PlotsPanel {
             opacity: 0.25;
             cursor: default;
         }
+        .toolbar button svg { width: 14px; height: 14px; display: block; }
         .plot-area {
             flex: 1;
             display: flex;
@@ -279,9 +302,9 @@ export class PlotsPanel {
         }
         .empty-state {
             text-align: center;
-            opacity: 0.5;
+            opacity: 0.3;
         }
-        .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+        .empty-state svg { width: 64px; height: 64px; margin-bottom: 16px; display: inline-block; }
         .empty-state p { font-size: 13px; line-height: 1.6; }
         .empty-state code {
             background: var(--vscode-textCodeBlock-background);
@@ -295,10 +318,12 @@ export class PlotsPanel {
     <div class="toolbar">
         <span class="pane-title">Plots</span>
         <div class="nav-controls">
-            <button id="btn-prev" ${prevDisabled} title="Previous plot">◀</button>
+            <button id="btn-prev" ${prevDisabled} title="Previous plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M10 12.796L4.854 7.65l.707-.707L10 11.382V12.796zM10 4.618L5.561 9.057l-.707-.707L10 3.204V4.618z" transform="rotate(90 8 8)"/></svg></button>
             <span class="counter">${counter}</span>
-            <button id="btn-next" ${nextDisabled} title="Next plot">▶</button>
-            <button id="btn-clear" ${!hasPlots ? 'disabled' : ''} title="Clear all plots">🗑</button>
+            <button id="btn-next" ${nextDisabled} title="Next plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M10 12.796L4.854 7.65l.707-.707L10 11.382V12.796zM10 4.618L5.561 9.057l-.707-.707L10 3.204V4.618z" transform="rotate(-90 8 8)"/></svg></button>
+            <button id="btn-copy" ${!hasPlots ? 'disabled' : ''} title="Copy to clipboard"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M4 4h7v7H4V4zm1 1v5h5V5H5z"/><path fill="currentColor" d="M6 3V2h7v7h-1V3H6z"/></svg></button>
+            <button id="btn-save" ${!hasPlots ? 'disabled' : ''} title="Save as..."><svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 11.5l-3.5-3.5h2V2h3v6h2L8 11.5z"/><path fill="currentColor" d="M2 12v2h12v-2h1v3H1v-3h1z"/></svg></button>
+            <button id="btn-clear" ${!hasPlots ? 'disabled' : ''} title="Clear all plots"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M13.2 2.5l-8.5 8.5V13h2l8.5-8.5-2-2zM4 14l-2 2-1-1 2-2h1v1z"/></svg></button>
         </div>
     </div>
     <div class="plot-area">
@@ -306,10 +331,10 @@ export class PlotsPanel {
             hasPlots
                 ? `<img src="${plotUrl}" alt="Plot ${this._currentIndex + 1}" />`
                 : `<div class="empty-state">
-                       <div class="icon">📊</div>
+                       <svg viewBox="0 0 16 16"><path fill="currentColor" d="M2 2h1v11h11v1H2V2zm3 8h2v3H5v-3zm3-4h2v7H8V6zm3-3h2v10h-2V3z"/></svg>
                        <p>No plots yet.<br/>
-                       Save images to <code>.r-quadrant/plots/</code><br/>
-                       and they will appear here.</p>
+                       Any <code>plot()</code> commands you run in the R Console<br/>
+                       will automatically appear here.</p>
                    </div>`
         }
     </div>
@@ -324,6 +349,27 @@ export class PlotsPanel {
             });
             document.getElementById('btn-clear')?.addEventListener('click', () => {
                 vscode.postMessage({ type: 'clear' });
+            });
+            document.getElementById('btn-save')?.addEventListener('click', () => {
+                vscode.postMessage({ type: 'saveAs' });
+            });
+            document.getElementById('btn-copy')?.addEventListener('click', async () => {
+                const img = document.querySelector('.plot-area img');
+                if (!img) return;
+                try {
+                    const response = await fetch(img.src);
+                    const blob = await response.blob();
+                    await navigator.clipboard.write([
+                        new ClipboardItem({ 'image/png': blob })
+                    ]);
+                    // Visual feedback
+                    const btn = document.getElementById('btn-copy');
+                    const oldHtml = btn.innerHTML;
+                    btn.innerHTML = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M6.5 12.2L2.1 7.8l.7-.7 3.7 3.7 7.4-7.4.7.7-8.1 8.1z"/></svg>';
+                    setTimeout(() => btn.innerHTML = oldHtml, 1000);
+                } catch (err) {
+                    console.error('Clipboard failed', err);
+                }
             });
         })();
     </script>

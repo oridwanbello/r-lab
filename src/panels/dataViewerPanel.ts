@@ -293,7 +293,7 @@ export class DataViewerPanel {
         } else if (this._columns.length === 0 && !this._varName) {
             mainContent = `
                 <div class="empty-state">
-                    <div class="icon">📋</div>
+                    <svg viewBox="0 0 16 16"><path fill="currentColor" d="M2 2h12v12H2V2zm1 1v2h10V3H3zm0 3v2h3V6H3zm4 0v2h6V6H7zm-4 3v2h3V9H3zm4 0v2h6V9H7zm-4 3v2h3v-2H3zm4 0v2h6v-2H7z"/></svg>
                     <p>No data loaded.<br/>
                     Click the eye icon on a data.frame in the <strong>Workspace</strong> tab<br/>
                     to view it here.</p>
@@ -418,8 +418,15 @@ export class DataViewerPanel {
             border: none; padding: 3px 6px;
             border-radius: 3px; cursor: pointer;
             font-size: 13px; opacity: 0.7;
+            display: flex; align-items: center; justify-content: center;
         }
         .toolbar button:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground); }
+        .toolbar button.active { opacity: 1; color: var(--vscode-textLink-foreground); }
+        .toolbar button[disabled] {
+            opacity: 0.25;
+            cursor: default;
+        }
+        .toolbar button svg { width: 14px; height: 14px; display: block; }
         .truncation-notice {
             padding: 4px 12px;
             font-size: 11px;
@@ -466,9 +473,9 @@ export class DataViewerPanel {
         .status-msg.error { color: var(--vscode-errorForeground); opacity: 0.9; white-space: pre-wrap; }
         .empty-state {
             display: flex; flex-direction: column; align-items: center;
-            justify-content: center; height: 100%; text-align: center; opacity: 0.5;
+            justify-content: center; height: 100%; text-align: center; opacity: 0.3;
         }
-        .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+        .empty-state svg { width: 64px; height: 64px; margin-bottom: 16px; display: inline-block; }
         .empty-state p { font-size: 13px; line-height: 1.6; }
     </style>
 </head>
@@ -480,8 +487,12 @@ export class DataViewerPanel {
         </span>
         <div class="toolbar-actions">
             ${this._varName ? `
-            <button id="btn-auto" title="${this._autoRefreshInterval ? 'Auto-refresh ON (3s)' : 'Auto-refresh OFF'}" class="${this._autoRefreshInterval ? 'active' : ''}">${this._autoRefreshInterval ? '⏸' : '▶'}</button>
-            <button id="btn-refresh" title="Reload data">↻</button>
+            <button id="btn-auto" title="${this._autoRefreshInterval ? 'Auto-refresh ON (3s)' : 'Auto-refresh OFF'}" class="${this._autoRefreshInterval ? 'active' : ''}">
+                ${this._autoRefreshInterval 
+                    ? '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M3 3h4v10H3V3zm6 0h4v10H9V3z"/></svg>' 
+                    : '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.7 8.5L4.5 13.5V3.5l8.2 5z"/></svg>'}
+            </button>
+            <button id="btn-refresh" title="Reload data"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M13.6 2.3L15 3.7l-1.8 1.8c1.3 1.4 2.1 3.3 2.1 5.4 0 4.1-3.4 7.5-7.5 7.5-3 0-5.7-1.8-6.9-4.5l1.4-.6c1 2.2 3.2 3.6 5.5 3.6 3.3 0 6-2.7 6-6 0-1.6-.6-3.1-1.7-4.2L12.2 8.6l-1.4-1.4 2.8-4.9zM2.4 12.4l-1.4-1.4 1.8-1.8C1.5 7.8.7 5.9.7 3.8.7.7 4.1-2.7 8.2-2.7c3 0 5.7 1.8 6.9 4.5l-1.4.6c-1-2.2-3.2-3.6-5.5-3.6-3.3 0-6 2.7-6 6 0 1.6.6 3.1 1.7 4.2l1.8-1.8 1.4 1.4-2.7 4.9z" transform="rotate(45 8 8)"/></svg></button>
             ` : ''}
         </div>
     </div>
