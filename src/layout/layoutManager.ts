@@ -1159,6 +1159,11 @@ local({
 #    extension never needs to send a path-setting command to the R console.
 .rquad_csv  <- ".r-quadrant/dv.csv"
 .rquad_meta <- ".r-quadrant/dv-meta.txt"
+.rquad_active_df_to_export <- NULL
+.rquad_last_plot_hash <- NULL
+
+# Set default device to null pdf to enable invisible plot recording
+options(device = function(...) { pdf(file="/dev/null", ...); dev.control("enable") })
 
 # 4. Wipe stale R Quadrant data at startup so previous sessions don't bleed over.
 #    We hook into .First which runs immediately when the R session begins.
@@ -1179,6 +1184,7 @@ if (exists(".First", envir = .GlobalEnv)) {
 # 5. Data Viewer export function.
 #    .rquad_csv and .rquad_meta are already set above — no paths needed at call time.
 .r_quadrant_export_data <- function(varName) {
+  .rquad_active_df_to_export <<- varName
   tryCatch({
     obj <- get(varName, envir = .GlobalEnv)
     if (!is.data.frame(obj)) obj <- as.data.frame(obj)
@@ -1193,7 +1199,34 @@ if (exists(".First", envir = .GlobalEnv)) {
 # 6. Install the task callback. It fires after every top-level R command.
 invisible(local({
   if (!any(vapply(getTaskCallbackNames(), function(n) n == ".r-quadrant.watcher", logical(1)))) {
-    addTaskCallback(function(expr, value, ok, visible) {${snapshotCode}
+    addTaskCallback(function(expr, value, ok, visible) {
+      # 1. Update Data Viewer quietly if active
+      if (!is.null(.rquad_active_df_to_export) && exists(.rquad_active_df_to_export, envir = .GlobalEnv)) {
+        try({
+          obj <- get(.rquad_active_df_to_export, envir = .GlobalEnv)
+          if (!is.data.frame(obj)) obj <- as.data.frame(obj)
+          writeLines(c(as.character(nrow(obj)), as.character(ncol(obj))), .rquad_meta)
+          write.csv(head(obj, 1000), .rquad_csv, row.names = FALSE, na = "NA")
+        }, silent = TRUE)
+      }
+      
+      # 2. Capture plots quietly
+      if (dev.cur() > 1) {
+        .p <- recordPlot()
+        if (!is.null(.p) && length(.p[[1]]) > 0) {
+          .hash <- sum(as.numeric(serialize(.p, NULL)))
+          if (!identical(.hash, .rquad_last_plot_hash)) {
+            .rquad_last_plot_hash <<- .hash
+            .file <- sprintf(".r-quadrant/plots/plot_%s.png", format(Sys.time(), "%Y%m%d_%H%M%S_%OS3"))
+            png(filename = .file, width = 800, height = 600, res = 100)
+            try(replayPlot(.p), silent = TRUE)
+            dev.off()
+          }
+        }
+      }
+      
+      # 3. Snapshot Workspace
+      ${snapshotCode}
       TRUE
     }, name = ".r-quadrant.watcher")
   }

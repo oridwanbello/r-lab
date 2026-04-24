@@ -23,6 +23,7 @@ export class DataViewerPanel {
     private _totalCols = 0;
     private _isLoading = false;
     private _errorMessage = '';
+    private _autoRefreshInterval?: ReturnType<typeof setInterval>;
     private _disposables: vscode.Disposable[] = [];
 
     // ── Factory ─────────────────────────────────────────────
@@ -65,8 +66,21 @@ export class DataViewerPanel {
                 switch (msg.type) {
                     case 'refresh':
                         if (this._varName) {
-                            await this.loadVariable(this._varName);
+                            await this.loadVariable(this._varName, false);
                         }
+                        break;
+                    case 'toggleAutoRefresh':
+                        if (this._autoRefreshInterval) {
+                            clearInterval(this._autoRefreshInterval);
+                            this._autoRefreshInterval = undefined;
+                        } else {
+                            this._autoRefreshInterval = setInterval(() => {
+                                if (this._varName && !this._isLoading) {
+                                    this.loadVariable(this._varName, true);
+                                }
+                            }, 3000);
+                        }
+                        this._render();
                         break;
                 }
             },
@@ -87,19 +101,31 @@ export class DataViewerPanel {
      *  We send a single short command (.r_quadrant_export_data) to the R terminal,
      *  which avoids polluting the user's history with massive chunks of code.
      */
-    public async loadVariable(varName: string): Promise<void> {
+    public async loadVariable(varName: string, isAutoRefresh: boolean = false): Promise<void> {
         this._varName = varName;
         // The user specifically requested the tab title never change from "Data Viewer"
         this._panel.title = 'Data Viewer';
-        this._isLoading = true;
-        this._errorMessage = '';
-        this._render();
+        
+        if (!isAutoRefresh) {
+            this._isLoading = true;
+            this._errorMessage = '';
+            this._render();
+            
+            // Start auto-refresh automatically on manual load, per user request
+            if (!this._autoRefreshInterval) {
+                this._autoRefreshInterval = setInterval(() => {
+                    if (this._varName && !this._isLoading) {
+                        this.loadVariable(this._varName, true);
+                    }
+                }, 3000);
+            }
+        }
 
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         if (!wf) {
             this._errorMessage = 'No workspace folder open.';
             this._isLoading = false;
-            this._render();
+            if (!isAutoRefresh) this._render();
             return;
         }
 
@@ -111,28 +137,32 @@ export class DataViewerPanel {
         const tmpCsv  = nodePath.join(outDir, 'dv.csv');
         const tmpMeta = nodePath.join(outDir, 'dv-meta.txt');
 
-        // Delete stale output files so we can detect when the new ones appear.
-        try { nodeFs.unlinkSync(tmpCsv);  } catch {}
-        try { nodeFs.unlinkSync(tmpMeta); } catch {}
+        if (!isAutoRefresh) {
+            // Delete stale output files so we can detect when the new ones appear.
+            try { nodeFs.unlinkSync(tmpCsv);  } catch {}
+            try { nodeFs.unlinkSync(tmpMeta); } catch {}
 
-        const rTerminal = require('../layout/layoutManager').getRConsoleTerminal();
-        if (!rTerminal) {
-            this._errorMessage = 'No R Console terminal found. Activate the R Quadrant layout first.';
-            this._isLoading = false;
-            this._render();
-            return;
+            const rTerminal = require('../layout/layoutManager').getRConsoleTerminal();
+            if (!rTerminal) {
+                this._errorMessage = 'No R Console terminal found. Activate the R Quadrant layout first.';
+                this._isLoading = false;
+                this._render();
+                return;
+            }
+
+            // Send the clean command directly. The invisible path-setting is no longer needed
+            // because the paths are pre-set securely in the Rprofile hook.
+            rTerminal.sendText(`.r_quadrant_export_data("${varName}")`, true);
         }
 
-        // Send the clean command directly. The invisible path-setting is no longer needed
-        // because the paths are pre-set securely in the Rprofile hook.
-        rTerminal.sendText(`.r_quadrant_export_data("${varName}")`, true);
-
-        // Poll for the meta file (up to 10 s).
-        const metaRaw = await this._waitForFile(tmpMeta, 10000);
+        // Poll for the meta file (up to 10 s if manual, 0s if auto).
+        const metaRaw = await this._waitForFile(tmpMeta, isAutoRefresh ? 0 : 10000);
         if (metaRaw === null) {
-            this._errorMessage = 'Timed out waiting for R to export data. Check the R Console for errors.';
-            this._isLoading = false;
-            this._render();
+            if (!isAutoRefresh) {
+                this._errorMessage = 'Timed out waiting for R to export data. Check the R Console for errors.';
+                this._isLoading = false;
+                this._render();
+            }
             return;
         }
 
@@ -449,7 +479,10 @@ export class DataViewerPanel {
             ${this._varName ? `<span class="meta"> — ${escapeHtml(this._varName)} (${this._totalRows.toLocaleString()} × ${this._totalCols})</span>` : ''}
         </span>
         <div class="toolbar-actions">
-            ${this._varName ? '<button id="btn-refresh" title="Reload data">↻</button>' : ''}
+            ${this._varName ? `
+            <button id="btn-auto" title="${this._autoRefreshInterval ? 'Auto-refresh ON (3s)' : 'Auto-refresh OFF'}" class="${this._autoRefreshInterval ? 'active' : ''}">${this._autoRefreshInterval ? '⏸' : '▶'}</button>
+            <button id="btn-refresh" title="Reload data">↻</button>
+            ` : ''}
         </div>
     </div>
     <div class="content">${mainContent}</div>
@@ -458,6 +491,9 @@ export class DataViewerPanel {
             const vscode = acquireVsCodeApi();
             document.getElementById('btn-refresh')?.addEventListener('click', () => {
                 vscode.postMessage({ type: 'refresh' });
+            });
+            document.getElementById('btn-auto')?.addEventListener('click', () => {
+                vscode.postMessage({ type: 'toggleAutoRefresh' });
             });
         })();
     </script>
@@ -469,6 +505,10 @@ export class DataViewerPanel {
 
     dispose(): void {
         DataViewerPanel.currentPanel = undefined;
+        if (this._autoRefreshInterval) {
+            clearInterval(this._autoRefreshInterval);
+            this._autoRefreshInterval = undefined;
+        }
         this._panel.dispose();
         while (this._disposables.length) {
             const d = this._disposables.pop();
