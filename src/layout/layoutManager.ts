@@ -1224,7 +1224,7 @@ invisible(local({
             # If no plot ID yet (startup), start at 1
             if (.rquad_current_plot_id == 0) .rquad_current_plot_id <<- 1
             .file <- sprintf(".r-quadrant/plots/plot_%05d.png", .rquad_current_plot_id)
-            png(filename = .file, width = 800, height = 600, res = 100)
+            png(filename = .file, width = 800, height = 600, res = 100, bg = "white")
             try(replayPlot(.p), silent = TRUE)
             dev.off()
           }
