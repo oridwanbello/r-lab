@@ -295,11 +295,24 @@ export class PlotsPanel {
             opacity: 1;
             background: var(--vscode-toolbar-hoverBackground);
         }
-        .toolbar button[disabled] {
-            opacity: 0.25;
-            cursor: default;
-        }
         .toolbar button svg { width: 14px; height: 14px; display: block; }
+        
+        /* Custom Instant Tooltip */
+        .tooltip {
+            position: fixed;
+            background: var(--vscode-notifications-background, #252526);
+            color: var(--vscode-notifications-foreground, #cccccc);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            z-index: 1000;
+            pointer-events: none;
+            display: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            border: 1px solid var(--vscode-widget-border, #454545);
+            white-space: nowrap;
+        }
+
         .plot-area {
             flex: 1;
             display: flex;
@@ -334,15 +347,16 @@ export class PlotsPanel {
     <div class="toolbar">
         <span class="pane-title">Plots</span>
         <div class="nav-controls">
-            <button id="btn-prev" ${prevDisabled} title="Previous plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M11.354 1.646L12.061 2.354 6.414 8l5.647 5.646-.707.708L5 8l6.354-6.354z"/></svg></button>
+            <button id="btn-prev" ${prevDisabled} data-tooltip="Previous plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M11.354 1.646L12.061 2.354 6.414 8l5.647 5.646-.707.708L5 8l6.354-6.354z"/></svg></button>
             <span class="counter">${counter}</span>
-            <button id="btn-next" ${nextDisabled} title="Next plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M4.646 1.646L3.939 2.354 9.586 8l-5.647 5.646.707.708L11 8 4.646 1.646z"/></svg></button>
-            <button id="btn-copy" ${!hasPlots ? 'disabled' : ''} title="Copy"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M10,13.33H3.33V4.67c0-0.37-0.3-0.67-0.67-0.67h0C2.3,4,2,4.3,2,4.67v8.67c0,0.73,0.6,1.33,1.33,1.33h6.67c0.37,0,0.67-0.3,0.67-0.67v0C10.67,13.63,10.37,13.33,10,13.33z M13.33,10.67V2.67c0-0.73-0.6-1.33-1.33-1.33H6c-0.73,0-1.33,0.6-1.33,1.33v8c0,0.73,0.6,1.33,1.33,1.33h6c0.73,0,1.33-0.6,1.33-1.33z M12,10.67H6V2.67h6V10.67z"/></svg></button>
-            <button id="btn-save" ${!hasPlots ? 'disabled' : ''} title="Save as..."><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12,10v2H4v-2H2.67v2c0,0.73,0.6,1.33,1.33,1.33h8c0.73,0,1.33-0.6,1.33-1.33v-2H12z M11.33,7.33l-0.94-0.94L8.67,8.11V2.67h-1.33v5.45L5.61,6.39L4.67,7.33l3.33,3.33 L11.33,7.33z"/></svg></button>
-            <button id="btn-delete" ${!hasPlots ? 'disabled' : ''} title="Delete current plot"><svg viewBox="0 0 16 16"><path fill="none" d="M9.25,2H6.75a0.25,0.25,0,0,0-0.25,0.25V3h3V2.25A0.25,0.25,0,0,0,9.25,2Z"/><path fill="currentColor" d="M13.5,3H10.5V2.25A1.25,1.25,0,0,0,9.25,1H6.75A1.25,1.25,0,0,0,5.5,2.25V3H2.5a0.5,0.5,0,0,0,0,1H3L3.63,13.53C3.67,14.37,4.31,15,5.13,15h5.75c0.82,0,1.45-.62,1.5-1.47L13,4h0.5a0.5,0.5,0,0,0,0-1ZM6,13H6a0.5,0.5,0,0,1-.5-.48l-0.25-7a0.5,0.5,0,1,1,1-.04l0.25,7A0.5,0.5,0,0,1,6,13ZM8.5,12.5a0.5,0.5,0,0,1-1,0V5.5a0.5,0.5,0,0,1,1,0ZM9.5,3H6.5V2.25a0.25,0.25,0,0,1,.25-.25h2.5a0.25,0.25,0,0,1,.25.25Zm1,9.55a0.5,0.5,0,0,1-.5.45H10a0.5,0.5,0,0,1-.5-.52l0.25-7a0.5,0.5,0,1,1,1,.04Z"/></svg></button>
-            <button id="btn-clear" ${!hasPlots ? 'disabled' : ''} title="Clear all plots"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.91,1.81L13.85,2.76L10.04,6.57C10.75,7.59 10.85,8.83 10.25,9.63L6.04,5.41C6.84,4.81 8.07,4.91 9.1,5.63L12.91,1.81M3.95,11.71C2.61,10.37 1.79,8.77 1.57,7.28L4.82,5.89L9.78,10.85L8.39,14.1C6.89,13.87 5.29,13.05 3.95,11.71Z"/></svg></button>
+            <button id="btn-next" ${nextDisabled} data-tooltip="Next plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M4.646 1.646L3.939 2.354 9.586 8l-5.647 5.646.707.708L11 8 4.646 1.646z"/></svg></button>
+            <button id="btn-copy" ${!hasPlots ? 'disabled' : ''} data-tooltip="Copy"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M10,13.33H3.33V4.67c0-0.37-0.3-0.67-0.67-0.67h0C2.3,4,2,4.3,2,4.67v8.67c0,0.73,0.6,1.33,1.33,1.33h6.67c0.37,0,0.67-0.3,0.67-0.67v0C10.67,13.63,10.37,13.33,10,13.33z M13.33,10.67V2.67c0-0.73-0.6-1.33-1.33-1.33H6c-0.73,0-1.33,0.6-1.33,1.33v8c0,0.73,0.6,1.33,1.33,1.33h6c0.73,0,1.33-0.6,1.33-1.33z M12,10.67H6V2.67h6V10.67z"/></svg></button>
+            <button id="btn-save" ${!hasPlots ? 'disabled' : ''} data-tooltip="Save as..."><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12,10v2H4v-2H2.67v2c0,0.73,0.6,1.33,1.33,1.33h8c0.73,0,1.33-0.6,1.33-1.33v-2H12z M11.33,7.33l-0.94-0.94L8.67,8.11V2.67h-1.33v5.45L5.61,6.39L4.67,7.33l3.33,3.33 L11.33,7.33z"/></svg></button>
+            <button id="btn-delete" ${!hasPlots ? 'disabled' : ''} data-tooltip="Delete current plot"><svg viewBox="0 0 16 16"><path fill="none" d="M9.25,2H6.75a0.25,0.25,0,0,0-0.25,0.25V3h3V2.25A0.25,0.25,0,0,0,9.25,2Z"/><path fill="currentColor" d="M13.5,3H10.5V2.25A1.25,1.25,0,0,0,9.25,1H6.75A1.25,1.25,0,0,0,5.5,2.25V3H2.5a0.5,0.5,0,0,0,0,1H3L3.63,13.53C3.67,14.37,4.31,15,5.13,15h5.75c0.82,0,1.45-.62,1.5-1.47L13,4h0.5a0.5,0.5,0,0,0,0-1ZM6,13H6a0.5,0.5,0,0,1-.5-.48l-0.25-7a0.5,0.5,0,1,1,1-.04l0.25,7A0.5,0.5,0,0,1,6,13ZM8.5,12.5a0.5,0.5,0,0,1-1,0V5.5a0.5,0.5,0,0,1,1,0ZM9.5,3H6.5V2.25a0.25,0.25,0,0,1,.25-.25h2.5a0.25,0.25,0,0,1,.25.25Zm1,9.55a0.5,0.5,0,0,1-.5.45H10a0.5,0.5,0,0,1-.5-.52l0.25-7a0.5,0.5,0,1,1,1,.04Z"/></svg></button>
+            <button id="btn-clear" ${!hasPlots ? 'disabled' : ''} data-tooltip="Clear all plots"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.91,1.81L13.85,2.76L10.04,6.57C10.75,7.59 10.85,8.83 10.25,9.63L6.04,5.41C6.84,4.81 8.07,4.91 9.1,5.63L12.91,1.81M3.95,11.71C2.61,10.37 1.79,8.77 1.57,7.28L4.82,5.89L9.78,10.85L8.39,14.1C6.89,13.87 5.29,13.05 3.95,11.71Z"/></svg></button>
         </div>
     </div>
+    <div id="tooltip" class="tooltip"></div>
     <div class="plot-area">
         ${
             hasPlots
@@ -390,6 +404,22 @@ export class PlotsPanel {
                 } catch (err) {
                     console.error('Clipboard failed', err);
                 }
+            });
+            // Instant Tooltip Controller
+            const tooltip = document.getElementById('tooltip');
+            document.querySelectorAll('[data-tooltip]').forEach(el => {
+                el.addEventListener('mouseenter', (e) => {
+                    const text = el.getAttribute('data-tooltip');
+                    if (!text || el.disabled) return;
+                    tooltip.textContent = text;
+                    tooltip.style.display = 'block';
+                    const rect = el.getBoundingClientRect();
+                    tooltip.style.top = (rect.bottom + 5) + 'px';
+                    tooltip.style.left = (rect.left + (rect.width/2) - (tooltip.offsetWidth/2)) + 'px';
+                });
+                el.addEventListener('mouseleave', () => {
+                    tooltip.style.display = 'none';
+                });
             });
         })();
     </script>

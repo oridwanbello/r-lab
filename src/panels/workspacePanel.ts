@@ -583,6 +583,23 @@ tryCatch({
         .view-btn svg { display: block; }
         .status-msg { padding: 20px; text-align: center; opacity: 0.6; }
         .status-msg.error { color: var(--vscode-errorForeground); opacity: 0.9; white-space: pre-wrap; }
+        
+        /* Custom Instant Tooltip */
+        .tooltip {
+            position: fixed;
+            background: var(--vscode-notifications-background, #252526);
+            color: var(--vscode-notifications-foreground, #cccccc);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            z-index: 1000;
+            pointer-events: none;
+            display: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            border: 1px solid var(--vscode-widget-border, #454545);
+            white-space: nowrap;
+        }
+
         .empty-state {
             display: flex; flex-direction: column; align-items: center;
             justify-content: center; height: 100%; text-align: center; opacity: 0.5;
@@ -598,12 +615,13 @@ tryCatch({
             <span class="pane-title">Workspace</span>
         </span>
         <div class="toolbar-actions">
-            <button id="btn-auto" title="Auto-refresh OFF">
+            <button id="btn-auto" data-tooltip="Auto-refresh OFF">
                 <svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.7 8.5L4.5 13.5V3.5l8.2 5z"/></svg>
             </button>
-            <button id="btn-refresh" title="Refresh workspace"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.71 3.29a6.6 6.6 0 0 0-2.12-1.43 6.75 6.75 0 0 0-5.19 0c-0.79.33-1.51.82-2.12 1.43s-1.1 1.33-1.43 2.12a6.63 6.63 0 0 0-0.53 2.59h1.33c0-0.72.14-1.42.42-2.07.27-.63.65-1.21 1.15-1.69.49-.49 1.06-.87 1.69-1.14 1.31-.55 2.84-.55 4.15 0 .63.27 1.21.65 1.69 1.15.11.11.22.23.32.35L10.67 6.01h4V2l-1.63 1.63c-.1-.12-.21-.24-.32-.35m0.2 6.79c-.27.63-.65 1.21-1.15 1.69-.49.49-1.06.87-1.69 1.14-1.31.55-2.84.55-4.15 0-.63-.27-1.21-.65-1.69-1.15-.11-.11-.22-.23-.32-.35l1.42-1.42H1.33v4l1.63-1.63c.1.12.21.24.32.35.61.61 1.33 1.09 2.12 1.43.82.35 1.69.53 2.59.53s1.77-.17 2.59-.53c0.79-.33 1.51-.82 2.12-1.43s1.09-1.33 1.43-2.12c.35-.82.53-1.69.53-2.59h-1.33c0 0.72-.14 1.42-.42 2.07Z"/></svg></button>
+            <button id="btn-refresh" data-tooltip="Refresh workspace"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.71 3.29a6.6 6.6 0 0 0-2.12-1.43 6.75 6.75 0 0 0-5.19 0c-0.79.33-1.51.82-2.12 1.43s-1.1 1.33-1.43 2.12a6.63 6.63 0 0 0-0.53 2.59h1.33c0-0.72.14-1.42.42-2.07.27-.63.65-1.21 1.15-1.69.49-.49 1.06-.87 1.69-1.14 1.31-.55 2.84-.55 4.15 0 .63.27 1.21.65 1.69 1.15.11.11.22.23.32.35L10.67 6.01h4V2l-1.63 1.63c-.1-.12-.21-.24-.32-.35m0.2 6.79c-.27.63-.65 1.21-1.15 1.69-.49.49-1.06.87-1.69 1.14-1.31.55-2.84.55-4.15 0-.63-.27-1.21-.65-1.69-1.15-.11-.11-.22-.23-.32-.35l1.42-1.42H1.33v4l1.63-1.63c.1.12.21.24.32.35.61.61 1.33 1.09 2.12 1.43.82.35 1.69.53 2.59.53s1.77-.17 2.59-.53c0.79-.33 1.51-.82 2.12-1.43s1.09-1.33 1.43-2.12c.35-.82.53-1.69.53-2.59h-1.33c0 0.72-.14 1.42-.42 2.07Z"/></svg></button>
         </div>
     </div>
+    <div id="tooltip" class="tooltip"></div>
     <div class="tabs">
         <div class="tab active" data-target="tab-global">Global Environment <span id="count-global"></span></div>
         <div class="tab" data-target="tab-loaded">Loaded Namespaces <span id="count-loaded"></span></div>
@@ -676,7 +694,7 @@ tryCatch({
                         const EYE = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>';
                         let rows = msg.variables.map(v => {
                             const btn = v.isDataFrame
-                                ? '<button class="view-btn" data-var="' + escapeHtml(v.name) + '" title="View in Data Viewer">' + EYE + '</button>'
+                                ? '<button class="view-btn" data-var="' + escapeHtml(v.name) + '" data-tooltip="View in Data Viewer">' + EYE + '</button>'
                                 : '';
                             return '<tr class="var-row">'
                                 + '<td class="name-col"><span class="var-name">' + escapeHtml(v.name) + '</span>' + btn + '</td>'
@@ -710,7 +728,31 @@ tryCatch({
             document.getElementById('btn-auto')?.addEventListener('click', () => {
                 vscode.postMessage({ type: 'toggleAutoRefresh' });
             });
-            // Signal the extension that the webview JS is loaded and ready to receive data.
+
+            // Instant Tooltip Controller
+            const tooltip = document.getElementById('tooltip');
+            function setupTooltips() {
+                document.querySelectorAll('[data-tooltip]').forEach(el => {
+                    if (el._hasTooltip) return;
+                    el._hasTooltip = true;
+                    el.addEventListener('mouseenter', (e) => {
+                        const text = el.getAttribute('data-tooltip');
+                        if (!text || el.disabled) return;
+                        tooltip.textContent = text;
+                        tooltip.style.display = 'block';
+                        const rect = el.getBoundingClientRect();
+                        tooltip.style.top = (rect.bottom + 5) + 'px';
+                        tooltip.style.left = (rect.left + (rect.width/2) - (tooltip.offsetWidth/2)) + 'px';
+                    });
+                    el.addEventListener('mouseleave', () => {
+                        tooltip.style.display = 'none';
+                    });
+                });
+            }
+            setupTooltips();
+            const observer = new MutationObserver(() => setupTooltips());
+            observer.observe(document.body, { childList: true, subtree: true });
+
             vscode.postMessage({ type: 'ready' });
         })();
     </script>

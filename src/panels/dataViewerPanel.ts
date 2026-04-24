@@ -471,6 +471,23 @@ export class DataViewerPanel {
         .content { flex: 1; overflow: auto; display: flex; flex-direction: column; }
         .status-msg { padding: 20px; text-align: center; opacity: 0.6; }
         .status-msg.error { color: var(--vscode-errorForeground); opacity: 0.9; white-space: pre-wrap; }
+        
+        /* Custom Instant Tooltip */
+        .tooltip {
+            position: fixed;
+            background: var(--vscode-notifications-background, #252526);
+            color: var(--vscode-notifications-foreground, #cccccc);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            z-index: 1000;
+            pointer-events: none;
+            display: none;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            border: 1px solid var(--vscode-widget-border, #454545);
+            white-space: nowrap;
+        }
+
         .empty-state {
             display: flex; flex-direction: column; align-items: center;
             justify-content: center; height: 100%; text-align: center; opacity: 0.3;
@@ -487,15 +504,16 @@ export class DataViewerPanel {
         </span>
         <div class="toolbar-actions">
             ${this._varName ? `
-            <button id="btn-auto" title="${this._autoRefreshInterval ? 'Auto-refresh ON (3s)' : 'Auto-refresh OFF'}" class="${this._autoRefreshInterval ? 'active' : ''}">
+            <button id="btn-auto" data-tooltip="${this._autoRefreshInterval ? 'Auto-refresh ON (3s)' : 'Auto-refresh OFF'}" class="${this._autoRefreshInterval ? 'active' : ''}">
                 ${this._autoRefreshInterval 
                     ? '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M3 3h4v10H3V3zm6 0h4v10H9V3z"/></svg>' 
                     : '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.7 8.5L4.5 13.5V3.5l8.2 5z"/></svg>'}
             </button>
-            <button id="btn-refresh" title="Refresh data"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.71 3.29a6.6 6.6 0 0 0-2.12-1.43 6.75 6.75 0 0 0-5.19 0c-0.79.33-1.51.82-2.12 1.43s-1.1 1.33-1.43 2.12a6.63 6.63 0 0 0-0.53 2.59h1.33c0-0.72.14-1.42.42-2.07.27-.63.65-1.21 1.15-1.69.49-.49 1.06-.87 1.69-1.14 1.31-.55 2.84-.55 4.15 0 .63.27 1.21.65 1.69 1.15.11.11.22.23.32.35L10.67 6.01h4V2l-1.63 1.63c-.1-.12-.21-.24-.32-.35m0.2 6.79c-.27.63-.65 1.21-1.15 1.69-.49.49-1.06.87-1.69 1.14-1.31.55-2.84.55-4.15 0-.63-.27-1.21-.65-1.69-1.15-.11-.11-.22-.23-.32-.35l1.42-1.42H1.33v4l1.63-1.63c.1.12.21.24.32.35.61.61 1.33 1.09 2.12 1.43.82.35 1.69.53 2.59.53s1.77-.17 2.59-.53c0.79-.33 1.51-.82 2.12-1.43s1.09-1.33 1.43-2.12c.35-.82.53-1.69.53-2.59h-1.33c0 0.72-.14 1.42-.42 2.07Z"/></svg></button>
+            <button id="btn-refresh" data-tooltip="Refresh data"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.71 3.29a6.6 6.6 0 0 0-2.12-1.43 6.75 6.75 0 0 0-5.19 0c-0.79.33-1.51.82-2.12 1.43s-1.1 1.33-1.43 2.12a6.63 6.63 0 0 0-0.53 2.59h1.33c0-0.72.14-1.42.42-2.07.27-.63.65-1.21 1.15-1.69.49-.49 1.06-.87 1.69-1.14 1.31-.55 2.84-.55 4.15 0 .63.27 1.21.65 1.69 1.15.11.11.22.23.32.35L10.67 6.01h4V2l-1.63 1.63c-.1-.12-.21-.24-.32-.35m0.2 6.79c-.27.63-.65 1.21-1.15 1.69-.49.49-1.06.87-1.69 1.14-1.31.55-2.84.55-4.15 0-.63-.27-1.21-.65-1.69-1.15-.11-.11-.22-.23-.32-.35l1.42-1.42H1.33v4l1.63-1.63c.1.12.21.24.32.35.61.61 1.33 1.09 2.12 1.43.82.35 1.69.53 2.59.53s1.77-.17 2.59-.53c0.79-.33 1.51-.82 2.12-1.43s1.09-1.33 1.43-2.12c.35-.82.53-1.69.53-2.59h-1.33c0 0.72-.14 1.42-.42 2.07Z"/></svg></button>
             ` : ''}
         </div>
     </div>
+    <div id="tooltip" class="tooltip"></div>
     <div class="content">${mainContent}</div>
     <script nonce="${nonce}">
         (function() {
@@ -505,6 +523,23 @@ export class DataViewerPanel {
             });
             document.getElementById('btn-auto')?.addEventListener('click', () => {
                 vscode.postMessage({ type: 'toggleAutoRefresh' });
+            });
+
+            // Instant Tooltip Controller
+            const tooltip = document.getElementById('tooltip');
+            document.querySelectorAll('[data-tooltip]').forEach(el => {
+                el.addEventListener('mouseenter', (e) => {
+                    const text = el.getAttribute('data-tooltip');
+                    if (!text || el.disabled) return;
+                    tooltip.textContent = text;
+                    tooltip.style.display = 'block';
+                    const rect = el.getBoundingClientRect();
+                    tooltip.style.top = (rect.bottom + 5) + 'px';
+                    tooltip.style.left = (rect.left + (rect.width/2) - (tooltip.offsetWidth/2)) + 'px';
+                });
+                el.addEventListener('mouseleave', () => {
+                    tooltip.style.display = 'none';
+                });
             });
         })();
     </script>
