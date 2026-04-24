@@ -111,7 +111,7 @@ export class PlotsPanel {
     private async _handleSaveAs(): Promise<void> {
         if (this._currentIndex < 0) { return; }
         const sourceUri = this._plots[this._currentIndex];
-        
+
         const saveUri = await vscode.window.showSaveDialog({
             defaultUri: vscode.Uri.file(path.basename(sourceUri.fsPath)),
             filters: { 'Images': ['png'] }
@@ -296,7 +296,15 @@ export class PlotsPanel {
             background: var(--vscode-toolbar-hoverBackground);
         }
         .toolbar button svg { width: 14px; height: 14px; display: block; }
-        
+        .toolbar button[disabled] {
+            opacity: 0.3;
+            cursor: default;
+            pointer-events: auto; /* Allow hover for tooltips */
+        }
+        .toolbar button[disabled]:hover {
+            background: none;
+        }
+
         /* Custom Instant Tooltip */
         .tooltip {
             position: fixed;
@@ -364,8 +372,8 @@ export class PlotsPanel {
                 : `<div class="empty-state">
                        <svg viewBox="0 0 16 16"><path fill="currentColor" d="M2 2h1v11h11v1H2V2zm3 8h2v3H5v-3zm3-4h2v7H8V6zm3-3h2v10h-2V3z"/></svg>
                        <p>No plots yet.<br/>
-                       Any <code>plot()</code> commands you run in the R Console<br/>
-                       will automatically appear here.</p>
+                       Any plot generated in the R Console using the default<br/>
+                       graphics device will automatically appear here.</p>
                    </div>`
         }
     </div>
@@ -410,7 +418,7 @@ export class PlotsPanel {
             document.querySelectorAll('[data-tooltip]').forEach(el => {
                 el.addEventListener('mouseenter', (e) => {
                     const text = el.getAttribute('data-tooltip');
-                    if (!text || el.disabled) return;
+                    if (!text) return;
                     tooltip.textContent = text;
                     tooltip.style.display = 'block';
                     const rect = el.getBoundingClientRect();

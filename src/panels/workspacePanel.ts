@@ -512,6 +512,14 @@ tryCatch({
         .toolbar button:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground); }
         .toolbar button.active { opacity: 1; color: var(--vscode-textLink-foreground); }
         .toolbar button svg { width: 14px; height: 14px; display: block; }
+        .toolbar button[disabled] {
+            opacity: 0.3;
+            cursor: default;
+            pointer-events: auto; /* Allow hover for tooltips */
+        }
+        .toolbar button[disabled]:hover {
+            background: none;
+        }
         
         .tabs { display: flex; border-bottom: 1px solid var(--vscode-editorGroup-border); background: var(--vscode-editor-background); }
         .tab { padding: 8px 12px; cursor: pointer; opacity: 0.6; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid transparent; }
@@ -618,7 +626,7 @@ tryCatch({
             <button id="btn-auto" data-tooltip="Auto-refresh OFF">
                 <svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.7 8.5L4.5 13.5V3.5l8.2 5z"/></svg>
             </button>
-            <button id="btn-refresh" data-tooltip="Refresh workspace"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.71 3.29a6.6 6.6 0 0 0-2.12-1.43 6.75 6.75 0 0 0-5.19 0c-0.79.33-1.51.82-2.12 1.43s-1.1 1.33-1.43 2.12a6.63 6.63 0 0 0-0.53 2.59h1.33c0-0.72.14-1.42.42-2.07.27-.63.65-1.21 1.15-1.69.49-.49 1.06-.87 1.69-1.14 1.31-.55 2.84-.55 4.15 0 .63.27 1.21.65 1.69 1.15.11.11.22.23.32.35L10.67 6.01h4V2l-1.63 1.63c-.1-.12-.21-.24-.32-.35m0.2 6.79c-.27.63-.65 1.21-1.15 1.69-.49.49-1.06.87-1.69 1.14-1.31.55-2.84.55-4.15 0-.63-.27-1.21-.65-1.69-1.15-.11-.11-.22-.23-.32-.35l1.42-1.42H1.33v4l1.63-1.63c.1.12.21.24.32.35.61.61 1.33 1.09 2.12 1.43.82.35 1.69.53 2.59.53s1.77-.17 2.59-.53c0.79-.33 1.51-.82 2.12-1.43s1.09-1.33 1.43-2.12c.35-.82.53-1.69.53-2.59h-1.33c0 0.72-.14 1.42-.42 2.07Z"/></svg></button>
+            <button id="btn-refresh" data-tooltip="Refresh workspace"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M14 8a6 6 0 1 1-2.56-4.94" /><path d="M14 3v3.33H10.67" /></svg></button>
         </div>
     </div>
     <div id="tooltip" class="tooltip"></div>
@@ -737,7 +745,7 @@ tryCatch({
                     el._hasTooltip = true;
                     el.addEventListener('mouseenter', (e) => {
                         const text = el.getAttribute('data-tooltip');
-                        if (!text || el.disabled) return;
+                        if (!text) return;
                         tooltip.textContent = text;
                         tooltip.style.display = 'block';
                         const rect = el.getBoundingClientRect();
