@@ -22,6 +22,8 @@ Ensure that users never lose their active session state when toggling the quadra
     - Workspace panel force-refreshes immediately on re-activation, skipping the loading spinner.
     - Terminal module-level references are preserved across deactivation so reuse works correctly.
 
+We need a space in the plot panel where someone can past filepath of the plots they want to view.
+
 **Proposed Technical Approach:**
 - For existing terminals/panels, use `vscode.commands.executeCommand` (e.g., `workbench.action.moveEditorToSecondGroup`) to reposition them.
 - Use `vscode.window.tabGroups` to track tab locations during transitions.
