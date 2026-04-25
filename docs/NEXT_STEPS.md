@@ -42,8 +42,14 @@ Make the activation of the quadrant view feel completely instantaneous.
 ## 3 Making the help results colorful in the help tab
 
 ## 4 ARK integration
+- [ ] Implement seamless layout support for the `ark` interactive console.
+- [ ] Auto-detect `ark` sessions and adjust quadrant behavior.
 
-## 5 Having tabs for multiple agents
+## 5 httpgd Integration (Advanced Plotting)
+- [ ] Detect if `httpgd` is installed and active in the R session.
+- [ ] Provide an option to swap the standard PNG gallery for the interactive `httpgd` webview.
+- [ ] Support SVG resizing and hover inspections within the Plot Quadrant.
 
-## 6 Testing the data viewer and plot tabs
+## 6 Having tabs for multiple agents
+## 7 Testing the data viewer and plot tabs
 

@@ -487,9 +487,10 @@ tryCatch({
         .toolbar {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            padding: 6px 12px;
-            background: var(--vscode-editorGroupHeader-tabsBackground);
+            justify-content: flex-end;
+            padding: 0 12px;
+            height: 32px;
+            background: var(--vscode-editor-background); /* Matches active tab */
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             flex-shrink: 0;
         }
@@ -548,7 +549,7 @@ tryCatch({
             vertical-align: top;
         }
         .var-row:hover td { background: var(--vscode-list-hoverBackground); }
-        .name-col { width: 25%; }
+        .name-col { width: 1%; white-space: nowrap; padding-right: 16px !important; }
         .var-name {
             font-family: var(--vscode-editor-font-family, monospace);
             font-size: 12px;
@@ -556,12 +557,15 @@ tryCatch({
             color: var(--vscode-textLink-foreground);
         }
         .type-col {
-            width: 18%;
+            width: 1%;
+            white-space: nowrap;
+            padding-right: 16px !important;
             font-family: var(--vscode-editor-font-family, monospace);
             font-size: 11px; opacity: 0.7;
         }
-        .size-col { width: 12%; opacity: 0.6; font-size: 11px; }
+        .size-col { width: 1%; white-space: nowrap; padding-right: 16px !important; opacity: 0.6; font-size: 11px; }
         .preview-col {
+            width: auto;
             font-family: var(--vscode-editor-font-family, monospace);
             font-size: 11px; opacity: 0.8;
             vertical-align: top;
@@ -595,16 +599,16 @@ tryCatch({
         /* Custom Instant Tooltip */
         .tooltip {
             position: fixed;
-            background: var(--vscode-notifications-background, #252526);
-            color: var(--vscode-notifications-foreground, #cccccc);
-            padding: 4px 8px;
-            border-radius: 4px;
+            background: var(--vscode-editorHoverWidget-background, #252526);
+            color: var(--vscode-editorHoverWidget-foreground, #cccccc);
+            padding: 2px 8px;
+            border-radius: 3px;
             font-size: 11px;
             z-index: 1000;
             pointer-events: none;
             display: none;
             box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-            border: 1px solid var(--vscode-widget-border, #454545);
+            border: 1px solid var(--vscode-editorHoverWidget-border, #454545);
             white-space: nowrap;
         }
 
@@ -619,14 +623,10 @@ tryCatch({
 </head>
 <body>
     <div class="toolbar">
-        <span>
-            <span class="pane-title">Workspace</span>
-        </span>
         <div class="toolbar-actions">
             <button id="btn-auto" data-tooltip="Auto-refresh OFF">
                 <svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.7 8.5L4.5 13.5V3.5l8.2 5z"/></svg>
             </button>
-            <button id="btn-refresh" data-tooltip="Refresh workspace"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M14 8a6 6 0 1 1-2.56-4.94" /><path d="M14 3v3.33H10.67" /></svg></button>
         </div>
     </div>
     <div id="tooltip" class="tooltip"></div>
@@ -734,6 +734,9 @@ tryCatch({
                 vscode.postMessage({ type: 'refresh' });
             });
             document.getElementById('btn-auto')?.addEventListener('click', () => {
+                const btn = document.getElementById('btn-auto');
+                const isOff = btn.getAttribute('data-tooltip') === 'Auto-refresh OFF';
+                btn.setAttribute('data-tooltip', isOff ? 'Auto-refresh ON' : 'Auto-refresh OFF');
                 vscode.postMessage({ type: 'toggleAutoRefresh' });
             });
 
@@ -750,7 +753,15 @@ tryCatch({
                         tooltip.style.display = 'block';
                         const rect = el.getBoundingClientRect();
                         tooltip.style.top = (rect.bottom + 5) + 'px';
-                        tooltip.style.left = (rect.left + (rect.width/2) - (tooltip.offsetWidth/2)) + 'px';
+                        
+                        // Boundary detection
+                        const padding = 10;
+                        let left = rect.left + (rect.width/2) - (tooltip.offsetWidth/2);
+                        if (left < padding) left = padding;
+                        if (left + tooltip.offsetWidth > window.innerWidth - padding) {
+                            left = window.innerWidth - tooltip.offsetWidth - padding;
+                        }
+                        tooltip.style.left = left + 'px';
                     });
                     el.addEventListener('mouseleave', () => {
                         tooltip.style.display = 'none';

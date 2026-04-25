@@ -302,7 +302,7 @@ export class DataViewerPanel {
             mainContent = `<div class="status-msg">No data available for "${escapeHtml(this._varName)}".</div>`;
         } else {
             const headerCells = this._columns
-                .map((col, i) => `<th data-col="${i}" class="sortable"><span class="col-name">${escapeHtml(col)}</span><span class="sort-icon">⇅</span></th>`)
+                .map((col, i) => `<th data-col="${i}" class="sortable"><span class="col-name">${escapeHtml(col)}</span><span class="sort-icon">⏶⏷</span></th>`)
                 .join('');
 
             // Build row data as JSON for client-side sorting
@@ -322,10 +322,14 @@ export class DataViewerPanel {
                 </div>
                 <script nonce="${nonce}">
                     (function() {
+                        const vscode = acquireVsCodeApi();
                         const rows = ${rowsJson};
                         const columns = ${JSON.stringify(this._columns)};
-                        let sortCol = -1;
-                        let sortAsc = true;
+                        
+                        // Restore state
+                        const oldState = vscode.getState() || {};
+                        let sortCol = oldState.sortCol !== undefined ? oldState.sortCol : -1;
+                        let sortAsc = oldState.sortAsc !== undefined ? oldState.sortAsc : true;
 
                         function renderRows(data) {
                             const tbody = document.getElementById('table-body');
@@ -342,33 +346,48 @@ export class DataViewerPanel {
                             return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
                         }
 
+                        function applySort() {
+                            if (sortCol === -1) {
+                                renderRows(rows);
+                                return;
+                            }
+                            const key = columns[sortCol];
+                            const sorted = [...rows].sort((a, b) => {
+                                const va = a[key], vb = b[key];
+                                if (va === null || va === undefined || va === 'NA') return 1;
+                                if (vb === null || vb === undefined || vb === 'NA') return -1;
+                                if (typeof va === 'number' && typeof vb === 'number') {
+                                    return sortAsc ? va - vb : vb - va;
+                                }
+                                const sa = String(va), sb = String(vb);
+                                return sortAsc ? sa.localeCompare(sb) : sb.localeCompare(sa);
+                            });
+                            
+                            document.querySelectorAll('th.sortable').forEach((t, i) => {
+                                t.classList.remove('sort-asc','sort-desc');
+                                t.querySelector('.sort-icon').textContent = '⏶⏷';
+                                if (i === sortCol) {
+                                    t.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
+                                    t.querySelector('.sort-icon').textContent = sortAsc ? '⏶' : '⏷';
+                                }
+                            });
+                            renderRows(sorted);
+                            vscode.setState({ sortCol, sortAsc });
+                        }
+
                         document.querySelectorAll('th.sortable').forEach(th => {
                             th.addEventListener('click', () => {
                                 const col = parseInt(th.getAttribute('data-col'));
-                                if (sortCol === col) { sortAsc = !sortAsc; }
+                                if (sortCol === col) { 
+                                    if (sortAsc) sortAsc = false;
+                                    else { sortCol = -1; sortAsc = true; } // Cycle: Asc -> Desc -> Default
+                                }
                                 else { sortCol = col; sortAsc = true; }
-                                const key = columns[col];
-                                rows.sort((a, b) => {
-                                    const va = a[key], vb = b[key];
-                                    if (va === null || va === undefined || va === 'NA') return 1;
-                                    if (vb === null || vb === undefined || vb === 'NA') return -1;
-                                    if (typeof va === 'number' && typeof vb === 'number') {
-                                        return sortAsc ? va - vb : vb - va;
-                                    }
-                                    const sa = String(va), sb = String(vb);
-                                    return sortAsc ? sa.localeCompare(sb) : sb.localeCompare(sa);
-                                });
-                                document.querySelectorAll('th.sortable').forEach(t => {
-                                    t.classList.remove('sort-asc','sort-desc');
-                                    t.querySelector('.sort-icon').textContent = '⇅';
-                                });
-                                th.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
-                                th.querySelector('.sort-icon').textContent = sortAsc ? '▲' : '▼';
-                                renderRows(rows);
+                                applySort();
                             });
                         });
 
-                        renderRows(rows);
+                        applySort();
                     })();
                 </script>`;
         }
@@ -397,12 +416,14 @@ export class DataViewerPanel {
         .toolbar {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            padding: 6px 12px;
-            background: var(--vscode-editorGroupHeader-tabsBackground);
+            justify-content: space-between; /* Meta left, Actions right */
+            padding: 0 12px;
+            height: 32px;
+            background: var(--vscode-editor-background); /* Matches active tab */
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             flex-shrink: 0;
         }
+
         .toolbar button[disabled] {
             opacity: 0.3;
             cursor: default;
@@ -411,12 +432,10 @@ export class DataViewerPanel {
         .toolbar button[disabled]:hover {
             background: none;
         }
-        .pane-title {
-            font-weight: 600; font-size: 11px;
-            text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7;
-        }
         .meta {
-            font-size: 11px; opacity: 0.5;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--vscode-textLink-foreground);
             font-family: var(--vscode-editor-font-family, monospace);
         }
         .toolbar-actions { display: flex; align-items: center; gap: 6px; }
@@ -452,33 +471,32 @@ export class DataViewerPanel {
         }
         .table-wrapper { flex: 1; overflow: auto; }
         table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        thead th {
-            position: sticky; top: 0; z-index: 1;
-            padding: 5px 8px;
+        th, td {
+            padding: 4px 10px;
             text-align: left;
-            font-weight: 600;
+            border-bottom: 1px solid var(--vscode-editorGroup-border);
+            border-right: 1px solid var(--vscode-editorGroup-border);
+            white-space: nowrap; /* Prevent data from spilling to next line */
+            font-family: var(--vscode-editor-font-family, monospace);
             font-size: 11px;
-            background: var(--vscode-editorGroupHeader-tabsBackground);
-            border-bottom: 2px solid var(--vscode-editorGroup-border);
-            white-space: nowrap;
         }
-        th.sortable { cursor: pointer; user-select: none; }
-        th.sortable:hover { background: var(--vscode-list-hoverBackground); }
-        th.sortable .col-name { margin-right: 4px; }
-        th.sortable .sort-icon { font-size: 9px; opacity: 0.35; }
-        th.sort-asc .sort-icon, th.sort-desc .sort-icon { opacity: 1; color: var(--vscode-textLink-foreground); }
+        th {
+            position: sticky; top: 0; z-index: 1;
+            background: var(--vscode-editorGroupHeader-tabsBackground);
+            font-weight: 600; font-size: 11px; letter-spacing: 0.3px; opacity: 0.8;
+            cursor: pointer; user-select: none;
+            border-bottom: 2px solid var(--vscode-editorGroup-border);
+        }
+        th.sortable:hover { background: var(--vscode-list-hoverBackground); opacity: 1; }
+        th.sortable .col-name { margin-right: 6px; }
+        th.sortable .sort-icon { font-size: 12px; opacity: 0.4; vertical-align: middle; }
+        th.sort-asc .sort-icon, th.sort-desc .sort-icon { opacity: 1; color: var(--vscode-textLink-foreground); font-weight: bold; }
         .row-num {
             width: 40px; text-align: right; opacity: 0.35;
             font-size: 10px; padding-right: 8px !important;
-            font-family: var(--vscode-editor-font-family, monospace);
         }
-        tbody td {
-            padding: 3px 8px;
-            border-bottom: 1px solid var(--vscode-editorGroup-border);
-            font-family: var(--vscode-editor-font-family, monospace);
-            font-size: 11px;
-            white-space: nowrap;
-            max-width: 300px;
+        td {
+            max-width: 400px;
             overflow: hidden;
             text-overflow: ellipsis;
         }
@@ -491,16 +509,16 @@ export class DataViewerPanel {
         /* Custom Instant Tooltip */
         .tooltip {
             position: fixed;
-            background: var(--vscode-notifications-background, #252526);
-            color: var(--vscode-notifications-foreground, #cccccc);
-            padding: 4px 8px;
-            border-radius: 4px;
+            background: var(--vscode-editorHoverWidget-background, #252526);
+            color: var(--vscode-editorHoverWidget-foreground, #cccccc);
+            padding: 2px 8px;
+            border-radius: 3px;
             font-size: 11px;
             z-index: 1000;
             pointer-events: none;
             display: none;
             box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-            border: 1px solid var(--vscode-widget-border, #454545);
+            border: 1px solid var(--vscode-editorHoverWidget-border, #454545);
             white-space: nowrap;
         }
 
@@ -515,18 +533,15 @@ export class DataViewerPanel {
 <body>
     <div class="toolbar">
         <span>
-            <span class="pane-title">Data Viewer</span>
-            ${this._varName ? `<span class="meta"> — ${escapeHtml(this._varName)} (${this._totalRows.toLocaleString()} × ${this._totalCols})</span>` : ''}
+            ${this._varName ? `<span class="meta">${escapeHtml(this._varName)} (${this._totalRows.toLocaleString()} × ${this._totalCols})</span>` : ''}
         </span>
         <div class="toolbar-actions">
-            ${this._varName ? `
-            <button id="btn-auto" data-tooltip="${this._autoRefreshInterval ? 'Auto-refresh ON (3s)' : 'Auto-refresh OFF'}" class="${this._autoRefreshInterval ? 'active' : ''}">
-                ${this._autoRefreshInterval 
-                    ? '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M3 3h4v10H3V3zm6 0h4v10H9V3z"/></svg>' 
-                    : '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.7 8.5L4.5 13.5V3.5l8.2 5z"/></svg>'}
+            <button id="btn-refresh" ${!this._varName ? 'disabled' : ''} data-tooltip="Refresh data">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M13.29 8.69a5.33 5.33 0 1 1 -6.62 -5.86c2.6-.67 5.29.67 6.28 3.16" />
+                    <path d="M13.33 2.67v3.33h-3.33" />
+                </svg>
             </button>
-            <button id="btn-refresh" data-tooltip="Refresh data"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M14 8a6 6 0 1 1-2.56-4.94" /><path d="M14 3v3.33H10.67" /></svg></button>
-            ` : ''}
         </div>
     </div>
     <div id="tooltip" class="tooltip"></div>
@@ -551,7 +566,15 @@ export class DataViewerPanel {
                     tooltip.style.display = 'block';
                     const rect = el.getBoundingClientRect();
                     tooltip.style.top = (rect.bottom + 5) + 'px';
-                    tooltip.style.left = (rect.left + (rect.width/2) - (tooltip.offsetWidth/2)) + 'px';
+                    
+                    // Boundary detection
+                    const padding = 10;
+                    let left = rect.left + (rect.width/2) - (tooltip.offsetWidth/2);
+                    if (left < padding) left = padding;
+                    if (left + tooltip.offsetWidth > window.innerWidth - padding) {
+                        left = window.innerWidth - tooltip.offsetWidth - padding;
+                    }
+                    tooltip.style.left = left + 'px';
                 });
                 el.addEventListener('mouseleave', () => {
                     tooltip.style.display = 'none';

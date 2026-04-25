@@ -216,9 +216,6 @@ export class HelpPanel {
             mainContent = `<div class="status-msg">⏳ Loading help for "${escapeHtml(this._lastQuery)}"…</div>`;
         } else if (this._helpText) {
             mainContent = `
-                <div class="help-header">
-                    <span class="help-topic">?${escapeHtml(this._lastQuery)}</span>
-                </div>
                 <div class="help-html-content">${this._helpText}</div>`;
         } else {
             mainContent = `
@@ -329,17 +326,8 @@ export class HelpPanel {
         .search-bar button:hover { background: var(--vscode-button-hoverBackground); }
         .content { flex: 1; overflow: auto; }
         .status-msg { padding: 20px; text-align: center; opacity: 0.6; }
-        .help-header {
-            padding: 8px 14px;
-            background: var(--vscode-editorGroupHeader-tabsBackground);
-            border-bottom: 1px solid var(--vscode-editorGroup-border);
-            position: sticky; top: 0; z-index: 1;
-        }
-        .help-topic {
-            font-family: var(--vscode-editor-font-family, monospace);
-            font-size: 12px; font-weight: 600;
-            color: var(--vscode-textLink-foreground);
-        }
+
+
         .help-html-content {
             padding: 16px 20px;
             font-size: 13px; line-height: 1.6;
@@ -400,7 +388,6 @@ export class HelpPanel {
     </style>
 </head>
 <body>
-    <div class="toolbar"><span class="pane-title">R Help</span></div>
     <div class="search-bar">
         <input id="search-input" type="text"
                placeholder="Search R help… e.g. mean, dplyr::filter"

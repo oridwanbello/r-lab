@@ -193,7 +193,6 @@ export class ProblemsPanel {
 </head>
 <body>
     <div class="toolbar">
-        <span class="pane-title">Problems</span>
         <span class="summary">${summary}</span>
     </div>
     <div class="content">

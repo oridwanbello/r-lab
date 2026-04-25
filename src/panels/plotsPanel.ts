@@ -256,9 +256,10 @@ export class PlotsPanel {
         .toolbar {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            padding: 6px 12px;
-            background: var(--vscode-editorGroupHeader-tabsBackground);
+            justify-content: flex-end; /* Right align tools */
+            padding: 0 12px;
+            height: 32px; /* Fixed height to prevent shrinking */
+            background: var(--vscode-editor-background); /* Matches active tab */
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             flex-shrink: 0;
         }
@@ -353,7 +354,6 @@ export class PlotsPanel {
 </head>
 <body>
     <div class="toolbar">
-        <span class="pane-title">Plots</span>
         <div class="nav-controls">
             <button id="btn-prev" ${prevDisabled} data-tooltip="Previous plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M11.354 1.646L12.061 2.354 6.414 8l5.647 5.646-.707.708L5 8l6.354-6.354z"/></svg></button>
             <span class="counter">${counter}</span>
@@ -423,7 +423,15 @@ export class PlotsPanel {
                     tooltip.style.display = 'block';
                     const rect = el.getBoundingClientRect();
                     tooltip.style.top = (rect.bottom + 5) + 'px';
-                    tooltip.style.left = (rect.left + (rect.width/2) - (tooltip.offsetWidth/2)) + 'px';
+                    
+                    // Boundary detection
+                    const padding = 10;
+                    let left = rect.left + (rect.width/2) - (tooltip.offsetWidth/2);
+                    if (left < padding) left = padding;
+                    if (left + tooltip.offsetWidth > window.innerWidth - padding) {
+                        left = window.innerWidth - tooltip.offsetWidth - padding;
+                    }
+                    tooltip.style.left = left + 'px';
                 });
                 el.addEventListener('mouseleave', () => {
                     tooltip.style.display = 'none';

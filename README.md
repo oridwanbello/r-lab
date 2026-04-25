@@ -40,6 +40,12 @@ Inspect dataframes directly from debug sessions:
 - Real-time row filtering
 - Works with R (`data.frame`, `tibble`) and Python (`pandas.DataFrame`)
 
+### 🚀 Advanced Tool Integration
+R Quadrant is designed to be "Zero Friction" by default, but it is fully compatible with high-performance community tools:
+- **`httpgd` Support** — Use the high-fidelity `httpgd` graphics device for interactive, vector-quality plotting inside the Plot Quadrant.
+- **`ark` Console** — Seamlessly integrates with the `ark` (Jupyter-based) interactive console for a more powerful R programming experience.
+- **DAP Integration** — Fully utilizes the Debug Adapter Protocol for real-time variable inspection.
+
 ---
 
 ## 🚀 Getting Started
