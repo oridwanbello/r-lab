@@ -469,6 +469,10 @@ export class PlotsPanel {
             font-size: 12px;
             outline: none;
         }
+        .dir-dropdown input::placeholder {
+            color: var(--vscode-input-placeholderForeground);
+            opacity: 1;
+        }
         .dir-dropdown input:focus {
             border-color: var(--vscode-focusBorder);
         }

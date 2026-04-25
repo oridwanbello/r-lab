@@ -158,8 +158,9 @@ export class ProblemsPanel {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 6px 12px;
-            background: var(--vscode-editorGroupHeader-tabsBackground);
+            padding: 0 12px;
+            height: 32px;
+            background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             flex-shrink: 0;
         }
