@@ -556,7 +556,6 @@ tryCatch({
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.3px;
-            opacity: 0.5;
             background: var(--vscode-editorGroupHeader-tabsBackground);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
         }

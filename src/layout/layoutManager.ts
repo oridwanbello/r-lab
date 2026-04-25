@@ -1144,9 +1144,15 @@ function discoverAllAi(allCommands: string[]): {
 
 async function focusGroup3(): Promise<void> {
     try {
-        await vscode.commands.executeCommand(
-            'workbench.action.focusThirdEditorGroup'
-        );
+        // 1. Try standard command
+        await vscode.commands.executeCommand('workbench.action.focusThirdEditorGroup');
+        await delay(50);
+
+        // 2. Aggressive fallback: Force reveal the HelpPanel WITHOUT preserving focus.
+        // This is the most reliable way to force focus into Group 3 if it exists.
+        if (HelpPanel.currentPanel) {
+            HelpPanel.currentPanel.reveal(vscode.ViewColumn.Three, false);
+        }
         await delay(100);
     } catch {
         // Silently ignore

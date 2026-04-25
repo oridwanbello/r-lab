@@ -46,6 +46,10 @@ export class HelpPanel {
         return HelpPanel.currentPanel;
     }
 
+    public reveal(column?: vscode.ViewColumn, preserveFocus?: boolean): void {
+        this._panel.reveal(column, preserveFocus);
+    }
+
     // ── State Serialization ─────────────────────────────────
 
     public saveState(): any {

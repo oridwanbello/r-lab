@@ -58,6 +58,10 @@ export class PlotsPanel {
         return roots;
     }
 
+    public reveal(column?: vscode.ViewColumn, preserveFocus?: boolean): void {
+        this._panel.reveal(column, preserveFocus);
+    }
+
     // ── Constructor ─────────────────────────────────────────
 
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
