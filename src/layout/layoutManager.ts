@@ -714,32 +714,20 @@ async function deactivateLayout(): Promise<void> {
     // will null them out if the user manually closes a terminal.
 
     // 6. Close non-text tabs to keep the normal view clean.
-    //    CHAT TABS — preserved for session continuity: send back to sidebar
-    //    instead of closing. Closing a Chat tab destroys the conversation.
-    //    Our webview panels (Help, Plots, etc.) were already disposed above,
-    //    so the only survivors here should be Chat tabs.
-    let chatRestored = false;
+    //    CHAT SESSION CONTINUITY:
+    //    When a sidebar chat was moved to Group 3 via vscode.moveViews, it is
+    //    a "relocated view" — NOT a new editor instance. Closing its editor tab
+    //    automatically returns the view to its original sidebar container with
+    //    the session fully intact. No special handling needed.
+    //    If openInEditor was used (last-resort fallback), closing also destroys
+    //    that new session — which is acceptable since it was already a fresh one.
+    //    Therefore: simply close all remaining non-text/non-terminal tabs.
     for (const group of vscode.window.tabGroups.all) {
         for (const tab of group.tabs) {
             if (tab.input instanceof vscode.TabInputText || tab.input instanceof vscode.TabInputTerminal) {
-                continue; // keep source files and terminals
+                continue;
             }
-            if (isChatTab(tab)) {
-                // Try to dock Chat back to the sidebar (preserves session).
-                // Only do this once — the command acts on whichever chat is active.
-                if (!chatRestored) {
-                    try {
-                        await vscode.commands.executeCommand('workbench.action.chat.openInSidebar');
-                        chatRestored = true;
-                    } catch {}
-                }
-                // If restoring to sidebar failed, close as last resort.
-                if (!chatRestored) {
-                    try { await vscode.window.tabGroups.close(tab); } catch {}
-                }
-            } else {
-                try { await vscode.window.tabGroups.close(tab); } catch {}
-            }
+            try { await vscode.window.tabGroups.close(tab); } catch {}
         }
     }
 
@@ -922,94 +910,145 @@ function isChatTab(tab: vscode.Tab): boolean {
 }
 
 /**
- * Opens the AI Chat tab in Group 3 (top-right quadrant).
+ * Opens AI Chat tabs in Group 3 (top-right quadrant), preserving sessions.
  *
- * Three-tier strategy:
- *   1. If a chat tab is already in Group 3, skip (avoids duplicates).
- *   2. Focus Group 3 (which MUST have HelpPanel content already!) then
- *      run standard chat-in-editor commands in priority order.
- *   3. Discover AI extension commands dynamically as a last resort.
+ * Strategy:
+ *   Tier 1. Already in Group 3 — skip.
+ *   Tier 2. vscode.moveViews — RELOCATES the existing sidebar view into Group 3.
+ *           This preserves the chat session and avoids creating a duplicate.
+ *           Tried for EVERY detected AI extension so Copilot + Gemini etc.
+ *           each get their own sub-tab.
+ *   Tier 3. openInEditor / extension-specific commands — last resort only.
+ *           Creates a new (fresh) editor instance. Used only when moveViews
+ *           fails for all extensions (e.g. extension doesn't support it).
  *
- * After placement, moves Chat to tab position 1 (before Help) so the
- * tab order matches the AGENTS.md spec: Chat → Help.
+ * After each successful placement, the new tab is moved left past Help so
+ * the order is always Chat(s) → Help per the AGENTS.md spec.
  *
  * IMPORTANT: Caller must create HelpPanel in Group 3 BEFORE calling this.
- * Without existing content, focusThirdEditorGroup silently no-ops and
- * openInEditor fires while Group 1 is still active — wrong quadrant.
+ * focusThirdEditorGroup silently no-ops on an empty group — Group 3 must
+ * already have content for the focus (and thus placement) to be reliable.
  */
 async function openChatInGroup3(): Promise<void> {
     // ── Tier 1: Already placed correctly — nothing to do ─────────
-    const group3 = vscode.window.tabGroups.all.find(
-        (g) => g.viewColumn === vscode.ViewColumn.Three
-    );
-    if (group3?.tabs.some((t) => isChatTab(t))) {
+    const alreadyInGroup3 = () => vscode.window.tabGroups.all
+        .find((g) => g.viewColumn === vscode.ViewColumn.Three)
+        ?.tabs.some((t) => isChatTab(t)) ?? false;
+
+    if (alreadyInGroup3()) {
         console.log('[R Quadrant] openChatInGroup3: Chat already in Group 3.');
         return;
     }
 
     const allCommands = await vscode.commands.getCommands(true);
+    const aiReport = discoverAllAi(allCommands);
+    for (const r of aiReport) {
+        console.log(`[R Quadrant] AI discovered: ${r.displayName} (${r.id}), views: ${r.viewIds.join(', ')}`);
+    }
 
-    // ── Tier 2: Standard chat-in-editor commands ──────────────────
-    // These open a chat editor in the currently focused group.
-    // We pre-focus Group 3 so the chat lands in the right quadrant.
-    const standardChatCmds = [
-        'workbench.action.chat.openInEditor',   // VS Code native / Antigravity
-        'workbench.action.chat.open',           // alternate native
-        'github.copilot.chat.openEditor',       // GitHub Copilot
-        'cloudcode.duet.chat.openEditor',       // Google Cloud Code
-        'amazonq.openChat',                     // Amazon Q
-        'codeium.chat.openEditor',              // Codeium
-        'continue.openEditor',                  // Continue.dev
-        'sourcegraph.cody.openChat',            // Cody
-    ].filter((c) => allCommands.includes(c));
+    // ── Tier 2: vscode.moveViews — relocates the existing sidebar view ────
+    //
+    // This is the CORRECT approach for session continuity:
+    //   • moveViews moves the actual sidebar view object into the editor area.
+    //   • The chat session (history, context) is fully preserved.
+    //   • No duplicate is created — it's the same view, just repositioned.
+    //   • When the editor tab is later closed (on deactivate), the view
+    //     automatically returns to its original sidebar container.
+    //
+    // We build a priority-ordered list of view IDs: real IDs from each
+    // extension's package.json (via discoverAllAi) plus well-known fallbacks.
+    // We iterate ALL extensions so that Copilot, Gemini, and any others each
+    // get their own tab in Group 3.
+    //
+    // Group 3 MUST have HelpPanel content before this runs — that's what
+    // makes focusThirdEditorGroup reliable.
 
-    for (const cmd of standardChatCmds) {
+    const wellKnownViewIds = [
+        // VS Code built-in / GitHub Copilot
+        'workbench.panel.chat',
+        'workbench.panel.chat.view.copilot',
+        'workbench.view.copilot',
+        'github.copilot.chat',
+        'copilot.chatSidebar',
+        // Google Gemini / Cloud Code
+        'googleCloudCode.geminiChat',
+        'cloudcode.geminiChat',
+        'gemini.chat',
+        // Antigravity
+        'antigravity.chat',
+        'antigravity.chatSidebar',
+    ];
+
+    let chatTabCount = 0; // how many chat tabs we've successfully placed
+
+    // Build per-extension view ID lists: real IDs first, well-known after.
+    // Outer loop = each AI extension; inner = each view ID for that extension.
+    const tried = new Set<string>();
+
+    const attemptMoveView = async (viewId: string): Promise<boolean> => {
+        if (tried.has(viewId)) { return false; }
+        tried.add(viewId);
         try {
-            await focusGroup3(); // Group 3 has Help content — focus sticks
-            await delay(150);
-            await vscode.commands.executeCommand(cmd);
-            await delay(350);
-            // Verify placement
-            const g3 = vscode.window.tabGroups.all.find(
-                (g) => g.viewColumn === vscode.ViewColumn.Three
-            );
-            if (g3?.tabs.some((t) => isChatTab(t))) {
-                console.log(`[R Quadrant] ✓ Chat placed in Group 3 via "${cmd}"`);
-                // Move Chat before Help so tab order is Chat → Help (AGENTS.md spec)
+            await focusGroup3(); // Group 3 has Help — focus sticks reliably
+            await delay(100);
+            await vscode.commands.executeCommand('vscode.moveViews', {
+                viewIds: [viewId],
+                destinationId: 'workbench.editor',
+            });
+            await delay(300);
+            // Verify: did a NEW chat tab appear in Group 3?
+            const currentCount = vscode.window.tabGroups.all
+                .find((g) => g.viewColumn === vscode.ViewColumn.Three)
+                ?.tabs.filter((t) => isChatTab(t)).length ?? 0;
+            if (currentCount > chatTabCount) {
+                chatTabCount = currentCount;
+                console.log(`[R Quadrant] ✓ Moved view "${viewId}" → Group 3 (${chatTabCount} chat tab(s))`);
+                // Move this chat tab before Help (reorder to tab 1)
                 await focusGroup3();
                 await delay(50);
                 await vscode.commands.executeCommand('workbench.action.moveEditorLeftInGroup');
-                return;
+                return true;
             }
-        } catch { /* try next */ }
+        } catch { /* view ID not valid — try next */ }
+        return false;
+    };
+
+    // Try each AI extension's own view IDs first (most likely to be correct)
+    for (const ai of aiReport) {
+        for (const viewId of ai.viewIds) {
+            await attemptMoveView(viewId);
+        }
     }
 
-    // ── Tier 3: AI-extension command discovery ────────────────────
-    const aiReport = discoverAllAi(allCommands);
-    for (const r of aiReport) {
-        console.log(`[R Quadrant] AI: ${r.displayName} (${r.id}), cmds: ${r.commands.slice(0, 5).join(', ')}`);
+    // Then try well-known fallback IDs that aren't already in the discovered set
+    for (const viewId of wellKnownViewIds) {
+        await attemptMoveView(viewId);
     }
 
-    // Heuristic: commands from AI extensions that mention "editor", "open", etc.
-    const discoveredCmds = allCommands.filter((c) => {
-        const l = c.toLowerCase();
-        const isAi = ['chat', 'gemini', 'copilot', 'antigravity', 'claude',
-                       'cody', 'continue', 'codeium', 'tabnine', 'amazonq'].some((k) => l.includes(k));
-        const isEditorOpen = ['editor', 'open', 'new', 'create'].some((k) => l.includes(k));
-        return isAi && isEditorOpen && !standardChatCmds.includes(c);
-    });
+    if (chatTabCount > 0) {
+        console.log(`[R Quadrant] openChatInGroup3: placed ${chatTabCount} chat tab(s) via vscode.moveViews.`);
+        return;
+    }
 
-    for (const cmd of discoveredCmds.slice(0, 15)) {
+    // ── Tier 3: Last-resort — openInEditor (new session, not the sidebar one) ──
+    //
+    // Only reached when vscode.moveViews failed for all extensions.
+    // Creates a fresh chat editor — session continuity is not preserved,
+    // but at least a chat tab appears in Group 3.
+    const fallbackCmds = [
+        'workbench.action.chat.openInEditor',
+        'workbench.action.chat.open',
+        'github.copilot.chat.openEditor',
+    ].filter((c) => allCommands.includes(c));
+
+    for (const cmd of fallbackCmds) {
         try {
             await focusGroup3();
             await delay(150);
             await vscode.commands.executeCommand(cmd);
             await delay(350);
-            const g3 = vscode.window.tabGroups.all.find(
-                (g) => g.viewColumn === vscode.ViewColumn.Three
-            );
-            if (g3?.tabs.some((t) => isChatTab(t))) {
-                console.log(`[R Quadrant] ✓ Chat placed in Group 3 via discovered "${cmd}"`);
+            if (alreadyInGroup3()) {
+                console.log(`[R Quadrant] ✓ Chat placed in Group 3 via fallback "${cmd}" (new session).`);
                 await focusGroup3();
                 await delay(50);
                 await vscode.commands.executeCommand('workbench.action.moveEditorLeftInGroup');
@@ -1020,7 +1059,7 @@ async function openChatInGroup3(): Promise<void> {
 
     console.log(
         '[R Quadrant] openChatInGroup3: could not auto-place a chat tab. ' +
-        'Open any AI chat sidebar and drag it into the top-right quadrant.'
+        'Open any AI chat and drag it into the top-right quadrant.'
     );
 }
 
