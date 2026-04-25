@@ -23,7 +23,7 @@ export class DataViewerPanel {
     private _totalCols = 0;
     private _isLoading = false;
     private _errorMessage = '';
-    private _autoRefreshInterval?: ReturnType<typeof setInterval>;
+    private _lastRenderHash = '';
     private _disposables: vscode.Disposable[] = [];
 
     // ── Factory ─────────────────────────────────────────────
@@ -66,21 +66,9 @@ export class DataViewerPanel {
                 switch (msg.type) {
                     case 'refresh':
                         if (this._varName) {
-                            await this.loadVariable(this._varName, false);
+                            // Manual refresh just re-reads the disk (silent).
+                            await this.loadVariable(this._varName, true);
                         }
-                        break;
-                    case 'toggleAutoRefresh':
-                        if (this._autoRefreshInterval) {
-                            clearInterval(this._autoRefreshInterval);
-                            this._autoRefreshInterval = undefined;
-                        } else {
-                            this._autoRefreshInterval = setInterval(() => {
-                                if (this._varName && !this._isLoading) {
-                                    this.loadVariable(this._varName, true);
-                                }
-                            }, 3000);
-                        }
-                        this._render();
                         break;
                 }
             },
@@ -105,20 +93,11 @@ export class DataViewerPanel {
         this._varName = varName;
         // The user specifically requested the tab title never change from "Data Viewer"
         this._panel.title = 'Data Viewer';
-        
+
         if (!isAutoRefresh) {
             this._isLoading = true;
             this._errorMessage = '';
             this._render();
-            
-            // Start auto-refresh automatically on manual load, per user request
-            if (!this._autoRefreshInterval) {
-                this._autoRefreshInterval = setInterval(() => {
-                    if (this._varName && !this._isLoading) {
-                        this.loadVariable(this._varName, true);
-                    }
-                }, 3000);
-            }
         }
 
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -278,7 +257,6 @@ export class DataViewerPanel {
 
     // ── Rendering ───────────────────────────────────────────
 
-    private _lastRenderHash?: string;
 
     private _render(): void {
         const stateToHash = JSON.stringify({
@@ -288,8 +266,7 @@ export class DataViewerPanel {
             cols: this._columns,
             rows: this._rows,
             totCols: this._totalCols,
-            totRows: this._totalRows,
-            autoOn: !!this._autoRefreshInterval
+            totRows: this._totalRows
         });
 
         if (this._lastRenderHash === stateToHash) {
@@ -334,80 +311,10 @@ export class DataViewerPanel {
                 ${truncated}
                 <div class="table-wrapper">
                     <table>
-                        <thead><tr><th class="row-num">#</th>${headerCells}</tr></thead>
+                        <thead><tr><th class="row-num"><span style="opacity: 0.35;">#</span></th>${headerCells}</tr></thead>
                         <tbody id="table-body"></tbody>
                     </table>
-                </div>
-                <script nonce="${nonce}">
-                    (function() {
-                        const vscode = acquireVsCodeApi();
-                        const rows = ${rowsJson};
-                        const columns = ${JSON.stringify(this._columns)};
-                        
-                        // Restore state
-                        const oldState = vscode.getState() || {};
-                        let sortCol = oldState.sortCol !== undefined ? oldState.sortCol : -1;
-                        let sortAsc = oldState.sortAsc !== undefined ? oldState.sortAsc : true;
-
-                        function renderRows(data) {
-                            const tbody = document.getElementById('table-body');
-                            tbody.innerHTML = data.map((row, i) => {
-                                const cells = columns.map(col => {
-                                    const val = row[col];
-                                    return '<td>' + (val === null || val === undefined || val === 'NA' ? '<span class="na">NA</span>' : escapeHtml(String(val))) + '</td>';
-                                }).join('');
-                                return '<tr><td class="row-num">' + (i + 1) + '</td>' + cells + '</tr>';
-                            }).join('');
-                        }
-
-                        function escapeHtml(s) {
-                            return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-                        }
-
-                        function applySort() {
-                            if (sortCol === -1) {
-                                renderRows(rows);
-                                return;
-                            }
-                            const key = columns[sortCol];
-                            const sorted = [...rows].sort((a, b) => {
-                                const va = a[key], vb = b[key];
-                                if (va === null || va === undefined || va === 'NA') return 1;
-                                if (vb === null || vb === undefined || vb === 'NA') return -1;
-                                if (typeof va === 'number' && typeof vb === 'number') {
-                                    return sortAsc ? va - vb : vb - va;
-                                }
-                                const sa = String(va), sb = String(vb);
-                                return sortAsc ? sa.localeCompare(sb) : sb.localeCompare(sa);
-                            });
-                            
-                            document.querySelectorAll('th.sortable').forEach((t, i) => {
-                                t.classList.remove('sort-asc','sort-desc');
-                                t.querySelector('.sort-icon').textContent = '⏶⏷';
-                                if (i === sortCol) {
-                                    t.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
-                                    t.querySelector('.sort-icon').textContent = sortAsc ? '⏶' : '⏷';
-                                }
-                            });
-                            renderRows(sorted);
-                            vscode.setState({ sortCol, sortAsc });
-                        }
-
-                        document.querySelectorAll('th.sortable').forEach(th => {
-                            th.addEventListener('click', () => {
-                                const col = parseInt(th.getAttribute('data-col'));
-                                if (sortCol === col) { 
-                                    if (sortAsc) sortAsc = false;
-                                    else { sortCol = -1; sortAsc = true; } // Cycle: Asc -> Desc -> Default
-                                }
-                                else { sortCol = col; sortAsc = true; }
-                                applySort();
-                            });
-                        });
-
-                        applySort();
-                    })();
-                </script>`;
+                </div>`;
         }
 
         return /* html */ `<!DOCTYPE html>
@@ -502,17 +409,29 @@ export class DataViewerPanel {
         th {
             position: sticky; top: 0; z-index: 1;
             background: var(--vscode-editorGroupHeader-tabsBackground);
-            font-weight: 600; font-size: 11px; letter-spacing: 0.3px; opacity: 0.8;
+            font-weight: 600; font-size: 11px; letter-spacing: 0.3px; color: var(--vscode-editor-foreground); opacity: 1;
             cursor: pointer; user-select: none;
             border-bottom: 2px solid var(--vscode-editorGroup-border);
         }
-        th.sortable:hover { background: var(--vscode-list-hoverBackground); opacity: 1; }
+        th.sortable:hover {
+            background: var(--vscode-editorGroupHeader-tabsBackground);
+            box-shadow: inset 0 0 0 1000px var(--vscode-list-hoverBackground);
+            opacity: 1;
+        }
         th.sortable .col-name { margin-right: 6px; }
-        th.sortable .sort-icon { font-size: 12px; opacity: 0.4; vertical-align: middle; }
+        th.sortable .sort-icon {
+            font-size: 12px; opacity: 0.4; vertical-align: middle;
+            display: inline-block; min-width: 16px; text-align: center;
+        }
         th.sort-asc .sort-icon, th.sort-desc .sort-icon { opacity: 1; color: var(--vscode-textLink-foreground); font-weight: bold; }
-        .row-num {
+        td.row-num {
             width: 40px; text-align: right; opacity: 0.35;
             font-size: 10px; padding-right: 8px !important;
+        }
+        th.row-num {
+            width: 40px; text-align: right;
+            font-size: 10px; padding-right: 8px !important;
+            opacity: 1;
         }
         td {
             max-width: 400px;
@@ -524,7 +443,7 @@ export class DataViewerPanel {
         .content { flex: 1; overflow: auto; display: flex; flex-direction: column; }
         .status-msg { padding: 20px; text-align: center; opacity: 0.6; }
         .status-msg.error { color: var(--vscode-errorForeground); opacity: 0.9; white-space: pre-wrap; }
-        
+
         /* Custom Instant Tooltip */
         .tooltip {
             position: fixed;
@@ -568,12 +487,91 @@ export class DataViewerPanel {
     <script nonce="${nonce}">
         (function() {
             const vscode = acquireVsCodeApi();
+
+            // Refresh Button
             document.getElementById('btn-refresh')?.addEventListener('click', () => {
                 vscode.postMessage({ type: 'refresh' });
             });
-            document.getElementById('btn-auto')?.addEventListener('click', () => {
-                vscode.postMessage({ type: 'toggleAutoRefresh' });
-            });
+
+            // Sorting Logic (only if table exists)
+            const tbody = document.getElementById('table-body');
+            if (tbody) {
+                const rows = ${JSON.stringify(this._rows)};
+                const columns = ${JSON.stringify(this._columns)};
+
+                const oldState = vscode.getState() || {};
+                let sortCol = oldState.sortCol !== undefined ? oldState.sortCol : -1;
+                let sortAsc = oldState.sortAsc !== undefined ? oldState.sortAsc : true;
+
+                function renderRows(data) {
+                    tbody.innerHTML = data.map((row, i) => {
+                        const cells = columns.map(col => {
+                            const val = row[col];
+                            let displayVal = val;
+                            if (val === null || val === undefined || val === 'NA') {
+                                displayVal = '<span class="na">NA</span>';
+                            } else {
+                                displayVal = String(val).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+                            }
+                            return '<td>' + displayVal + '</td>';
+                        }).join('');
+                        return '<tr><td class="row-num">' + (i + 1) + '</td>' + cells + '</tr>';
+                    }).join('');
+                }
+
+                function applySort() {
+                    document.querySelectorAll('th.sortable').forEach((t, i) => {
+                        t.classList.remove('sort-asc','sort-desc');
+                        t.querySelector('.sort-icon').textContent = '⏶⏷';
+                        if (i === sortCol) {
+                            t.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
+                            t.querySelector('.sort-icon').textContent = sortAsc ? '⏶' : '⏷';
+                        }
+                    });
+
+                    if (sortCol === -1) {
+                        renderRows(rows);
+                        vscode.setState({ sortCol, sortAsc });
+                        return;
+                    }
+
+                    const key = columns[sortCol];
+                    const sorted = [...rows].sort((a, b) => {
+                        const va = a[key], vb = b[key];
+                        if (va === null || va === undefined || va === 'NA') return 1;
+                        if (vb === null || vb === undefined || vb === 'NA') return -1;
+
+                        const sa = String(va).trim();
+                        const sb = String(vb).trim();
+                        const na = Number(sa);
+                        const nb = Number(sb);
+                        const isNumA = sa !== '' && !isNaN(na);
+                        const isNumB = sb !== '' && !isNaN(nb);
+
+                        if (isNumA && isNumB) {
+                            return sortAsc ? na - nb : nb - na;
+                        }
+                        return sortAsc ? sa.localeCompare(sb) : sb.localeCompare(sa);
+                    });
+
+                    renderRows(sorted);
+                    vscode.setState({ sortCol, sortAsc });
+                }
+
+                document.querySelectorAll('th.sortable').forEach(th => {
+                    th.addEventListener('click', () => {
+                        const col = parseInt(th.getAttribute('data-col'));
+                        if (sortCol === col) {
+                            if (sortAsc) sortAsc = false;
+                            else { sortCol = -1; sortAsc = true; }
+                        }
+                        else { sortCol = col; sortAsc = true; }
+                        applySort();
+                    });
+                });
+
+                applySort();
+            }
 
             // Instant Tooltip Controller
             const tooltip = document.getElementById('tooltip');
@@ -585,8 +583,7 @@ export class DataViewerPanel {
                     tooltip.style.display = 'block';
                     const rect = el.getBoundingClientRect();
                     tooltip.style.top = (rect.bottom + 5) + 'px';
-                    
-                    // Boundary detection
+
                     const padding = 10;
                     let left = rect.left + (rect.width/2) - (tooltip.offsetWidth/2);
                     if (left < padding) left = padding;
@@ -609,10 +606,6 @@ export class DataViewerPanel {
 
     dispose(): void {
         DataViewerPanel.currentPanel = undefined;
-        if (this._autoRefreshInterval) {
-            clearInterval(this._autoRefreshInterval);
-            this._autoRefreshInterval = undefined;
-        }
         this._panel.dispose();
         while (this._disposables.length) {
             const d = this._disposables.pop();
