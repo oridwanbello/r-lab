@@ -30,6 +30,11 @@
           "type": "string",
           "default": ".r-quadrant/plots",
           "description": "Relative path (from workspace root) to the directory where plot images are saved. The Plot Gallery watches this directory for new files."
+        },
+        "r-quadrant.chatViewId": {
+          "type": "string",
+          "default": "",
+          "description": "The view ID of your preferred AI chat sidebar panel to move into the top-right quadrant. Find it by running 'Developer: Inspect Context Keys' while focused on your chat sidebar, and looking for 'view'. Examples: 'antigravity.chat', 'googleCloudCode.geminiChat'. Leave empty to auto-detect."
         }
       }
     },

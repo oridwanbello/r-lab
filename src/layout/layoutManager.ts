@@ -1039,6 +1039,12 @@ async function openChatInGroup3(): Promise<void> {
     // Group 3 MUST have HelpPanel content before this runs — that's what
     // makes focusThirdEditorGroup reliable.
 
+    // ── Tier 0: User-configured view ID takes highest priority ───────────
+    const userChatViewId = vscode.workspace.getConfiguration('r-quadrant').get<string>('chatViewId', '').trim();
+    if (userChatViewId) {
+        console.log(`[R Quadrant] Trying user-configured chatViewId: "${userChatViewId}"`);
+    }
+
     const wellKnownViewIds = [
         // VS Code built-in / GitHub Copilot
         'workbench.panel.chat',
@@ -1094,6 +1100,11 @@ async function openChatInGroup3(): Promise<void> {
         } catch { /* view ID not valid — try next */ }
         return false;
     };
+
+    // Try user-configured ID first (highest priority)
+    if (userChatViewId) {
+        await attemptMoveView(userChatViewId);
+    }
 
     // Try each AI extension's own view IDs first (most likely to be correct)
     for (const ai of aiReport) {
