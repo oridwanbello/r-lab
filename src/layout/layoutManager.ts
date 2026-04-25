@@ -564,9 +564,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     ProblemsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
     await delay(100);
 
-    // Make R Console the active/visible tab in Group 2.
-    // show(true) = reveal in the editor without stealing keyboard focus.
-    if (rConsoleTerminal) { rConsoleTerminal.show(true); }
+
 
     // 10. Group 3 (top-right): Chat → Help  (Chat FIRST, Chat FOCUSED)
     //
@@ -670,6 +668,16 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     // 15. Ensure bottom panel is closed since we opened terminals
     try { await vscode.commands.executeCommand('workbench.action.closePanel'); } catch {}
+
+    // 16. Set final tab focus: R Console in Group 2 (done LAST so nothing steals it back).
+    //     R Console is always the first tab placed in Group 2.
+    try {
+        await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+        await delay(100);
+        await vscode.commands.executeCommand('workbench.action.firstEditorInGroup');
+        await delay(50);
+        await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+    } catch {}
 
     activationInProgress = false;
     // Deferred refresh: give the Workspace webview ~500ms to fully render after
@@ -1073,8 +1081,14 @@ async function openChatInGroup3(): Promise<void> {
                 console.log(`[R Quadrant] ✓ Moved view "${viewId}" → Group 3 (${chatTabCount} chat tab(s))`);
                 // Move this chat tab before Help (reorder to tab 1)
                 await focusGroup3();
-                await delay(50);
+                await delay(100);
+                // focusThirdEditorGroup might restore focus to Help.
+                // Select the newly added Chat tab (which is at the end)
+                await vscode.commands.executeCommand('workbench.action.lastEditorInGroup');
+                await delay(100);
                 await vscode.commands.executeCommand('workbench.action.moveEditorLeftInGroup');
+                await delay(50);
+                await vscode.commands.executeCommand('workbench.action.moveEditorLeftInGroup'); // twice to be safe
                 return true;
             }
         } catch { /* view ID not valid — try next */ }
@@ -1118,6 +1132,10 @@ async function openChatInGroup3(): Promise<void> {
             if (alreadyInGroup3()) {
                 console.log(`[R Quadrant] ✓ Chat placed in Group 3 via fallback "${cmd}" (new session).`);
                 await focusGroup3();
+                await delay(100);
+                await vscode.commands.executeCommand('workbench.action.lastEditorInGroup');
+                await delay(100);
+                await vscode.commands.executeCommand('workbench.action.moveEditorLeftInGroup');
                 await delay(50);
                 await vscode.commands.executeCommand('workbench.action.moveEditorLeftInGroup');
                 return;
