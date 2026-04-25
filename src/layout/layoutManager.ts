@@ -38,6 +38,7 @@ let rConsoleTerminal: vscode.Terminal | undefined;
 let shellTerminal: vscode.Terminal | undefined;
 let statusBarItem: vscode.StatusBarItem;
 let extensionContext: vscode.ExtensionContext;
+let helpSessionState: any = null; // Session-only persistence for R Help
 
 export function getRConsoleTerminal(): vscode.Terminal | undefined {
     return rConsoleTerminal;
@@ -472,6 +473,9 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         if (wf && !wasRConsoleReused) {
             const staleFile = path.join(wf, '.r-quadrant', '.workspace_data.json');
             try { fs.unlinkSync(staleFile); } catch {}
+            
+            // NEW: Clear R Help state for brand-new R sessions
+            helpSessionState = null;
         }
 
         // Build the watcher Rprofile BEFORE creating the terminal.
@@ -547,8 +551,8 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     // Always ensure HelpPanel is open in Group 3, regardless of Chat success.
     const helpPanel = HelpPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
-    const helpState = extensionContext.workspaceState.get<any>('r-quadrant.helpState');
-    if (helpState) { helpPanel.loadState(helpState); }
+    // Load Help state from session memory (resets on VS Code restart)
+    if (helpSessionState) { helpPanel.loadState(helpSessionState); }
 
     await delay(100);
     // Focus Group 3 and navigate to the first tab (Chat/Help) to make it active.
@@ -665,10 +669,9 @@ async function deactivateLayout(): Promise<void> {
     await extensionContext.workspaceState.update('r-quadrant.textFilePositions', textFilePositions);
     await extensionContext.workspaceState.update('r-quadrant.panelPositions', panelPositions);
 
-    // Save Help state before disposing
+    // Save Help state to session memory before disposing
     if (HelpPanel.currentPanel) {
-        const helpState = HelpPanel.currentPanel.saveState();
-        await extensionContext.workspaceState.update('r-quadrant.helpState', helpState);
+        helpSessionState = HelpPanel.currentPanel.saveState();
     }
 
     // 4. Dispose panel singletons (closes our Webview tabs)

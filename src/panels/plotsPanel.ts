@@ -243,6 +243,7 @@ export class PlotsPanel {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style nonce="${nonce}">
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
         body {
             font-family: var(--vscode-font-family);
             font-size: 13px;
@@ -309,16 +310,16 @@ export class PlotsPanel {
         /* Custom Instant Tooltip */
         .tooltip {
             position: fixed;
-            background: var(--vscode-notifications-background, #252526);
-            color: var(--vscode-notifications-foreground, #cccccc);
-            padding: 4px 8px;
-            border-radius: 4px;
+            background: var(--vscode-editorHoverWidget-background, #252526);
+            color: var(--vscode-editorHoverWidget-foreground, #cccccc);
+            padding: 2px 8px;
+            border-radius: 3px;
             font-size: 11px;
             z-index: 1000;
             pointer-events: none;
             display: none;
             box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-            border: 1px solid var(--vscode-widget-border, #454545);
+            border: 1px solid var(--vscode-editorHoverWidget-border, #454545);
             white-space: nowrap;
         }
 

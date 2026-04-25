@@ -143,6 +143,7 @@ export class ProblemsPanel {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style nonce="${nonce}">
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
         body {
             font-family: var(--vscode-font-family);
             font-size: 12px;

@@ -136,6 +136,17 @@ src/
 
 ---
 
+## 📜 Credits
+
+This extension integrates high-quality resources from the R community. We would like to acknowledge the following projects for their contributions to the ecosystem:
+
+- **R Logo** — The R logo is © 2016 The R Foundation and is used under the [CC-BY-SA 4.0](https://www.r-project.org/logo/) license.
+- **Tidyverse** — The Tidyverse hex logo and branding are trademarks of Posit Software, PBC.
+- **Bioconductor** — The Bioconductor logo is a trademark of the Bioconductor Project.
+- **Rdocumentation** — The Rdocumentation icon is a custom recreation inspired by the official rdocumentation.org favicon.
+
+---
+
 ## 📄 License
 
 [MIT](LICENSE)

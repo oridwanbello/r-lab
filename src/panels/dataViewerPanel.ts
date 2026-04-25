@@ -278,7 +278,25 @@ export class DataViewerPanel {
 
     // ── Rendering ───────────────────────────────────────────
 
+    private _lastRenderHash?: string;
+
     private _render(): void {
+        const stateToHash = JSON.stringify({
+            varName: this._varName,
+            err: this._errorMessage,
+            loading: this._isLoading,
+            cols: this._columns,
+            rows: this._rows,
+            totCols: this._totalCols,
+            totRows: this._totalRows,
+            autoOn: !!this._autoRefreshInterval
+        });
+
+        if (this._lastRenderHash === stateToHash) {
+            return; // No changes, do not rebuild DOM (preserves text selection)
+        }
+        this._lastRenderHash = stateToHash;
+
         this._panel.webview.html = this._getHtml();
     }
 
@@ -403,6 +421,7 @@ export class DataViewerPanel {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style nonce="${nonce}">
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
         body {
             font-family: var(--vscode-font-family);
             font-size: 12px;
