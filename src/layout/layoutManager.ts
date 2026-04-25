@@ -37,6 +37,7 @@ let activationInProgress = false;
 let rConsoleTerminal: vscode.Terminal | undefined;
 let shellTerminal: vscode.Terminal | undefined;
 let savedDataViewerState: { varName: string } | undefined;
+let savedHelpState: any | undefined;
 let statusBarItem: vscode.StatusBarItem;
 let extensionContext: vscode.ExtensionContext;
 
@@ -88,6 +89,7 @@ export function registerLayoutCommand(
             if (t === rConsoleTerminal) {
                 rConsoleTerminal = undefined;
                 savedDataViewerState = undefined;
+                savedHelpState = undefined;
                 
                 // Delete .r-quadrant directory to prevent left-over files
                 const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -477,6 +479,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                     name: 'R Console',
                     shellPath: resolveRPath(config),
                     location: { viewColumn: vscode.ViewColumn.Two },
+                    iconPath: vscode.Uri.joinPath(context.extensionUri, 'resources', 'r-logo.svg'),
                 });
                 rConsoleTerminal.show(false);
             }
@@ -525,6 +528,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                 shellPath: resolveRPath(config),
                 location: { viewColumn: vscode.ViewColumn.Two },
                 env: Object.keys(rProfileEnv).length > 0 ? rProfileEnv : undefined,
+                iconPath: vscode.Uri.joinPath(context.extensionUri, 'resources', 'r-logo.svg'),
             });
             await delay(200);
             rConsoleTerminal.show(false);
@@ -580,8 +584,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     // a+b: Anchor Group 3 with HelpPanel.
     const helpPanel = HelpPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
-    const savedHelp = context.workspaceState.get<any>('r-quadrant.helpState');
-    if (savedHelp) { helpPanel.loadState(savedHelp); }
+    if (savedHelpState) { helpPanel.loadState(savedHelpState); }
     await delay(150);
 
     // c+d: Open Chat into Group 3 (now non-empty) and reorder to tab 1.
@@ -714,10 +717,11 @@ async function deactivateLayout(): Promise<void> {
     await extensionContext.workspaceState.update('r-quadrant.textFilePositions', textFilePositions);
     await extensionContext.workspaceState.update('r-quadrant.panelPositions', panelPositions);
 
-    // Save Help state to workspaceState before disposing
+    // Save Help state to in-memory variable before disposing
     if (HelpPanel.currentPanel) {
-        const helpState = HelpPanel.currentPanel.saveState();
-        await extensionContext.workspaceState.update('r-quadrant.helpState', helpState);
+        savedHelpState = HelpPanel.currentPanel.saveState();
+        // Clear workspaceState in case it was used previously
+        await extensionContext.workspaceState.update('r-quadrant.helpState', undefined);
     }
 
     // Save Data Viewer state to in-memory variable before disposing
