@@ -170,9 +170,9 @@ export class ProblemsPanel {
         .file-group { margin-bottom: 2px; }
         .file-header {
             padding: 4px 12px;
-            font-weight: 600;
+            font-weight: 900;
             font-size: 11px;
-            background: var(--vscode-editorGroupHeader-tabsBackground);
+            background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             position: sticky;
             top: 0;

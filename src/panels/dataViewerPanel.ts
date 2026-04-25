@@ -53,6 +53,17 @@ export class DataViewerPanel {
         return DataViewerPanel.currentPanel;
     }
 
+    // ── Persistence ─────────────────────────────────────────
+    public saveState(): { varName: string } {
+        return { varName: this._varName };
+    }
+
+    public async loadState(state: { varName: string }): Promise<void> {
+        if (state && state.varName) {
+            await this.loadVariable(state.varName, true);
+        }
+    }
+
     // ── Constructor ─────────────────────────────────────────
 
     private constructor(panel: vscode.WebviewPanel) {
@@ -350,11 +361,6 @@ export class DataViewerPanel {
             flex-shrink: 0;
         }
 
-        .toolbar button[disabled] {
-            opacity: 0.3;
-            cursor: default;
-            pointer-events: auto; /* Allow hover for tooltips */
-        }
         .toolbar button[disabled]:hover {
             background: none;
         }
@@ -408,13 +414,14 @@ export class DataViewerPanel {
         }
         th {
             position: sticky; top: 0; z-index: 1;
-            background: var(--vscode-editorGroupHeader-tabsBackground);
-            font-weight: 600; font-size: 11px; letter-spacing: 0.3px; color: var(--vscode-editor-foreground); opacity: 1;
+            background: var(--vscode-editor-background);
+            font-family: var(--vscode-font-family);
+            font-weight: 900; font-size: 11px; letter-spacing: 0.3px; color: var(--vscode-editor-foreground); opacity: 1;
             cursor: pointer; user-select: none;
             border-bottom: 2px solid var(--vscode-editorGroup-border);
         }
         th.sortable:hover {
-            background: var(--vscode-editorGroupHeader-tabsBackground);
+            background: var(--vscode-editor-background);
             box-shadow: inset 0 0 0 1000px var(--vscode-list-hoverBackground);
             opacity: 1;
         }

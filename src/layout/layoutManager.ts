@@ -36,9 +36,9 @@ let isLayoutActive = false;
 let activationInProgress = false;
 let rConsoleTerminal: vscode.Terminal | undefined;
 let shellTerminal: vscode.Terminal | undefined;
+let savedDataViewerState: { varName: string } | undefined;
 let statusBarItem: vscode.StatusBarItem;
 let extensionContext: vscode.ExtensionContext;
-let helpSessionState: any = null; // Session-only persistence for R Help
 
 export function getRConsoleTerminal(): vscode.Terminal | undefined {
     return rConsoleTerminal;
@@ -85,7 +85,23 @@ export function registerLayoutCommand(
     // ── Track terminal disposal ─────────────────────────────
     context.subscriptions.push(
         vscode.window.onDidCloseTerminal((t) => {
-            if (t === rConsoleTerminal) { rConsoleTerminal = undefined; }
+            if (t === rConsoleTerminal) {
+                rConsoleTerminal = undefined;
+                savedDataViewerState = undefined;
+                
+                // Delete .r-quadrant directory to prevent left-over files
+                const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+                if (wf) {
+                    const rQuadDir = path.join(wf, '.r-quadrant');
+                    try {
+                        if (fs.existsSync(rQuadDir)) {
+                            fs.rmSync(rQuadDir, { recursive: true, force: true });
+                        }
+                    } catch (e) {
+                        console.error('Failed to delete .r-quadrant directory on session end', e);
+                    }
+                }
+            }
             if (t === shellTerminal) { shellTerminal = undefined; }
         })
     );
@@ -475,7 +491,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
             try { fs.unlinkSync(staleFile); } catch {}
             
             // NEW: Clear R Help state for brand-new R sessions
-            helpSessionState = null;
+            // state is now in workspaceState
         }
 
         // Build the watcher Rprofile BEFORE creating the terminal.
@@ -489,24 +505,28 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     if (rConsoleTerminal) {
             // Reuse the existing terminal — do NOT recreate (that kills the R session).
-            // show(false) makes this terminal active in the panel so moveToEditor picks it up.
-            // We must focus Group 2 briefly for moveToEditor, then IMMEDIATELY restore
-            // Group 1 focus so window.activeTextEditor never becomes undefined — that
-            // would trigger the R extension's "No text editor active" warning.
+            // show(false) ensures this terminal is the active one in the terminal panel.
             rConsoleTerminal.show(false);
-            await delay(100);
+            await delay(200);
+            
+            // Fallback for older terminals or tricky states: use moveToEditor
             await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
-            await delay(100);
+            await delay(150);
             await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
-            await delay(50);
+            await delay(100);
+
+            // Restore focus to Group 1
             try { await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'); } catch {}
+            await delay(100);
         } else {
+            // New session: create directly in ViewColumn.Two
             rConsoleTerminal = vscode.window.createTerminal({
                 name: 'R Console',
                 shellPath: resolveRPath(config),
                 location: { viewColumn: vscode.ViewColumn.Two },
                 env: Object.keys(rProfileEnv).length > 0 ? rProfileEnv : undefined,
             });
+            await delay(200);
             rConsoleTerminal.show(false);
         }
     }
@@ -515,17 +535,20 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     await delay(200);
     if (shellTerminal) {
         shellTerminal.show(false);
-        await delay(100);
+        await delay(200);
+        
         await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
-        await delay(100);
+        await delay(150);
         await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
-        await delay(50);
+        await delay(100);
+        
         try { await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'); } catch {}
     } else {
         shellTerminal = vscode.window.createTerminal({
             name: 'Terminal',
             location: { viewColumn: vscode.ViewColumn.Two },
         });
+        await delay(200);
         shellTerminal.show(false);
     }
 
@@ -557,7 +580,8 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     // a+b: Anchor Group 3 with HelpPanel.
     const helpPanel = HelpPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
-    if (helpSessionState) { helpPanel.loadState(helpSessionState); }
+    const savedHelp = context.workspaceState.get<any>('r-quadrant.helpState');
+    if (savedHelp) { helpPanel.loadState(savedHelp); }
     await delay(150);
 
     // c+d: Open Chat into Group 3 (now non-empty) and reorder to tab 1.
@@ -599,6 +623,17 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     // 13. Now that ViewColumns 1-4 are rigidly locked by default content,
     //     we can safely restore saved positions without causing ViewColumn shifting.
 
+    // 12. Create DataViewer if it was open (RESTORATION)
+    if (savedDataViewerState && savedDataViewerState.varName) {
+        const dvPanel = DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Four);
+        await dvPanel.loadState(savedDataViewerState);
+    }
+
+    // 13. Create Problems if it was open (RESTORATION)
+    if (panelPositions['problems'] === vscode.ViewColumn.Two) {
+        ProblemsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
+    }
+
     // Reposition custom panels
     if (panelPositions['problems'] && panelPositions['problems'] !== vscode.ViewColumn.Two) ProblemsPanel.createOrShow(context.extensionUri, panelPositions['problems']);
     if (panelPositions['help'] && panelPositions['help'] !== vscode.ViewColumn.Three) HelpPanel.createOrShow(context.extensionUri, panelPositions['help']);
@@ -638,6 +673,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     // all layout commands complete, then push the latest R environment state.
     // Doing this earlier races the webview paint and the message is dropped.
     setTimeout(() => { WorkspacePanel.currentPanel?.forceRefresh(); }, 500);
+
     vscode.window.showInformationMessage('R Quadrant layout activated.');
 }
 
@@ -678,9 +714,17 @@ async function deactivateLayout(): Promise<void> {
     await extensionContext.workspaceState.update('r-quadrant.textFilePositions', textFilePositions);
     await extensionContext.workspaceState.update('r-quadrant.panelPositions', panelPositions);
 
-    // Save Help state to session memory before disposing
+    // Save Help state to workspaceState before disposing
     if (HelpPanel.currentPanel) {
-        helpSessionState = HelpPanel.currentPanel.saveState();
+        const helpState = HelpPanel.currentPanel.saveState();
+        await extensionContext.workspaceState.update('r-quadrant.helpState', helpState);
+    }
+
+    // Save Data Viewer state to in-memory variable before disposing
+    if (DataViewerPanel.currentPanel) {
+        savedDataViewerState = DataViewerPanel.currentPanel.saveState();
+        // Clear workspaceState in case it was used previously
+        await extensionContext.workspaceState.update('r-quadrant.dataViewerState', undefined);
     }
 
     // 4. Dispose panel singletons (closes our Webview tabs)
@@ -715,17 +759,36 @@ async function deactivateLayout(): Promise<void> {
 
     // 6. Close non-text tabs to keep the normal view clean.
     //    CHAT SESSION CONTINUITY:
-    //    When a sidebar chat was moved to Group 3 via vscode.moveViews, it is
-    //    a "relocated view" — NOT a new editor instance. Closing its editor tab
-    //    automatically returns the view to its original sidebar container with
-    //    the session fully intact. No special handling needed.
-    //    If openInEditor was used (last-resort fallback), closing also destroys
-    //    that new session — which is acceptable since it was already a fresh one.
-    //    Therefore: simply close all remaining non-text/non-terminal tabs.
+    //    We move chat tabs back to the sidebar before resetting the layout.
+    //    Resetting the layout (setEditorLayout) can destroy tabs in disappearing groups.
+    
+    // First, specifically handle Group 3 (where Chat usually lives)
+    try {
+        await vscode.commands.executeCommand('workbench.action.focusThirdEditorGroup');
+        const group3 = vscode.window.tabGroups.all.find(g => g.viewColumn === vscode.ViewColumn.Three);
+        if (group3) {
+            // Iterate backwards to safely handle moving tabs
+            for (let i = group3.tabs.length - 1; i >= 0; i--) {
+                const tab = group3.tabs[i];
+                if (isChatTab(tab)) {
+                    // Focus the tab to make it the target for openInSidebar
+                    await vscode.commands.executeCommand('workbench.action.openEditorAtIndex', i);
+                    await delay(50);
+                    await vscode.commands.executeCommand('workbench.action.chat.openInSidebar');
+                    await delay(100);
+                }
+            }
+        }
+    } catch {}
+
+    // Then, close remaining non-text/non-terminal tabs in all groups
     for (const group of vscode.window.tabGroups.all) {
         for (const tab of group.tabs) {
             if (tab.input instanceof vscode.TabInputText || tab.input instanceof vscode.TabInputTerminal) {
                 continue;
+            }
+            if (isChatTab(tab)) {
+                continue; // Already handled or will be handled by the final safety call
             }
             try { await vscode.window.tabGroups.close(tab); } catch {}
         }
@@ -742,7 +805,8 @@ async function deactivateLayout(): Promise<void> {
         await vscode.commands.executeCommand('workbench.action.toggleSidebarVisibility');
     } catch {}
 
-    // 9. Try to return AI Chat to sidebar
+    // 9. All chats should already be in sidebar from the loop above,
+    //    but we call it once more as a safety measure for the native chat.
     try {
         await vscode.commands.executeCommand('workbench.action.chat.openInSidebar');
     } catch {}

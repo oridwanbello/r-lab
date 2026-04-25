@@ -493,9 +493,7 @@ tryCatch({
         ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
         body {
             font-family: var(--vscode-font-family);
-            font-size: 12px;
-            color: var(--vscode-editor-foreground);
-            background: var(--vscode-editor-background);
+            font-weight: 900; font-size: 12px; letter-spacing: 0.3px; color: var(--vscode-editor-foreground); opacity: 1;           background: var(--vscode-editor-background);
             display: flex;
             flex-direction: column;
             height: 100vh;
@@ -553,10 +551,10 @@ tryCatch({
             padding: 4px 8px;
             text-align: left;
             font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
+            font-weight: 900;
+            text-transform: none;
             letter-spacing: 0.3px;
-            background: var(--vscode-editorGroupHeader-tabsBackground);
+            background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
         }
         .var-row td {
