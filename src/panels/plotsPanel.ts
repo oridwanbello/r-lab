@@ -115,10 +115,11 @@ export class PlotsPanel {
         // Update localResourceRoots to allow loading images from the new directory
         const roots = PlotsPanel._getResourceRoots(this._extensionUri);
         if (this._customPlotDir) {
-            const customUri = vscode.Uri.file(path.isAbsolute(this._customPlotDir)
-                ? this._customPlotDir
-                : path.join(vscode.workspace.workspaceFolders?.[0].uri.fsPath || '', this._customPlotDir)
-            );
+            const base = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
+            const normalizedPath = path.isAbsolute(this._customPlotDir) || !base
+                ? path.normalize(this._customPlotDir)
+                : path.join(base, this._customPlotDir);
+            const customUri = vscode.Uri.file(normalizedPath);
             roots.push(customUri);
         }
         this._panel.webview.options = {
@@ -555,8 +556,8 @@ export class PlotsPanel {
                 : `<div class="empty-state">
                        <svg viewBox="0 0 16 16"><path fill="currentColor" d="M2 2h1v11h11v1H2V2zm3 8h2v3H5v-3zm3-4h2v7H8V6zm3-3h2v10h-2V3z"/></svg>
                        <p>No plots yet.<br/>
-                       Any plot generated in the R Console using the default<br/>
-                       graphics device will automatically appear here.</p>
+                       Plots generated in the R Console or found in your<br/>
+                       custom directory will automatically appear here.</p>
                    </div>`
         }
     </div>

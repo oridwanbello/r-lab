@@ -21,14 +21,31 @@ Ensure that users never lose their active session state when toggling the quadra
     - Plots panel syncs files created while layout was closed via `syncPlots()` on re-activation.
     - Workspace panel force-refreshes immediately on re-activation, skipping the loading spinner.
     - Terminal module-level references are preserved across deactivation so reuse works correctly.
-
-We need a space in the plot panel where someone can past filepath of the plots they want to view.
+- [x] **Phase 4: Advanced Panel Refinements**
+    - **Custom Plot Directory**: Added toolbar dropdown with native folder picker and visual state feedback.
+    - **Silent Data Refresh**: Removed background polling from Data Viewer in favor of a silent manual trigger.
+    - **Premium Aesthetics**: Added canvas padding, shadows, and Day/Night modes to Plots and Data Viewer.
+    - **Make the help results colorful in the help tab**
 
 **Proposed Technical Approach:**
 - For existing terminals/panels, use `vscode.commands.executeCommand` (e.g., `workbench.action.moveEditorToSecondGroup`) to reposition them.
 - Use `vscode.window.tabGroups` to track tab locations during transitions.
 
-## 2. Layout Activation Speed Optimization
+## 2. Restore Chat Tab (Quadrant 3) - NEXT MAJOR FOCUS
+**Current Status:**
+The chat tab has been missing from the top-right quadrant (ViewColumn.Three). This quadrant is intended to be a hub for AI interaction.
+
+**Goal:**
+Restore the Chat Tab and make it a "Universal AI Hub" that can host multiple sub-tabs for different AI agents.
+
+**Implementation Plan:**
+- [ ] **Multi-Agent Support**: Design the tab to hold the default VS Code chat, Antigravity, and third-party AI extensions (Cursor, Copilot, etc.) as sub-tabs.
+- [ ] **Quadrant Locking**: Ensure the Chat Tab snap-locks to Quadrant 3 during layout activation.
+- [ ] **Session Continuity**: Ensure chat history and agent state are preserved across layout toggles.
+- [ ] **Integration**: Allow R Quadrant to communicate with these agents (e.g., sending console errors or dataframe summaries to the active chat).
+
+
+## 3. Layout Activation Speed Optimization
 **Current Behavior:**
 While the quadrant layout activates at a decent speed, the transition still has some perceptible lag. The current implementation relies on a sequence of artificial `delay()` calls (e.g., `await delay(150)`, `await delay(200)`) to give VS Code's UI time to render panels and grids before firing the next command.
 
@@ -40,8 +57,6 @@ Make the activation of the quadrant view feel completely instantaneous.
 - **Reduce or Eliminate:** See if the timeout durations can be safely reduced without breaking the layout.
 - **Concurrent Execution:** Where possible, execute layout setup commands concurrently using `Promise.all()` instead of waiting for them sequentially.
 - **Event-Driven UI Updates:** Investigate if we can replace arbitrary time delays with actual event listeners that fire exactly when the UI is ready.
-
-## 3 Making the help results colorful in the help tab
 
 ## 4 ARK integration
 - [ ] Implement seamless layout support for the `ark` interactive console.

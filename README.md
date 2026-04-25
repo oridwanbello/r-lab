@@ -30,15 +30,17 @@ A live TreeView that displays variables from your active debug session:
 
 ### 🎨 Plot Gallery
 A dedicated panel that watches for new plot outputs:
-- Navigate through plot history with ◀ ▶ controls
-- Supports PNG, JPG, SVG, GIF, WebP, and BMP
-- Configurable watch directory (default: `.r-quadrant/plots/`)
+- **Custom Plot Directory**: Override the default output folder via a sleek toolbar dropdown with a native folder picker.
+- **Canvas Aesthetic**: High-fidelity rendering with internal padding and shadows for a premium feel.
+- **Navigate**: History navigation with ◀ ▶ controls.
+- **Supports**: PNG, JPG, SVG, GIF, WebP, BMP, and ICO.
 
 ### 🔍 Data Viewer
-Inspect dataframes directly from debug sessions:
-- Click-to-sort columns (ascending / descending)
-- Real-time row filtering
-- Works with R (`data.frame`, `tibble`) and Python (`pandas.DataFrame`)
+Inspect dataframes directly from your R session:
+- **Silent Manual Refresh**: Re-read data from disk with one click, consuming zero background resources.
+- **Type-aware Column Formatting**: Clean, readable tables with automatic alignment.
+- **Sorting & Filtering**: Real-time row filtering and click-to-sort columns.
+- **Night Mode**: Fully dimmed dark mode support for late-night data exploration.
 
 ### 🚀 Advanced Tool Integration
 R Quadrant is designed to be "Zero Friction" by default, but it is fully compatible with high-performance community tools:
@@ -112,10 +114,11 @@ src/
 ├── extension.ts               # Entry point (orchestrator)
 ├── layout/
 │   └── layoutManager.ts       # Layout toggle & Status Bar
-├── views/
+├── panels/
 │   ├── environmentExplorer.ts # Variable TreeView (DAP)
-│   ├── plotGallery.ts         # Plot gallery (WebviewView)
-│   └── dataViewer.ts          # Dataframe viewer (WebviewView)
+│   ├── plotsPanel.ts          # Plot gallery (WebviewPanel)
+│   ├── dataViewerPanel.ts     # Dataframe viewer (WebviewPanel)
+│   └── helpPanel.ts           # Integrated R Help
 └── util/
     └── debugSession.ts        # DAP helper utilities
 ```
@@ -124,12 +127,18 @@ src/
 
 ## 📝 Release Notes
 
+### 0.2.0 (Current)
+- **Custom Plot Directory**: Added toolbar tool to override plot locations with native folder picker support.
+- **Silent Manual Refresh**: Transitioned Data Viewer to a manual, resource-zero refresh mechanism.
+- **UI/UX Polish**: Implemented premium canvas aesthetics for plots, Day/Night mode toggles, and instant tooltips.
+- **Dynamic Resources**: Support for loading plots from any absolute path on the filesystem.
+
 ### 0.1.0
 - **Environment Explorer**: Live variable inspection via Debug Adapter Protocol
 - **Plot Gallery**: File-system-based plot capture with history navigation
 - **Data Viewer**: Interactive dataframe viewer with sorting and filtering
 - **R Quadrant Sidebar**: Dedicated Activity Bar container for all views
-- **Modular architecture**: Refactored source into `layout/`, `views/`, and `util/` modules
+- **Modular architecture**: Refactored source into `layout/`, `panels/`, and `util/` modules
 
 ### 0.0.1
 - Initial scaffold with layout toggle command and AI agent configuration
