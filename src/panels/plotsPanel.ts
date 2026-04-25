@@ -18,6 +18,8 @@ export class PlotsPanel {
     private _watcher?: vscode.FileSystemWatcher;
     private _disposables: vscode.Disposable[] = [];
     private _isNightMode: boolean = false;
+    private _customPlotDir?: string;
+    private _extensionUri: vscode.Uri;
 
     // ── Factory ─────────────────────────────────────────────
 
@@ -42,7 +44,7 @@ export class PlotsPanel {
         );
         panel.iconPath = vscode.Uri.joinPath(extensionUri, 'resources', 'blank.svg');
 
-        PlotsPanel.currentPanel = new PlotsPanel(panel);
+        PlotsPanel.currentPanel = new PlotsPanel(panel, extensionUri);
         return PlotsPanel.currentPanel;
     }
 
@@ -58,8 +60,9 @@ export class PlotsPanel {
 
     // ── Constructor ─────────────────────────────────────────
 
-    private constructor(panel: vscode.WebviewPanel) {
+    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
         this._panel = panel;
+        this._extensionUri = extensionUri;
         this._render();
         this._startWatcher();
 
@@ -93,11 +96,56 @@ export class PlotsPanel {
                         this._isNightMode = !this._isNightMode;
                         this._render();
                         break;
+                    case 'setCustomDir':
+                        this._handleSetCustomDir((msg as any).path);
+                        break;
+                    case 'browseCustomDir':
+                        this._handleBrowseCustomDir();
+                        break;
                 }
             },
             null,
             this._disposables
         );
+    }
+
+    private _handleSetCustomDir(dirPath: string | undefined): void {
+        this._customPlotDir = dirPath && dirPath.trim() ? dirPath.trim() : undefined;
+
+        // Update localResourceRoots to allow loading images from the new directory
+        const roots = PlotsPanel._getResourceRoots(this._extensionUri);
+        if (this._customPlotDir) {
+            const customUri = vscode.Uri.file(path.isAbsolute(this._customPlotDir)
+                ? this._customPlotDir
+                : path.join(vscode.workspace.workspaceFolders?.[0].uri.fsPath || '', this._customPlotDir)
+            );
+            roots.push(customUri);
+        }
+        this._panel.webview.options = {
+            ...this._panel.webview.options,
+            localResourceRoots: roots
+        };
+
+        this.clear(); // Clear existing plots
+        this._startWatcher(); // Restart watcher on new dir
+        this.syncPlots(); // Load existing plots from new dir
+    }
+
+    private async _handleBrowseCustomDir(): Promise<void> {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        const defaultUri = workspaceFolder ? workspaceFolder.uri : undefined;
+
+        const uris = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            openLabel: 'Select Plot Directory',
+            defaultUri: defaultUri
+        });
+
+        if (uris && uris.length > 0) {
+            this._handleSetCustomDir(uris[0].fsPath);
+        }
     }
 
     private _handleDeleteCurrent(): void {
@@ -135,15 +183,33 @@ export class PlotsPanel {
     // ── File System Watcher ─────────────────────────────────
 
     private _startWatcher(): void {
-        const config = vscode.workspace.getConfiguration('r-quadrant');
-        const plotDir = config.get<string>('plotOutputDir', '.r-quadrant/plots');
+        // Dispose existing watcher if any
+        if (this._watcher) {
+            this._watcher.dispose();
+            const idx = this._disposables.indexOf(this._watcher);
+            if (idx > -1) {
+                this._disposables.splice(idx, 1);
+            }
+            this._watcher = undefined;
+        }
 
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (!workspaceFolder) { return; }
 
+        let watchDirFsPath: string;
+        if (this._customPlotDir) {
+            watchDirFsPath = path.isAbsolute(this._customPlotDir)
+                ? this._customPlotDir
+                : path.join(workspaceFolder.uri.fsPath, this._customPlotDir);
+        } else {
+            const config = vscode.workspace.getConfiguration('r-quadrant');
+            const plotDir = config.get<string>('plotOutputDir', '.r-quadrant/plots');
+            watchDirFsPath = path.join(workspaceFolder.uri.fsPath, plotDir);
+        }
+
         const pattern = new vscode.RelativePattern(
-            workspaceFolder.uri,
-            `${plotDir}/*.{png,jpg,jpeg,svg,gif,bmp,webp}`
+            vscode.Uri.file(watchDirFsPath),
+            '*.{png,jpg,jpeg,svg,gif,bmp,webp,ico}'
         );
 
         this._watcher = vscode.workspace.createFileSystemWatcher(pattern);
@@ -188,15 +254,23 @@ export class PlotsPanel {
      * layout was closed (i.e., not yet in `_plots`). Called on re-activation.
      */
     public syncPlots(): void {
-        const config = vscode.workspace.getConfiguration('r-quadrant');
-        const plotDir = config.get<string>('plotOutputDir', '.r-quadrant/plots');
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (!workspaceFolder) { return; }
 
-        const dir = path.join(workspaceFolder.uri.fsPath, plotDir);
+        let dir: string;
+        if (this._customPlotDir) {
+            dir = path.isAbsolute(this._customPlotDir)
+                ? this._customPlotDir
+                : path.join(workspaceFolder.uri.fsPath, this._customPlotDir);
+        } else {
+            const config = vscode.workspace.getConfiguration('r-quadrant');
+            const plotDir = config.get<string>('plotOutputDir', '.r-quadrant/plots');
+            dir = path.join(workspaceFolder.uri.fsPath, plotDir);
+        }
+
         if (!fs.existsSync(dir)) { return; }
 
-        const exts = new Set(['.png', '.jpg', '.jpeg', '.svg', '.gif', '.bmp', '.webp']);
+        const exts = new Set(['.png', '.jpg', '.jpeg', '.svg', '.gif', '.bmp', '.webp', '.ico']);
         const existing = new Set(this._plots.map(u => u.fsPath));
 
         let added = 0;
@@ -338,13 +412,14 @@ export class PlotsPanel {
             align-items: center;
             justify-content: center;
             overflow: auto;
-            padding: 12px;
+            padding: 8px;
         }
         .plot-area img {
             max-width: 100%;
             max-height: 100%;
             object-fit: contain;
             background: ${plotBg};
+            padding: 16px;
             border-radius: 4px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
             transition: background-color 0.2s ease;
@@ -361,6 +436,91 @@ export class PlotsPanel {
             border-radius: 3px;
             font-size: 12px;
         }
+        .dir-dropdown {
+            position: absolute;
+            top: 32px;
+            right: 12px;
+            background: var(--vscode-editorHoverWidget-background, #252526);
+            border: 1px solid var(--vscode-editorHoverWidget-border, #454545);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            border-radius: 4px;
+            padding: 10px;
+            display: none;
+            z-index: 1000;
+            flex-direction: column;
+            gap: 8px;
+            width: 300px;
+        }
+        .dir-dropdown.open {
+            display: flex;
+        }
+        .dir-dropdown .input-row {
+            display: flex;
+            gap: 4px;
+        }
+        .dir-dropdown input {
+            flex: 1;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border, transparent);
+            padding: 4px 6px;
+            border-radius: 2px;
+            font-size: 12px;
+            outline: none;
+        }
+        .dir-dropdown input:focus {
+            border-color: var(--vscode-focusBorder);
+        }
+        .dir-dropdown .btn-browse {
+            background: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border: none;
+            padding: 4px 8px;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 12px;
+            opacity: 1;
+        }
+        .dir-dropdown .btn-browse:hover {
+            background: var(--vscode-button-secondaryHoverBackground);
+        }
+        .dir-dropdown .btn-browse svg {
+            width: 14px;
+            height: 14px;
+            display: block;
+            margin: auto;
+        }
+        .dir-dropdown .action-row {
+            display: flex;
+            justify-content: flex-end;
+            gap: 6px;
+        }
+        .dir-dropdown .action-row button {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 4px 12px;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 12px;
+            opacity: 1;
+        }
+        .dir-dropdown .action-row button:hover {
+            background: var(--vscode-button-hoverBackground);
+        }
+        .dir-dropdown .action-row button.btn-clear {
+            background: transparent;
+            color: var(--vscode-button-background);
+            border: 1px solid var(--vscode-button-background);
+        }
+        .dir-dropdown .action-row button.btn-clear:hover {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+        }
+        .btn-custom-dir.active {
+            color: var(--vscode-textLink-foreground) !important;
+            opacity: 1 !important;
+        }
     </style>
 </head>
 <body>
@@ -374,6 +534,17 @@ export class PlotsPanel {
             <button id="btn-night-mode" ${!hasPlots ? 'disabled' : ''} data-tooltip="${this._isNightMode ? 'Switch to Day Mode' : 'Switch to Night Mode'}">${this._isNightMode ? sunIcon : moonIcon}</button>
             <button id="btn-delete" ${!hasPlots ? 'disabled' : ''} data-tooltip="Delete current plot"><svg viewBox="0 0 16 16"><path fill="none" d="M9.25,2H6.75a0.25,0.25,0,0,0-0.25,0.25V3h3V2.25A0.25,0.25,0,0,0,9.25,2Z"/><path fill="currentColor" d="M13.5,3H10.5V2.25A1.25,1.25,0,0,0,9.25,1H6.75A1.25,1.25,0,0,0,5.5,2.25V3H2.5a0.5,0.5,0,0,0,0,1H3L3.63,13.53C3.67,14.37,4.31,15,5.13,15h5.75c0.82,0,1.45-.62,1.5-1.47L13,4h0.5a0.5,0.5,0,0,0,0-1ZM6,13H6a0.5,0.5,0,0,1-.5-.48l-0.25-7a0.5,0.5,0,1,1,1-.04l0.25,7A0.5,0.5,0,0,1,6,13ZM8.5,12.5a0.5,0.5,0,0,1-1,0V5.5a0.5,0.5,0,0,1,1,0ZM9.5,3H6.5V2.25a0.25,0.25,0,0,1,.25-.25h2.5a0.25,0.25,0,0,1,.25.25Zm1,9.55a0.5,0.5,0,0,1-.5.45H10a0.5,0.5,0,0,1-.5-.52l0.25-7a0.5,0.5,0,1,1,1,.04Z"/></svg></button>
             <button id="btn-clear" ${!hasPlots ? 'disabled' : ''} data-tooltip="Clear all plots"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.91,1.81L13.85,2.76L10.04,6.57C10.75,7.59 10.85,8.83 10.25,9.63L6.04,5.41C6.84,4.81 8.07,4.91 9.1,5.63L12.91,1.81M3.95,11.71C2.61,10.37 1.79,8.77 1.57,7.28L4.82,5.89L9.78,10.85L8.39,14.1C6.89,13.87 5.29,13.05 3.95,11.71Z"/></svg></button>
+            <button id="btn-custom-dir" class="btn-custom-dir ${this._customPlotDir ? 'active' : ''}" data-tooltip="Set custom plot directory"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="m7.52 2c-0.00591-2.1e-4 -0.0118-3.1e-4 -0.0178-3.1e-4l-1.2-1.6c-0.0932-0.124-0.214-0.225-0.353-0.294-0.139-0.0694-0.292-0.106-0.447-0.106h-3.5c-0.53 0-1.04 0.211-1.41 0.586-0.375 0.375-0.586 0.884-0.586 1.41v10c0 0.53 0.211 1.04 0.586 1.41 0.375 0.375 0.884 0.586 1.41 0.586h4v-1h-4c-0.265 0-0.52-0.105-0.707-0.293-0.188-0.188-0.293-0.442-0.293-0.707v-7l3.88 3e-5c0.203 1.9e-4 0.383 3.5e-4 0.557-0.0415 0.153-0.0368 0.299-0.0974 0.434-0.18 0.153-0.0936 0.279-0.221 0.423-0.365l1.41-1.41h6.29c0.265 0 0.52 0.105 0.707 0.293s0.293 0.442 0.293 0.707v2h1v-2c0-0.53-0.211-1.04-0.586-1.41s-0.884-0.586-1.41-0.586h-6.48zm-2.02-1 1.2 1.6-1.08 1.08c-0.19 0.19-0.229 0.225-0.268 0.248-0.0447 0.0274-0.0935 0.0476-0.145 0.0599-0.0442 0.0106-0.0969 0.0138-0.365 0.0138h-3.84v-2c0-0.265 0.105-0.52 0.293-0.707 0.188-0.188 0.442-0.293 0.707-0.293h3.5z" clip-rule="evenodd" fill="currentColor" fill-rule="evenodd"/><path d="m11.5 7c0.276 0 0.5 0.224 0.5 0.5v3.5h3.5c0.276 0 0.5 0.224 0.5 0.5s-0.224 0.5-0.5 0.5h-3.5v3.5c0 0.276-0.224 0.5-0.5 0.5s-0.5-0.224-0.5-0.5v-3.5h-3.5c-0.276 0-0.5-0.224-0.5-0.5s0.224-0.5 0.5-0.5h3.5v-3.5c0-0.276 0.224-0.5 0.5-0.5z" fill="currentColor"/></svg></button>
+        </div>
+    </div>
+    <div id="dir-dropdown" class="dir-dropdown">
+        <div class="input-row">
+            <input type="text" id="dir-input" placeholder="Custom Plot Directory (Absolute or relative)..." value="${this._customPlotDir || ''}" />
+            <button id="btn-browse" class="btn-browse" data-tooltip="Browse for folder"><svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="m14 3h-6.5l-1.2-1.6c-0.0932-0.124-0.214-0.225-0.353-0.294-0.139-0.0694-0.292-0.106-0.447-0.106h-3.5c-0.53 0-1.04 0.211-1.41 0.586-0.375 0.375-0.586 0.884-0.586 1.41v10c0 0.53 0.211 1.04 0.586 1.41 0.375 0.375 0.884 0.586 1.41 0.586h12c0.53 0 1.04-0.211 1.41-0.586s0.586-0.884 0.586-1.41v-8c0-0.53-0.211-1.04-0.586-1.41-0.375-0.375-0.884-0.586-1.41-0.586zm-7.3 0.6c0.0932 0.124 0.214 0.225 0.353 0.294 0.139 0.0694 0.292 0.106 0.447 0.106h6.5c0.265 0 0.52 0.105 0.707 0.293 0.188 0.188 0.293 0.442 0.293 0.707v8c0 0.265-0.105 0.52-0.293 0.707s-0.442 0.293-0.707 0.293h-12c-0.265 0-0.52-0.105-0.707-0.293-0.188-0.188-0.293-0.442-0.293-0.707v-10c0-0.265 0.105-0.52 0.293-0.707 0.188-0.188 0.442-0.293 0.707-0.293h3.5l1.2 1.6z" fill="currentColor"/></svg></button>
+        </div>
+        <div class="action-row">
+            <button id="btn-clear-dir" class="btn-clear">Clear</button>
+            <button id="btn-apply-dir">Apply</button>
         </div>
     </div>
     <div id="tooltip" class="tooltip"></div>
@@ -428,6 +599,53 @@ export class PlotsPanel {
                     console.error('Clipboard failed', err);
                 }
             });
+            // Custom Directory Dropdown Logic
+            const btnCustomDir = document.getElementById('btn-custom-dir');
+            const dropdown = document.getElementById('dir-dropdown');
+            const btnApply = document.getElementById('btn-apply-dir');
+            const btnClearDir = document.getElementById('btn-clear-dir');
+            const btnBrowse = document.getElementById('btn-browse');
+            const dirInput = document.getElementById('dir-input');
+
+            btnCustomDir?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dropdown.classList.toggle('open');
+                if (dropdown.classList.contains('open')) {
+                    dirInput.focus();
+                }
+            });
+
+            dropdown?.addEventListener('click', (e) => {
+                e.stopPropagation(); // Prevent clicks inside from closing it
+            });
+
+            document.addEventListener('click', () => {
+                dropdown.classList.remove('open');
+            });
+
+            btnApply?.addEventListener('click', () => {
+                dropdown.classList.remove('open');
+                vscode.postMessage({ type: 'setCustomDir', path: dirInput.value });
+            });
+
+            dirInput?.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    dropdown.classList.remove('open');
+                    vscode.postMessage({ type: 'setCustomDir', path: dirInput.value });
+                }
+            });
+
+            btnClearDir?.addEventListener('click', () => {
+                dropdown.classList.remove('open');
+                dirInput.value = '';
+                vscode.postMessage({ type: 'setCustomDir', path: '' });
+            });
+
+            btnBrowse?.addEventListener('click', () => {
+                dropdown.classList.remove('open');
+                vscode.postMessage({ type: 'browseCustomDir' });
+            });
+
             // Instant Tooltip Controller
             const tooltip = document.getElementById('tooltip');
             document.querySelectorAll('[data-tooltip]').forEach(el => {
