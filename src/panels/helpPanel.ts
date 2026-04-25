@@ -305,9 +305,8 @@ export class HelpPanel {
                                 ${tidyverseSvg}
                                 Tidyverse
                             </a>
-                            <a class="link-card" data-url="https://www.bioconductor.org">
+                            <a class="link-card" data-url="https://www.bioconductor.org" aria-label="Bioconductor">
                                 ${bioconductorSvg}
-                                Bioconductor
                             </a>
                         </div>
                     </div>
