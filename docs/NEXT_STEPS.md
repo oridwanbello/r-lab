@@ -27,6 +27,8 @@ Ensure that users never lose their active session state when toggling the quadra
     - **Premium Aesthetics**: Added canvas padding, shadows, and Day/Night modes to Plots and Data Viewer.
     - **Make the help results colorful in the help tab**
 
+Unfortunately, the chat showing up in the top right quadrant is the editor version of the chat. Since we have wasted time trying to solve that, we can suspend that for now. Instead, we should focus on having a persistent chat across layout switches. As a matter of fact, since it is an ai chat, the chat history should be persistent forever until the individual chooses to delete the chat. Also, a user should be able to resume that chat. What has been happening is that the chat is being persistent forever which is good. And the way it currently works is that the chat I have during an R session becomes part of the standard chat side panel list of chats as soon as I switch from R quadrant layout. When I switch back to R quadrant layout, that chat from the list of the side panel chanel history is not restored back to the quadrant chat, instead the quadrant chat becomes a brand new chat.
+
 **Proposed Technical Approach:**
 - For existing terminals/panels, use `vscode.commands.executeCommand` (e.g., `workbench.action.moveEditorToSecondGroup`) to reposition them.
 - Use `vscode.window.tabGroups` to track tab locations during transitions.
