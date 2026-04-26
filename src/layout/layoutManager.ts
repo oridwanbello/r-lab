@@ -90,7 +90,7 @@ export function registerLayoutCommand(
                 rConsoleTerminal = undefined;
                 savedDataViewerState = undefined;
                 savedHelpState = undefined;
-                
+
                 // Delete .r-quadrant directory to prevent left-over files
                 const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
                 if (wf) {
@@ -492,7 +492,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         if (wf && !wasRConsoleReused) {
             const staleFile = path.join(wf, '.r-quadrant', '.workspace_data.json');
             try { fs.unlinkSync(staleFile); } catch {}
-            
+
             // NEW: Clear R Help state for brand-new R sessions
             // state is now in workspaceState
         }
@@ -511,7 +511,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
             // show(false) ensures this terminal is the active one in the terminal panel.
             rConsoleTerminal.show(false);
             await delay(200);
-            
+
             // Fallback for older terminals or tricky states: use moveToEditor
             await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
             await delay(150);
@@ -540,12 +540,12 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     if (shellTerminal) {
         shellTerminal.show(false);
         await delay(200);
-        
+
         await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
         await delay(150);
         await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
         await delay(100);
-        
+
         try { await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'); } catch {}
     } else {
         shellTerminal = vscode.window.createTerminal({
@@ -773,25 +773,10 @@ async function deactivateLayout(): Promise<void> {
     //    CHAT SESSION CONTINUITY:
     //    We move chat tabs back to the sidebar before resetting the layout.
     //    Resetting the layout (setEditorLayout) can destroy tabs in disappearing groups.
-    
-    // First, specifically handle Group 3 (where Chat usually lives)
-    try {
-        await vscode.commands.executeCommand('workbench.action.focusThirdEditorGroup');
-        const group3 = vscode.window.tabGroups.all.find(g => g.viewColumn === vscode.ViewColumn.Three);
-        if (group3) {
-            // Iterate backwards to safely handle moving tabs
-            for (let i = group3.tabs.length - 1; i >= 0; i--) {
-                const tab = group3.tabs[i];
-                if (isChatTab(tab)) {
-                    // Focus the tab to make it the target for openInSidebar
-                    await vscode.commands.executeCommand('workbench.action.openEditorAtIndex', i);
-                    await delay(50);
-                    await vscode.commands.executeCommand('workbench.action.chat.openInSidebar');
-                    await delay(100);
-                }
-            }
-        }
-    } catch {}
+
+    // To gracefully return moved views (like Chat) to the sidebar, we simply
+    // close their editor tabs. VS Code automatically restores moved views to
+    // their original containers when their editor tab is closed.
 
     // Then, close remaining non-text/non-terminal tabs in all groups
     for (const group of vscode.window.tabGroups.all) {
@@ -799,9 +784,7 @@ async function deactivateLayout(): Promise<void> {
             if (tab.input instanceof vscode.TabInputText || tab.input instanceof vscode.TabInputTerminal) {
                 continue;
             }
-            if (isChatTab(tab)) {
-                continue; // Already handled or will be handled by the final safety call
-            }
+
             try { await vscode.window.tabGroups.close(tab); } catch {}
         }
     }
@@ -817,11 +800,7 @@ async function deactivateLayout(): Promise<void> {
         await vscode.commands.executeCommand('workbench.action.toggleSidebarVisibility');
     } catch {}
 
-    // 9. All chats should already be in sidebar from the loop above,
-    //    but we call it once more as a safety measure for the native chat.
-    try {
-        await vscode.commands.executeCommand('workbench.action.chat.openInSidebar');
-    } catch {}
+
 
     // 10. Restore user settings FIRST — before reopening files —
     //     so that closeEmptyGroups is true again when showTextDocument
