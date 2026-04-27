@@ -84,6 +84,34 @@ export function registerLayoutCommand(
         vscode.commands.registerCommand('r-layout.noop', () => {})
     );
 
+    // ── Source File to R Console ─────────────────────────────
+    // This command sends source('filepath') to our R Console terminal.
+    // It also overrides r.runSource so the R extension's built-in
+    // "Run Source" button routes to our terminal instead of a generic shell.
+    const doSourceFile = async () => {
+        const editor = vscode.window.activeTextEditor;
+        const filePath = editor?.document.uri.fsPath;
+        if (!filePath) {
+            vscode.window.showWarningMessage('No active file to source.');
+            return;
+        }
+
+        // Ensure we have a live R Console terminal
+        if (!rConsoleTerminal) {
+            vscode.window.showWarningMessage('R Console is not running. Activate R Layout first.');
+            return;
+        }
+
+        // Escape backslashes for Windows paths; forward slashes work on all platforms
+        const escapedPath = filePath.replace(/\\/g, '/');
+        rConsoleTerminal.show(false); // bring it into view without stealing keyboard focus
+        rConsoleTerminal.sendText(`source('${escapedPath}', echo = FALSE)`);
+    };
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('r-layout.sourceFile', doSourceFile)
+    );
+
     // ── Resize Commands ─────────────────────────────────────
     const setResizeLayout = async (topSize: number, bottomSize: number) => {
         if (!isLayoutActive) return;

@@ -51,6 +51,11 @@
         "command": "r-layout.restoreRightSplit",
         "title": "Restore Pane Split",
         "icon": "$(screen-normal)"
+      },
+      {
+        "command": "r-layout.sourceFile",
+        "title": "Source File to R Console",
+        "icon": "$(play)"
       }
     ],
     "keybindings": [
@@ -68,6 +73,16 @@
         "command": "r-layout.noop",
         "key": "cmd+shift+i",
         "when": "r-layout.layoutActive"
+      },
+      {
+        "command": "r-layout.sourceFile",
+        "key": "cmd+shift+s",
+        "when": "r-layout.layoutActive && editorLangId == 'r'"
+      },
+      {
+        "command": "r-layout.sourceFile",
+        "key": "ctrl+shift+s",
+        "when": "r-layout.layoutActive && editorLangId == 'r'"
       }
     ],
     "menus": {
@@ -81,6 +96,11 @@
           "command": "r-layout.restoreRightSplit",
           "when": "r-layout.layoutActive && r-layout.isTopRightMaximized && activeEditorGroupIndex != 1",
           "group": "navigation@1"
+        },
+        {
+          "command": "r-layout.sourceFile",
+          "when": "r-layout.layoutActive && resourceLangId == 'r' && activeEditorGroupIndex == 1",
+          "group": "navigation@0"
         }
       ]
     },
