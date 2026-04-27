@@ -41,10 +41,26 @@ The chat tab has been missing from the top-right quadrant (ViewColumn.Three). Th
 Restore the Chat Tab and make it a "Universal AI Hub" that can host multiple sub-tabs for different AI agents.
 
 **Implementation Plan:**
-- [ ] **Multi-Agent Support**: Design the tab to hold the default VS Code chat, Antigravity, and third-party AI extensions (Cursor, Copilot, etc.) as sub-tabs.
+- [x] **Multi-Agent Support**: Use configuration arrays (`r-quadrant.chatViewIds` and `r-quadrant.chatSidebarCommands`) to dynamically load any combination of installed chat extensions while skipping uninstalled ones.
 - [ ] **Quadrant Locking**: Ensure the Chat Tab snap-locks to Quadrant 3 during layout activation.
-- [ ] **Session Continuity**: Ensure chat history and agent state are preserved across layout toggles.
+- [x] **Session Continuity**: Move original sidebar views (`vscode.moveViews`) to preserve chat history/tools instead of creating new sessions, and use deactivation commands to safely unmount them.
 - [ ] **Integration**: Allow R Quadrant to communicate with these agents (e.g., sending console errors or dataframe summaries to the active chat).
+
+**Reference: Collected Chat View & Command IDs**
+These values govern the multi-agent orchestration logic:
+
+| AI Extension / IDE | Command ID (to open) | View ID (to move) |
+| :--- | :--- | :--- |
+| **VS Code Copilot (Built-in)** | `workbench.panel.chat` | `workbench.panel.chat` |
+| **Antigravity (Built-in)** | `workbench.panel.chat` | `workbench.panel.chat` |
+| **Gemini Code Assist** | `workbench.view.extension.geminiChat` | `cloudcode.gemini.chatView` |
+| **Claude Code** | `workbench.view.extension.claude-sidebar-secondary` | `claudeVSCodeSidebarSecondary` |
+
+**Sidebar Restoration Commands**
+Commands used during layout deactivation to force sidebars to visibly reopen:
+* `workbench.action.toggleAuxiliaryBar` (VS Code Secondary Side Bar)
+* `antigravity.openAgent` (Antigravity Agent Side Bar)
+* `workbench.action.chat.openInSidebar` (Fallback for standard sidebars)
 
 
 ## 3. Layout Activation Speed Optimization
