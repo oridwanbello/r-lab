@@ -225,10 +225,10 @@ export class PlotGalleryProvider implements vscode.WebviewViewProvider {
 </head>
 <body>
     <div class="toolbar">
-        <button id="btn-prev" ${prevDisabled} title="Previous plot">◀</button>
+        <button id="btn-prev" ${prevDisabled} title="Previous Plot">◀</button>
         <span class="counter">${counter}</span>
-        <button id="btn-next" ${nextDisabled} title="Next plot">▶</button>
-        <button id="btn-clear" ${!hasPlots ? 'disabled' : ''} title="Clear all plots">🗑</button>
+        <button id="btn-next" ${nextDisabled} title="Next Plot">▶</button>
+        <button id="btn-clear" ${!hasPlots ? 'disabled' : ''} title="Clear All Plots">🗑</button>
     </div>
     <div class="plot-area">
         ${

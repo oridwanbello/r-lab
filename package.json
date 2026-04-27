@@ -44,13 +44,8 @@
       },
       {
         "command": "r-layout.maximizeTopRight",
-        "title": "Maximize Top Right Pane",
-        "icon": "$(chevron-up)"
-      },
-      {
-        "command": "r-layout.maximizeBottomRight",
-        "title": "Maximize Bottom Right Pane",
-        "icon": "$(chevron-down)"
+        "title": "Maximize Top Pane",
+        "icon": "$(screen-full)"
       },
       {
         "command": "r-layout.restoreRightSplit",
@@ -79,18 +74,13 @@
       "editor/title": [
         {
           "command": "r-layout.maximizeTopRight",
-          "when": "r-layout.layoutActive",
-          "group": "navigation@1"
-        },
-        {
-          "command": "r-layout.maximizeBottomRight",
-          "when": "r-layout.layoutActive",
+          "when": "r-layout.layoutActive && !r-layout.isTopRightMaximized",
           "group": "navigation@1"
         },
         {
           "command": "r-layout.restoreRightSplit",
-          "when": "r-layout.layoutActive",
-          "group": "navigation@2"
+          "when": "r-layout.layoutActive && r-layout.isTopRightMaximized",
+          "group": "navigation@1"
         }
       ]
     },

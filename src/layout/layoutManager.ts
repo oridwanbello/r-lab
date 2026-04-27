@@ -104,12 +104,11 @@ export function registerLayoutCommand(
     context.subscriptions.push(
         vscode.commands.registerCommand('r-layout.maximizeTopRight', async () => {
             await setResizeLayout(0.9, 0.1);
-        }),
-        vscode.commands.registerCommand('r-layout.maximizeBottomRight', async () => {
-            await setResizeLayout(0.1, 0.9);
+            await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', true);
         }),
         vscode.commands.registerCommand('r-layout.restoreRightSplit', async () => {
             await setResizeLayout(0.5, 0.5);
+            await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', false);
         })
     );
 
@@ -391,6 +390,9 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     // 5. Set context key (for keybinding "when" clauses)
     await vscode.commands.executeCommand(
         'setContext', 'r-layout.layoutActive', true
+    );
+    await vscode.commands.executeCommand(
+        'setContext', 'r-layout.isTopRightMaximized', false
     );
 
     // 6. Apply workspace overrides
@@ -706,6 +708,9 @@ async function deactivateLayout(): Promise<void> {
     await vscode.commands.executeCommand(
         'setContext', 'r-layout.layoutActive', false
     );
+    await vscode.commands.executeCommand(
+        'setContext', 'r-layout.isTopRightMaximized', false
+    );
 
     // 2. Dispose layout guards immediately so they don't interfere
     disposeLayoutGuards();
@@ -1008,10 +1013,10 @@ async function focusGroup3(): Promise<void> {
 function updateStatusBar(): void {
     if (isLayoutActive) {
         statusBarItem.text = 'R Layout ●';
-        statusBarItem.tooltip = 'Click to deactivate RStudio layout';
+        statusBarItem.tooltip = 'Click to Deactivate RStudio Layout';
     } else {
         statusBarItem.text = 'R Layout';
-        statusBarItem.tooltip = 'Click to activate RStudio layout';
+        statusBarItem.tooltip = 'Click to Activate RStudio Layout';
     }
 }
 

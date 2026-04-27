@@ -638,7 +638,7 @@ tryCatch({
 <body>
     <div class="toolbar">
         <div class="toolbar-actions">
-            <button id="btn-auto" data-tooltip="Auto-refresh OFF">
+            <button id="btn-auto" data-tooltip="Auto-Refresh Off">
                 <svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.7 8.5L4.5 13.5V3.5l8.2 5z"/></svg>
             </button>
         </div>
@@ -689,11 +689,11 @@ tryCatch({
                     if (msg.autoOn) {
                         autoBtn.classList.add('active');
                         autoBtn.innerHTML = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M3 3h4v10H3V3zm6 0h4v10H9V3z"/></svg>';
-                        autoBtn.title = 'Auto-refresh ON (3s)';
+                        autoBtn.title = 'Auto-Refresh On (3s)';
                     } else {
                         autoBtn.classList.remove('active');
                         autoBtn.innerHTML = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.7 8.5L4.5 13.5V3.5l8.2 5z"/></svg>';
-                        autoBtn.title = 'Auto-refresh OFF';
+                        autoBtn.title = 'Auto-Refresh Off';
                     }
 
                     if (msg.isLoading && !msg.errorMessage && msg.variables.length === 0) {
@@ -749,8 +749,8 @@ tryCatch({
             });
             document.getElementById('btn-auto')?.addEventListener('click', () => {
                 const btn = document.getElementById('btn-auto');
-                const isOff = btn.getAttribute('data-tooltip') === 'Auto-refresh OFF';
-                btn.setAttribute('data-tooltip', isOff ? 'Auto-refresh ON' : 'Auto-refresh OFF');
+                const isOff = btn.getAttribute('data-tooltip') === 'Auto-Refresh Off';
+                btn.setAttribute('data-tooltip', isOff ? 'Auto-Refresh On' : 'Auto-Refresh Off');
                 vscode.postMessage({ type: 'toggleAutoRefresh' });
             });
 

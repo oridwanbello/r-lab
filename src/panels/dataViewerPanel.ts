@@ -481,7 +481,7 @@ export class DataViewerPanel {
             ${this._varName ? `<span class="meta">${escapeHtml(this._varName)} (${this._totalRows.toLocaleString()} × ${this._totalCols})</span>` : ''}
         </span>
         <div class="toolbar-actions">
-            <button id="btn-refresh" ${!this._varName ? 'disabled' : ''} data-tooltip="Refresh data">
+            <button id="btn-refresh" ${!this._varName ? 'disabled' : ''} data-tooltip="Refresh Data">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M13.29 8.69a5.33 5.33 0 1 1 -6.62 -5.86c2.6-.67 5.29.67 6.28 3.16" />
                     <path d="M13.33 2.67v3.33h-3.33" />
