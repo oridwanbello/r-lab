@@ -55,7 +55,7 @@
       {
         "command": "r-layout.sourceFile",
         "title": "Source File to R Console",
-        "icon": "$(run)"
+        "icon": "resources/run-source.svg"
       }
     ],
     "keybindings": [
