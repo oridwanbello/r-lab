@@ -1,6 +1,6 @@
-# R Quadrant Setup & Scaffolding Guide
+# R Layout Setup & Scaffolding Guide
 
-This guide documents the initial setup and configuration of the **R Quadrant** VS Code extension.
+This guide documents the initial setup and configuration of the **R Layout** VS Code extension.
 
 ## 1. Environment Preparation
 
@@ -20,8 +20,8 @@ The project was scaffolded using `yo code` with the following configuration:
 | Setting | Selection |
 | :--- | :--- |
 | **Type** | New Extension (TypeScript) |
-| **Name** | R Quadrant |
-| **Identifier** | `r-quadrant` |
+| **Name** | R Layout |
+| **Identifier** | `r-layout` |
 | **Description** | An RStudio-style 4-pane layout orchestrator for data scientists. |
 | **Git** | Yes |
 | **Webpack** | Yes |
@@ -40,11 +40,11 @@ After scaffolding, the local repository was initialized and linked to GitHub.
 
 ```bash
 # Enter the project directory
-cd R-Quadrant
+cd R-Layout
 
 # Initialize branch and remote
 git branch -M main
-git remote add origin https://github.com/oridwanbello/R-Quadrant.git
+git remote add origin https://github.com/oridwanbello/R-Layout.git
 
 # Stage and commit files
 git add .
@@ -59,7 +59,7 @@ git push -u origin main
 The source code follows a modular architecture:
 
 ```
-R-Quadrant/
+R-Layout/
 ├── src/
 │   ├── extension.ts                  # Entry point — wires everything together
 │   ├── layout/
@@ -73,7 +73,7 @@ R-Quadrant/
 │   └── test/
 │       └── extension.test.ts         # Test suite
 ├── resources/
-│   └── quadrant-icon.svg             # Activity Bar icon
+│   └── layout-icon.svg             # Activity Bar icon
 ├── docs/
 │   ├── executive_blueprint.md        # PRD & Roadmap
 │   ├── setup.md                      # This file
@@ -99,5 +99,5 @@ As the project progresses, you will frequently modify these core files to implem
    npm run watch
    ```
 2. Press `Fn + F5` (or `F5`) to launch a new **Extension Development Host** window.
-3. In the new window, use the command palette or status bar button to test the **R Quadrant Layout**.
-4. The R Quadrant sidebar should appear in the Activity Bar with three panels: Environment, Plots, and Data Viewer.
+3. In the new window, use the command palette or status bar button to test the **R Layout Layout**.
+4. The R Layout sidebar should appear in the Activity Bar with three panels: Environment, Plots, and Data Viewer.

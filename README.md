@@ -1,8 +1,8 @@
-# R Quadrant
+# R Layout
 
 **An RStudio-style 4-pane layout orchestrator for VS Code.**
 
-R Quadrant brings the familiar multi-pane workflow of RStudio to VS Code and its forks (Cursor, Google Antigravity, VSCodium). With a single command, snap your editor into a 4-quadrant layout optimized for data science — complete with a live variable explorer, plot gallery, and interactive data viewer.
+R Layout brings the familiar multi-pane workflow of RStudio to VS Code and its forks (Cursor, Google Antigravity, VSCodium). With a single command, snap your editor into a 4-layout layout optimized for data science — complete with a live variable explorer, plot gallery, and interactive data viewer.
 
 ---
 
@@ -16,7 +16,7 @@ One click to transform your editor into a 65/35 asymmetrical 4-pane grid:
 - **Bottom Right** — Plots & Data Viewer
 
 ### 🤖 Universal AI Integration
-Choose your preferred AI assistant for the console quadrant:
+Choose your preferred AI assistant for the console layout:
 - Standard Terminal / R Console
 - GitHub Copilot
 - Google Antigravity Agent
@@ -43,8 +43,8 @@ Inspect dataframes directly from your R session:
 - **Night Mode**: Fully dimmed dark mode support for late-night data exploration.
 
 ### 🚀 Advanced Tool Integration
-R Quadrant is designed to be "Zero Friction" by default, but it is fully compatible with high-performance community tools:
-- **`httpgd` Support** — Use the high-fidelity `httpgd` graphics device for interactive, vector-quality plotting inside the Plot Quadrant.
+R Layout is designed to be "Zero Friction" by default, but it is fully compatible with high-performance community tools:
+- **`httpgd` Support** — Use the high-fidelity `httpgd` graphics device for interactive, vector-quality plotting inside the Plot Layout.
 - **`ark` Console** — Seamlessly integrates with the `ark` (Jupyter-based) interactive console for a more powerful R programming experience.
 - **DAP Integration** — Fully utilizes the Debug Adapter Protocol for real-time variable inspection.
 
@@ -54,8 +54,8 @@ R Quadrant is designed to be "Zero Friction" by default, but it is fully compati
 
 1. Install the extension from the VS Code Marketplace (or build from source).
 2. Open a workspace and press `Fn + F5` to try it in the Extension Development Host.
-3. Click the **R Quadrant Layout** button in the Status Bar, or run `R Quadrant: Apply RStudio Layout` from the Command Palette.
-4. Open the **R Quadrant** sidebar from the Activity Bar to access the Environment Explorer, Plot Gallery, and Data Viewer.
+3. Click the **R Layout Layout** button in the Status Bar, or run `R Layout: Apply RStudio Layout` from the Command Palette.
+4. Open the **R Layout** sidebar from the Activity Bar to access the Environment Explorer, Plot Gallery, and Data Viewer.
 
 ---
 
@@ -63,8 +63,8 @@ R Quadrant is designed to be "Zero Friction" by default, but it is fully compati
 
 | Setting | Default | Description |
 |---|---|---|
-| `r-quadrant.rConsolePath` | `"R"` | Path or command for the R Console terminal. |
-| `r-quadrant.plotOutputDir` | `".r-quadrant/plots"` | Relative path to the directory where plot images are saved. |
+| `r-layout.rConsolePath` | `"R"` | Path or command for the R Console terminal. |
+| `r-layout.plotOutputDir` | `".r-layout/plots"` | Relative path to the directory where plot images are saved. |
 
 ---
 
@@ -72,8 +72,8 @@ R Quadrant is designed to be "Zero Friction" by default, but it is fully compati
 
 | Command | Description |
 |---|---|
-| `R Quadrant: Apply RStudio Layout` | Snap the editor into the 4-pane grid. |
-| `R Quadrant: Inspect Variable` | Inspect a dataframe variable from the active debug session. |
+| `R Layout: Apply RStudio Layout` | Snap the editor into the 4-pane grid. |
+| `R Layout: Inspect Variable` | Inspect a dataframe variable from the active debug session. |
 | `Refresh Variables` | Refresh the Environment Explorer tree. |
 | `Clear Plot History` | Clear all plots from the Plot Gallery. |
 
@@ -87,8 +87,8 @@ R Quadrant is designed to be "Zero Friction" by default, but it is fully compati
 
 ### Setup
 ```bash
-git clone https://github.com/oridwanbello/R-Quadrant.git
-cd R-Quadrant
+git clone https://github.com/oridwanbello/R-Layout.git
+cd R-Layout
 npm install
 ```
 
@@ -137,7 +137,7 @@ src/
 - **Environment Explorer**: Live variable inspection via Debug Adapter Protocol
 - **Plot Gallery**: File-system-based plot capture with history navigation
 - **Data Viewer**: Interactive dataframe viewer with sorting and filtering
-- **R Quadrant Sidebar**: Dedicated Activity Bar container for all views
+- **R Layout Sidebar**: Dedicated Activity Bar container for all views
 - **Modular architecture**: Refactored source into `layout/`, `panels/`, and `util/` modules
 
 ### 0.0.1

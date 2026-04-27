@@ -5,12 +5,12 @@ import * as vscode from 'vscode';
  * VS Code's built-in Problems view by displaying diagnostics
  * from `vscode.languages.getDiagnostics()`.
  *
- * Opens in ViewColumn.Two (bottom-left quadrant) alongside
+ * Opens in ViewColumn.Two (bottom-left layout) alongside
  * R Console and Terminal tabs.
  */
 export class ProblemsPanel {
     public static currentPanel: ProblemsPanel | undefined;
-    public static readonly viewType = 'r-quadrant.problemsPanel';
+    public static readonly viewType = 'r-layout.problemsPanel';
 
     private readonly _panel: vscode.WebviewPanel;
     private _diagnosticsListener?: vscode.Disposable;

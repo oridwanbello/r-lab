@@ -12,7 +12,7 @@ import * as path from 'path';
  */
 export class HelpPanel {
     public static currentPanel: HelpPanel | undefined;
-    public static readonly viewType = 'r-quadrant.helpPanel';
+    public static readonly viewType = 'r-layout.helpPanel';
 
     private readonly _panel: vscode.WebviewPanel;
     private _recentSearches: string[] = [];
@@ -197,7 +197,7 @@ export class HelpPanel {
 
     /** Find the Rscript binary — works regardless of whether rConsolePath is R, radian, or ark. */
     private _findRscript(): Promise<string> {
-        const config = vscode.workspace.getConfiguration('r-quadrant');
+        const config = vscode.workspace.getConfiguration('r-layout');
         const rPath = config.get<string>('rConsolePath', 'R');
         if (/[/\\]R$/.test(rPath)) {
             return Promise.resolve(rPath.replace(/[/\\]R$/, '/Rscript'));

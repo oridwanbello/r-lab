@@ -9,11 +9,11 @@ import { execFile } from 'child_process';
  *
  * Uses base R write.csv to export data — no external packages required.
  *
- * Opens in ViewColumn.Four (bottom-right quadrant).
+ * Opens in ViewColumn.Four (bottom-right layout).
  */
 export class DataViewerPanel {
     public static currentPanel: DataViewerPanel | undefined;
-    public static readonly viewType = 'r-quadrant.dataViewerPanel';
+    public static readonly viewType = 'r-layout.dataViewerPanel';
 
     private readonly _panel: vscode.WebviewPanel;
     private _varName = '';
@@ -97,7 +97,7 @@ export class DataViewerPanel {
 
     /** Load and display a variable from the LIVE R session.
      *
-     *  We send a single short command (.r_quadrant_export_data) to the R terminal,
+     *  We send a single short command (.r_layout_export_data) to the R terminal,
      *  which avoids polluting the user's history with massive chunks of code.
      */
     public async loadVariable(varName: string, isAutoRefresh: boolean = false): Promise<void> {
@@ -119,7 +119,7 @@ export class DataViewerPanel {
             return;
         }
 
-        const outDir = nodePath.join(wf, '.r-quadrant');
+        const outDir = nodePath.join(wf, '.r-layout');
         if (!nodeFs.existsSync(outDir)) {
             nodeFs.mkdirSync(outDir, { recursive: true });
         }
@@ -134,7 +134,7 @@ export class DataViewerPanel {
 
             const rTerminal = require('../layout/layoutManager').getRConsoleTerminal();
             if (!rTerminal) {
-                this._errorMessage = 'No R Console terminal found. Activate the R Quadrant layout first.';
+                this._errorMessage = 'No R Console terminal found. Activate the R Layout layout first.';
                 this._isLoading = false;
                 this._render();
                 return;
@@ -142,7 +142,7 @@ export class DataViewerPanel {
 
             // Send the clean command directly. The invisible path-setting is no longer needed
             // because the paths are pre-set securely in the Rprofile hook.
-            rTerminal.sendText(`.r_quadrant_export_data("${varName}")`, true);
+            rTerminal.sendText(`.r_layout_export_data("${varName}")`, true);
         }
 
         // Poll for the meta file (up to 10 s if manual, 0s if auto).
@@ -224,7 +224,7 @@ export class DataViewerPanel {
 
     /** Find the Rscript binary — works regardless of whether rConsolePath is R, radian, or ark. */
     private _findRscript(): Promise<string> {
-        const config = vscode.workspace.getConfiguration('r-quadrant');
+        const config = vscode.workspace.getConfiguration('r-layout');
         const rPath = config.get<string>('rConsolePath', 'R');
         // If rConsolePath ends with 'R' or 'Rscript', use that directory.
         if (/[/\\]R$/.test(rPath)) {

@@ -1,8 +1,9 @@
 {
-  "name": "r-quadrant",
-  "displayName": "R Quadrant",
-  "description": "An RStudio-style 4-pane layout orchestrator for data scientists.",
+  "name": "r-layout",
+  "displayName": "R Layout",
+  "description": "An RStudio-style 3-pane layout orchestrator for data scientists.",
   "version": "0.1.0",
+  "publisher": "oridwanbello",
   "engines": {
     "vscode": "^1.107.0"
   },
@@ -10,73 +11,127 @@
     "Other",
     "Data Science"
   ],
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "configuration": {
-      "title": "R Quadrant",
+      "title": "R Layout",
       "properties": {
-        "r-quadrant.rConsolePath": {
+        "r-layout.rConsolePath": {
           "type": "string",
           "default": "R",
           "description": "Path or command for the R Console terminal. Examples: 'R', 'radian', or a full path to the Ark kernel."
         },
-        "r-quadrant.useArkInteractiveConsole": {
+        "r-layout.useArkInteractiveConsole": {
           "type": "boolean",
           "default": false,
           "description": "If true, launches a VS Code Jupyter Interactive Window as the R Console instead of a standard terminal. Ideal for using the Ark kernel."
-        },
-        "r-quadrant.plotOutputDir": {
-          "type": "string",
-          "default": ".r-quadrant/plots",
-          "description": "Relative path (from workspace root) to the directory where plot images are saved. The Plot Gallery watches this directory for new files."
-        },
-        "r-quadrant.chatViewIds": {
-          "type": "array",
-          "items": { "type": "string" },
-          "default": [],
-          "description": "Additional View IDs for AI chat extensions to move into the top-right quadrant. Built-in defaults (workbench.panel.chat, cloudcode.gemini.chatView, claudeVSCodeSidebarSecondary) are always tried. Add your own here for other chat extensions."
-        },
-        "r-quadrant.chatSidebarCommands": {
-          "type": "array",
-          "items": { "type": "string" },
-          "default": [
-            "workbench.action.toggleAuxiliaryBar",
-            "antigravity.openAgent"
-          ],
-          "description": "Commands to run when deactivating the layout to reopen your AI sidebar panels (e.g. secondary sidebar, Antigravity agent)."
         }
       }
     },
     "commands": [
       {
-        "command": "r-quadrant.toggleLayout",
-        "title": "R Quadrant: Toggle Layout",
+        "command": "r-layout.toggleLayout",
+        "title": "Toggle R Layout",
         "category": "View"
       },
       {
-        "command": "r-quadrant.plotGallery.clear",
-        "title": "R Quadrant: Clear Plot Gallery",
+        "command": "r-layout.plotGallery.clear",
+        "title": "R Layout: Clear Plot Gallery",
         "category": "View"
+      },
+      {
+        "command": "r-layout.maximizeTopRight",
+        "title": "Maximize Top Right Pane",
+        "icon": "$(chevron-up)"
+      },
+      {
+        "command": "r-layout.maximizeBottomRight",
+        "title": "Maximize Bottom Right Pane",
+        "icon": "$(chevron-down)"
+      },
+      {
+        "command": "r-layout.restoreRightSplit",
+        "title": "Restore Pane Split",
+        "icon": "$(screen-normal)"
       }
     ],
     "keybindings": [
       {
         "command": "workbench.action.focusSecondEditorGroup",
         "key": "cmd+j",
-        "when": "r-quadrant.layoutActive"
+        "when": "r-layout.layoutActive"
       },
       {
         "command": "workbench.action.focusThirdEditorGroup",
         "key": "cmd+alt+b",
-        "when": "r-quadrant.layoutActive"
+        "when": "r-layout.layoutActive"
       },
       {
-        "command": "r-quadrant.noop",
+        "command": "r-layout.noop",
         "key": "cmd+shift+i",
-        "when": "r-quadrant.layoutActive"
+        "when": "r-layout.layoutActive"
       }
-    ]
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "r-layout.maximizeTopRight",
+          "when": "r-layout.layoutActive",
+          "group": "navigation@1"
+        },
+        {
+          "command": "r-layout.maximizeBottomRight",
+          "when": "r-layout.layoutActive",
+          "group": "navigation@1"
+        },
+        {
+          "command": "r-layout.restoreRightSplit",
+          "when": "r-layout.layoutActive",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "r-layout-sidebar",
+          "title": "R Layout",
+          "icon": "resources/r-layout-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "r-layout-sidebar": [
+        {
+          "id": "r-layout.workspacePanel",
+          "name": "Workspace",
+          "type": "webview"
+        },
+        {
+          "id": "r-layout.plotGallery",
+          "name": "Plot Gallery",
+          "type": "webview"
+        },
+        {
+          "id": "r-layout.dataViewerPanel",
+          "name": "Data Viewer",
+          "type": "webview"
+        },
+        {
+          "id": "r-layout.helpPanel",
+          "name": "Help",
+          "type": "webview"
+        },
+        {
+          "id": "r-layout.problemsPanel",
+          "name": "Problems",
+          "type": "webview"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

@@ -6,11 +6,11 @@ import * as path from 'path';
  * Plots Panel — a WebviewPanel (editor tab) that watches a directory
  * for new plot images and displays them with history navigation.
  *
- * Opens in ViewColumn.Three (bottom-right quadrant).
+ * Opens in ViewColumn.Three (bottom-right layout).
  */
 export class PlotsPanel {
     public static currentPanel: PlotsPanel | undefined;
-    public static readonly viewType = 'r-quadrant.plotsPanel';
+    public static readonly viewType = 'r-layout.plotsPanel';
 
     private readonly _panel: vscode.WebviewPanel;
     private _plots: vscode.Uri[] = [];
@@ -207,8 +207,8 @@ export class PlotsPanel {
                 ? this._customPlotDir
                 : path.join(workspaceFolder.uri.fsPath, this._customPlotDir);
         } else {
-            const config = vscode.workspace.getConfiguration('r-quadrant');
-            const plotDir = config.get<string>('plotOutputDir', '.r-quadrant/plots');
+            const config = vscode.workspace.getConfiguration('r-layout');
+            const plotDir = '.r-layout/plots';
             watchDirFsPath = path.join(workspaceFolder.uri.fsPath, plotDir);
         }
 
@@ -268,8 +268,8 @@ export class PlotsPanel {
                 ? this._customPlotDir
                 : path.join(workspaceFolder.uri.fsPath, this._customPlotDir);
         } else {
-            const config = vscode.workspace.getConfiguration('r-quadrant');
-            const plotDir = config.get<string>('plotOutputDir', '.r-quadrant/plots');
+            const config = vscode.workspace.getConfiguration('r-layout');
+            const plotDir = '.r-layout/plots';
             dir = path.join(workspaceFolder.uri.fsPath, plotDir);
         }
 

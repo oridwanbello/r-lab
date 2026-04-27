@@ -1,6 +1,6 @@
 # Change Log
 
-All notable changes to the "R Quadrant" extension will be documented in this file.
+All notable changes to the "R Layout" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
@@ -8,11 +8,11 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ### Added
 - **Environment Explorer**: TreeView displaying variables from the active debug session via DAP requests. Supports type-aware icons, expandable nested objects, and auto-refresh on debug events.
-- **Plot Gallery**: WebviewView that watches a configurable directory (`.quadrant/plots/`) for new image files. Includes previous/next navigation and clear history.
+- **Plot Gallery**: WebviewView that watches a configurable directory (`.layout/plots/`) for new image files. Includes previous/next navigation and clear history.
 - **Data Viewer**: WebviewView for inspecting dataframes with click-to-sort columns and real-time row filtering. Supports R (jsonlite) and Python (pandas) serialization.
-- **R Quadrant Sidebar**: Custom Activity Bar view container housing all three analysis views.
-- **New commands**: `quadrant.environmentExplorer.refresh`, `quadrant.plotGallery.clear`, `quadrant.dataViewer.inspect`.
-- **New setting**: `quadrant.plotOutputDir` for configuring the plot output directory.
+- **R Layout Sidebar**: Custom Activity Bar view container housing all three analysis views.
+- **New commands**: `layout.environmentExplorer.refresh`, `layout.plotGallery.clear`, `layout.dataViewer.inspect`.
+- **New setting**: `layout.plotOutputDir` for configuring the plot output directory.
 - **Architecture docs**: Added `docs/architecture.md` describing the modular component structure.
 
 ### Changed

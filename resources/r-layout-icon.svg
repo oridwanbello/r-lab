@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
-  <!-- 4-quadrant grid with alternating fills -->
+  <!-- 4-layout grid with alternating fills -->
   <!-- Top-left: light fill -->
   <rect x="3" y="3" width="8" height="8" rx="1.5"
         fill="currentColor" opacity="0.25"

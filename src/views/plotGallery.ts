@@ -5,7 +5,7 @@ import * as vscode from 'vscode';
 // ────────────────────────────────────────────────────────────
 
 export class PlotGalleryProvider implements vscode.WebviewViewProvider {
-    public static readonly viewType = 'r-quadrant.plotGallery';
+    public static readonly viewType = 'r-layout.plotGallery';
 
     private _view?: vscode.WebviewView;
     private _plots: vscode.Uri[] = [];
@@ -46,8 +46,8 @@ export class PlotGalleryProvider implements vscode.WebviewViewProvider {
     // ── File System Watcher ─────────────────────────────────
 
     private _startWatcher(): void {
-        const config = vscode.workspace.getConfiguration('r-quadrant');
-        const plotDir = config.get<string>('plotOutputDir', '.r-quadrant/plots');
+        const config = vscode.workspace.getConfiguration('r-layout');
+        const plotDir = '.r-layout/plots';
 
         // Watch for new image files in the configured directory
         const pattern = new vscode.RelativePattern(
@@ -237,7 +237,7 @@ export class PlotGalleryProvider implements vscode.WebviewViewProvider {
                 : `<div class="empty-state">
                        <div class="icon">📊</div>
                        <p>No plots yet.<br/>
-                       Save image files to <code>.r-quadrant/plots/</code><br/>
+                       Save image files to <code>.r-layout/plots/</code><br/>
                        and they will appear here.</p>
                    </div>`
         }
@@ -276,7 +276,7 @@ export function registerPlotGallery(
     );
 
     const clearCmd = vscode.commands.registerCommand(
-        'r-quadrant.plotGallery.clear',
+        'r-layout.plotGallery.clear',
         () => provider.clear()
     );
 

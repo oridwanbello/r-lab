@@ -13,7 +13,7 @@ interface VariableInfo {
 
 export class WorkspacePanel {
     public static currentPanel: WorkspacePanel | undefined;
-    public static readonly viewType = 'r-quadrant.workspacePanel';
+    public static readonly viewType = 'r-layout.workspacePanel';
 
     private readonly _panel: vscode.WebviewPanel;
     private _variables: VariableInfo[] = [];
@@ -146,7 +146,7 @@ export class WorkspacePanel {
 
         // ── Priority 2: Read the auto-updated watcher file ──────────
         // The R task callback (injected at activation) writes
-        // .r-quadrant/.workspace_data.json after every R command.
+        // .r-layout/.workspace_data.json after every R command.
         // We just read it — no terminal interaction needed.
         const watcherResult = this._readWatcherFile();
         if (watcherResult) {
@@ -225,7 +225,7 @@ tryCatch({
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         if (!wf) { return null; }
 
-        const outDir = path.join(wf, '.r-quadrant');
+        const outDir = path.join(wf, '.r-layout');
         const varsFile = path.join(outDir, '.workspace_vars.tsv');
         const loadedFile = path.join(outDir, '.workspace_loaded.tsv');
         const attachedFile = path.join(outDir, '.workspace_attached.tsv');
@@ -403,7 +403,7 @@ tryCatch({
      */
     private async _findRscript(): Promise<string> {
         // First, try the R console path setting — if it's plain "R", derive "Rscript"
-        const config = vscode.workspace.getConfiguration('r-quadrant');
+        const config = vscode.workspace.getConfiguration('r-layout');
         const rPath = config.get<string>('rConsolePath', 'R');
         
         // Only derive from setting if it looks like it ends with /R or is just "R"

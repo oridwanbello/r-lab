@@ -8,9 +8,9 @@ import { WorkspacePanel } from '../panels/workspacePanel';
 import { DataViewerPanel } from '../panels/dataViewerPanel';
 
 /**
- * R Quadrant Layout Manager
+ * R Layout Layout Manager
  *
- * Orchestrates a true 4-quadrant RStudio layout:
+ * Orchestrates a true 4-layout RStudio layout:
  *
  *   ┌───────────────────┬───────────────────┐
  *   │ ① Source Editor   │ ③ AI Chat        │
@@ -45,7 +45,7 @@ export function getRConsoleTerminal(): vscode.Terminal | undefined {
     return rConsoleTerminal;
 }
 
-const STATE_KEY = 'r-quadrant.layoutActive';
+const STATE_KEY = 'r-layout.layoutActive';
 
 // ── Registration ────────────────────────────────────────────
 
@@ -62,14 +62,14 @@ export function registerLayoutCommand(
         vscode.StatusBarAlignment.Right,
         100
     );
-    statusBarItem.command = 'r-quadrant.toggleLayout';
+    statusBarItem.command = 'r-layout.toggleLayout';
     updateStatusBar();
     statusBarItem.show();
     context.subscriptions.push(statusBarItem);
 
     // ── Layout Toggle Command ───────────────────────────────
     context.subscriptions.push(
-        vscode.commands.registerCommand('r-quadrant.toggleLayout', async () => {
+        vscode.commands.registerCommand('r-layout.toggleLayout', async () => {
             if (isLayoutActive) {
                 await deactivateLayout();
             } else {
@@ -80,7 +80,37 @@ export function registerLayoutCommand(
 
     // ── Utility Commands ────────────────────────────────────
     context.subscriptions.push(
-        vscode.commands.registerCommand('r-quadrant.noop', () => {})
+        vscode.commands.registerCommand('r-layout.noop', () => {})
+    );
+
+    // ── Resize Commands ─────────────────────────────────────
+    const setResizeLayout = async (topSize: number, bottomSize: number) => {
+        if (!isLayoutActive) return;
+        await vscode.commands.executeCommand('vscode.setEditorLayout', {
+            orientation: 0,
+            groups: [
+                { size: 0.55 },
+                {
+                    size: 0.45,
+                    groups: [
+                        { size: topSize },
+                        { size: bottomSize }
+                    ]
+                }
+            ]
+        });
+    };
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('r-layout.maximizeTopRight', async () => {
+            await setResizeLayout(0.9, 0.1);
+        }),
+        vscode.commands.registerCommand('r-layout.maximizeBottomRight', async () => {
+            await setResizeLayout(0.1, 0.9);
+        }),
+        vscode.commands.registerCommand('r-layout.restoreRightSplit', async () => {
+            await setResizeLayout(0.5, 0.5);
+        })
     );
 
     // ── Track terminal disposal ─────────────────────────────
@@ -91,16 +121,16 @@ export function registerLayoutCommand(
                 savedDataViewerState = undefined;
                 savedHelpState = undefined;
 
-                // Delete .r-quadrant directory to prevent left-over files
+                // Delete .r-layout directory to prevent left-over files
                 const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
                 if (wf) {
-                    const rQuadDir = path.join(wf, '.r-quadrant');
+                    const rLayoutDir = path.join(wf, '.r-layout');
                     try {
-                        if (fs.existsSync(rQuadDir)) {
-                            fs.rmSync(rQuadDir, { recursive: true, force: true });
+                        if (fs.existsSync(rLayoutDir)) {
+                            fs.rmSync(rLayoutDir, { recursive: true, force: true });
                         }
                     } catch (e) {
-                        console.error('Failed to delete .r-quadrant directory on session end', e);
+                        console.error('Failed to delete .r-layout directory on session end', e);
                     }
                 }
             }
@@ -167,7 +197,7 @@ export async function resetStaleLayout(
     // If a previous session crashed or was killed before cleanup
     // could finish, these settings can get stuck as workspace
     // overrides — causing files to open in a split view and
-    // terminals to land in the editor area in pre-quadrant VS Code.
+    // terminals to land in the editor area in pre-layout VS Code.
     try {
         const cfgTarget = vscode.workspace.workspaceFolders
             ? vscode.ConfigurationTarget.Workspace
@@ -185,7 +215,7 @@ export async function resetStaleLayout(
 
     // ── CONDITIONAL stale-layout cleanup ─────────────────────
     // Only close editors and reset the layout if there are actually
-    // stale elements from a previous R Quadrant session:
+    // stale elements from a previous R Layout session:
     //   • more than one editor group (leftover 4-pane grid), OR
     //   • webview / notebook tabs (our panel singletons) still open
     // On a clean startup with no stale layout this is a no-op,
@@ -254,7 +284,7 @@ export async function resetStaleLayout(
  * layout to its session store, so on the next startup there is nothing
  * multi-group to restore — and the flash never happens.
  *
- * Without this, when the user reloads while R Quadrant is active, VS Code
+ * Without this, when the user reloads while R Layout is active, VS Code
  * saves the 4-group layout, restores it on reload (flash!), and only then
  * our activation code can collapse it.
  */
@@ -264,7 +294,7 @@ export async function collapseLayoutForShutdown(): Promise<void> {
         return;
     }
 
-    console.log('[R Quadrant] deactivate(): collapsing layout before state is saved.');
+    console.log('[R Layout] deactivate(): collapsing layout before state is saved.');
 
     // Determine config target once, synchronously, before we fan out.
     const cfgTarget = vscode.workspace.workspaceFolders
@@ -317,8 +347,8 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     activationInProgress = true;
     // 1. Load saved positions, and Save references to all currently open TEXT files
     //    so we can reopen them after setting the layout.
-    const textFilePositions = context.workspaceState.get<Record<string, number>>('r-quadrant.textFilePositions', {});
-    const panelPositions = context.workspaceState.get<Record<string, number>>('r-quadrant.panelPositions', {});
+    const textFilePositions = context.workspaceState.get<Record<string, number>>('r-layout.textFilePositions', {});
+    const panelPositions = context.workspaceState.get<Record<string, number>>('r-layout.panelPositions', {});
 
     const openFiles: vscode.Uri[] = [];
     for (const group of vscode.window.tabGroups.all) {
@@ -329,7 +359,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         }
     }
 
-    // 2. Close stale R Quadrant panels from previous sessions.
+    // 2. Close stale R Layout panels from previous sessions.
     //    We explicitly PRESERVE the Help tab and any Chat tabs so their sessions survive layout toggles.
     //    We preserve TabInputText so the user's source files remain open.
     for (const group of vscode.window.tabGroups.all) {
@@ -360,7 +390,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     // 5. Set context key (for keybinding "when" clauses)
     await vscode.commands.executeCommand(
-        'setContext', 'r-quadrant.layoutActive', true
+        'setContext', 'r-layout.layoutActive', true
     );
 
     // 6. Apply workspace overrides
@@ -373,22 +403,16 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     await delay(200);
 
-    // 7. Set the 4-group (2×2) editor layout
+    // 7. Set the 3-pane editor layout
     await vscode.commands.executeCommand('vscode.setEditorLayout', {
         orientation: 0,
         groups: [
+            { size: 0.55 }, // ① Source Editor (Full Height)
             {
-                size: 0.65,
+                size: 0.45,
                 groups: [
-                    { size: 0.6 }, // ① Source Editor
-                    { size: 0.4 }, // ② Console / Terminal / Problems
-                ],
-            },
-            {
-                size: 0.35,
-                groups: [
-                    { size: 0.5 }, // ③ AI Chat + Help
-                    { size: 0.5 }, // ④ Workspace + Plots
+                    { size: 0.5 }, // ② Console / Terminal / Problems / Help
+                    { size: 0.5 }, // ③ Workspace / Plots / Data Viewer
                 ],
             },
         ],
@@ -449,7 +473,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     //         currently focused editor group (Group 2). ✓
     //
     //    For NEW terminals, createTerminal with location.viewColumn is reliable.
-    const config = vscode.workspace.getConfiguration('r-quadrant');
+    const config = vscode.workspace.getConfiguration('r-layout');
     const useArk = config.get<boolean>('useArkInteractiveConsole', false);
 
     // 9a. Anchor Group 2 with ProblemsPanel before any terminal placement.
@@ -490,7 +514,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         // running and its variables are still live — do NOT wipe the data file.
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         if (wf && !wasRConsoleReused) {
-            const staleFile = path.join(wf, '.r-quadrant', '.workspace_data.json');
+            const staleFile = path.join(wf, '.r-layout', '.workspace_data.json');
             try { fs.unlinkSync(staleFile); } catch {}
 
             // NEW: Clear R Help state for brand-new R sessions
@@ -566,46 +590,31 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
 
 
-    // 10. Group 3 (top-right): Chat → Help  (Chat FIRST, Chat FOCUSED)
-    //
-    //     CRITICAL ORDER: HelpPanel MUST be created first so Group 3 has content.
-    //     focusThirdEditorGroup silently no-ops on an empty group, causing
-    //     openChatInGroup3 to fire while Group 1 is still active — landing Chat
-    //     in the wrong quadrant.
-    //
-    //     Sequence:
-    //       a) Open Help in Group 3 (preserveFocus=true so editor stays active).
-    //       b) Load Help state.
-    //       c) Open Chat — Group 3 now has content, focus is reliable.
-    //       d) Chat lands as tab 2; moveEditorLeftInGroup moves it to tab 1.
-    //       e) firstEditorInGroup activates Chat (tab 1).
-
-    // a+b: Anchor Group 3 with HelpPanel.
-    const helpPanel = HelpPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
+    // 10. HelpPanel: Appended to Group 2 (Top-Right) so it becomes the 4th tab
+    //     Order in Group 2: R Console → Terminal → Problems → Help
+    const helpPanel = HelpPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
     if (savedHelpState) { helpPanel.loadState(savedHelpState); }
-    await delay(150);
+    await delay(100);
 
-    // c+d: Open Chat into Group 3 (now non-empty) and reorder to tab 1.
-    await openChatInGroup3();
-    await delay(150);
-
-    // e: Focus Group 3 and activate its first tab (Chat).
+    // Focus Group 2 and activate R Console (which is usually the 1st or 2nd tab)
+    // Actually, R Console was shown first, let's just make sure Group 2 is focused
+    // and then activate the first editor (R Console).
     try {
-        await vscode.commands.executeCommand('workbench.action.focusThirdEditorGroup');
+        await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
         await vscode.commands.executeCommand('workbench.action.firstEditorInGroup');
     } catch {}
     await delay(100);
 
-    // 11. Group 4 (bottom-right): Workspace → Plots → Data Viewer  (Workspace FIRST, Workspace FOCUSED)
+    // 11. Group 3 (bottom-right): Workspace → Plots → Data Viewer  (Workspace FIRST, Workspace FOCUSED)
     //     Create Workspace first (leftmost tab), then Plots, then Data Viewer.
     //     Reveal Workspace at the end to make it the active/focused tab.
-    const workspacePanel = WorkspacePanel.createOrShow(context.extensionUri, vscode.ViewColumn.Four);
+    const workspacePanel = WorkspacePanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
     // Note: forceRefresh() is deferred (see end of activation) to give the webview
     // time to fully render before the message is posted.
-    const plotsPanel = PlotsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Four);
+    const plotsPanel = PlotsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
     plotsPanel.syncPlots(); // catch up on any plots created while layout was closed
-    const dataPanel = DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Four);
-    workspacePanel.reveal(); // restore Workspace as the focused tab in Group 4
+    const dataPanel = DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
+    workspacePanel.reveal(); // restore Workspace as the focused tab in Group 3
 
     // Wire up: clicking "View" on a data.frame in Workspace opens it in Data Viewer
     workspacePanel.onRequestDataView((varName) => {
@@ -685,7 +694,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     // Doing this earlier races the webview paint and the message is dropped.
     setTimeout(() => { WorkspacePanel.currentPanel?.forceRefresh(); }, 500);
 
-    vscode.window.showInformationMessage('R Quadrant layout activated.');
+    vscode.window.showInformationMessage('R Layout layout activated.');
 }
 
 // ────────────────────────────────────────────────────────────
@@ -695,7 +704,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 async function deactivateLayout(): Promise<void> {
     // 1. Clear context key
     await vscode.commands.executeCommand(
-        'setContext', 'r-quadrant.layoutActive', false
+        'setContext', 'r-layout.layoutActive', false
     );
 
     // 2. Dispose layout guards immediately so they don't interfere
@@ -722,21 +731,21 @@ async function deactivateLayout(): Promise<void> {
     }
 
     // Save to workspaceState
-    await extensionContext.workspaceState.update('r-quadrant.textFilePositions', textFilePositions);
-    await extensionContext.workspaceState.update('r-quadrant.panelPositions', panelPositions);
+    await extensionContext.workspaceState.update('r-layout.textFilePositions', textFilePositions);
+    await extensionContext.workspaceState.update('r-layout.panelPositions', panelPositions);
 
     // Save Help state to in-memory variable before disposing
     if (HelpPanel.currentPanel) {
         savedHelpState = HelpPanel.currentPanel.saveState();
         // Clear workspaceState in case it was used previously
-        await extensionContext.workspaceState.update('r-quadrant.helpState', undefined);
+        await extensionContext.workspaceState.update('r-layout.helpState', undefined);
     }
 
     // Save Data Viewer state to in-memory variable before disposing
     if (DataViewerPanel.currentPanel) {
         savedDataViewerState = DataViewerPanel.currentPanel.saveState();
         // Clear workspaceState in case it was used previously
-        await extensionContext.workspaceState.update('r-quadrant.dataViewerState', undefined);
+        await extensionContext.workspaceState.update('r-layout.dataViewerState', undefined);
     }
 
     // 4. Dispose panel singletons (closes our Webview tabs)
@@ -748,7 +757,7 @@ async function deactivateLayout(): Promise<void> {
     DataViewerPanel.currentPanel?.dispose();
 
     // 5. Move ALL terminals back to the bottom panel.
-    //    We focus Group 2 (where terminal tabs live during quadrant mode) and
+    //    We focus Group 2 (where terminal tabs live during layout mode) and
     //    call moveToTerminalPanel once per terminal. We deliberately do NOT call
     //    t.show() here — show() opens the terminal panel which can trigger VS Code
     //    to auto-create a new default bash terminal before ours arrive.
@@ -769,21 +778,7 @@ async function deactivateLayout(): Promise<void> {
     // The onDidCloseTerminal listener (registered in registerLayoutCommand)
     // will null them out if the user manually closes a terminal.
 
-    // 6. CHAT SESSION CONTINUITY:
-    //    Explicitly return the chat view to the sidebar BEFORE closing any tabs.
-    //    workbench.action.chat.openInSidebar sends the chat back to its sidebar
-    //    panel and makes the current session active there, so the next activation's
-    //    vscode.moveViews will restore that exact session.
-    try {
-        await vscode.commands.executeCommand('workbench.action.focusThirdEditorGroup');
-        await delay(100);
-        const g3 = vscode.window.tabGroups.all.find(g => g.viewColumn === vscode.ViewColumn.Three);
-        const hasChatInGroup3 = g3?.tabs.some(t => isChatTab(t)) ?? false;
-        if (hasChatInGroup3) {
-            await vscode.commands.executeCommand('workbench.action.chat.openInSidebar');
-            await delay(200);
-        }
-    } catch {}
+
 
     // 7. Close remaining non-text/non-terminal tabs (our custom webview panels).
     for (const group of vscode.window.tabGroups.all) {
@@ -842,11 +837,11 @@ async function deactivateLayout(): Promise<void> {
     await extensionContext.workspaceState.update(STATE_KEY, false);
     updateStatusBar();
 
-    vscode.window.showInformationMessage('R Quadrant layout deactivated.');
+    vscode.window.showInformationMessage('R Layout layout deactivated.');
 }
 
 // ────────────────────────────────────────────────────────────
-//  Layout Guards — redirect stray content to the right quadrant
+//  Layout Guards — redirect stray content to the right layout
 // ────────────────────────────────────────────────────────────
 
 let layoutGuards: vscode.Disposable[] = [];
@@ -959,18 +954,9 @@ function disposeLayoutGuards(): void {
  * extensions (Antigravity, Copilot, Gemini, Claude, etc.) include
  * "chat" or their brand name in their editor tab label.
  */
-function isChatTab(tab: vscode.Tab): boolean {
-    const label = tab.label.toLowerCase();
-    const chatKeywords = [
-        'chat', 'copilot', 'gemini', 'antigravity',
-        'claude', 'cody', 'continue', 'amazon q',
-        'tabnine', 'codeium', 'cursor', 'supermaven',
-    ];
-    return chatKeywords.some((k) => label.includes(k));
-}
 
 /**
- * Opens AI Chat tabs in Group 3 (top-right quadrant), preserving sessions.
+ * Opens AI Chat tabs in Group 3 (top-right layout), preserving sessions.
  *
  * Strategy:
  *   Tier 1. Already in Group 3 — skip.
@@ -989,107 +975,6 @@ function isChatTab(tab: vscode.Tab): boolean {
  * focusThirdEditorGroup silently no-ops on an empty group — Group 3 must
  * already have content for the focus (and thus placement) to be reliable.
  */
-async function openChatInGroup3(): Promise<void> {
-    const chatTabsInGroup3 = () => vscode.window.tabGroups.all
-        .find((g) => g.viewColumn === vscode.ViewColumn.Three)
-        ?.tabs.filter((t) => isChatTab(t)) ?? [];
-
-    // Helper: push the last tab in Group 3 left past Help so order is Chat(s) → Help.
-    const pushChatTabLeft = async () => {
-        await focusGroup3();
-        await delay(100);
-        await vscode.commands.executeCommand('workbench.action.lastEditorInGroup');
-        await delay(80);
-        await vscode.commands.executeCommand('workbench.action.moveEditorLeftInGroup');
-        await delay(40);
-        await vscode.commands.executeCommand('workbench.action.moveEditorLeftInGroup');
-        await delay(40);
-    };
-
-    // ── Tier 1: Already in Group 3 — nothing to do ───────────────────────────
-    if (chatTabsInGroup3().length > 0) {
-        console.log('[R Quadrant] openChatInGroup3: chat already in Group 3.');
-        return;
-    }
-
-    const allCommands = await vscode.commands.getCommands(true);
-    let placed = 0;
-
-    // ── Tier 2: vscode.moveViews ──────────────────────────────────────────────
-    //
-    // Moves a sidebar view into the editor area as a tab, preserving its session.
-    //
-    // IMPORTANT: destinationId:'workbench.editor' only works for built-in workbench
-    // panel views. Extension views registered in the activitybar or secondarySidebar
-    // (like Gemini's cloudcode.gemini.chatView or Claude's claudeVSCodeSidebarSecondary)
-    // silently fail — vscode.moveViews returns without error but no tab appears.
-    //
-    // Built-in view confirmed to work: workbench.panel.chat (VS Code / Copilot / Antigravity)
-    //
-    // Users can prepend additional view IDs via r-quadrant.chatViewIds if they discover
-    // one that works for their IDE build.
-    const builtinViewIds = [
-        'workbench.panel.chat',   // VS Code built-in / Copilot / Antigravity
-    ];
-    const userViewIds = vscode.workspace
-        .getConfiguration('r-quadrant')
-        .get<string[]>('chatViewIds', []);
-    const allViewIds = [...userViewIds, ...builtinViewIds];
-    const tried = new Set<string>();
-
-    for (const viewId of allViewIds) {
-        const id = viewId.trim();
-        if (!id || tried.has(id)) { continue; }
-        tried.add(id);
-        try {
-            await focusGroup3();
-            await delay(100);
-            const before = chatTabsInGroup3().length;
-            await vscode.commands.executeCommand('vscode.moveViews', {
-                viewIds: [id],
-                destinationId: 'workbench.editor',
-            });
-            await delay(400);
-            const after = chatTabsInGroup3().length;
-            if (after > before) {
-                console.log(`[R Quadrant] ✓ vscode.moveViews: "${id}" → Group 3`);
-                await pushChatTabLeft();
-                placed++;
-            } else {
-                console.log(`[R Quadrant] ✗ vscode.moveViews: "${id}" produced no new tab`);
-            }
-        } catch (err) {
-            console.log(`[R Quadrant] ✗ vscode.moveViews threw for "${id}": ${err}`);
-        }
-    }
-
-    if (placed > 0) {
-        console.log(`[R Quadrant] openChatInGroup3: placed ${placed} chat tab(s).`);
-        return;
-    }
-
-    // ── Tier 3: Last-resort — VS Code built-in openInEditor ──────────────────
-    const lastResort = [
-        'workbench.action.chat.openInEditor',
-        'workbench.action.chat.open',
-    ].filter(c => allCommands.includes(c));
-
-    for (const cmd of lastResort) {
-        try {
-            await focusGroup3();
-            await delay(150);
-            await vscode.commands.executeCommand(cmd);
-            await delay(400);
-            if (chatTabsInGroup3().length > 0) {
-                await pushChatTabLeft();
-                console.log(`[R Quadrant] ✓ Chat placed via last-resort "${cmd}" (new session).`);
-                return;
-            }
-        } catch { /* try next */ }
-    }
-
-    console.log('[R Quadrant] openChatInGroup3: no chat tab could be placed. Open a chat and drag it to the top-right quadrant.');
-}
 
 
 
@@ -1098,78 +983,6 @@ async function openChatInGroup3(): Promise<void> {
  * Full AI extension discovery: scans ALL installed extensions and
  * collects views, chat participants, and commands for each AI extension.
  */
-function discoverAllAi(allCommands: string[]): {
-    id: string;
-    displayName: string;
-    viewIds: string[];
-    chatParticipants: string[];
-    commands: string[];
-}[] {
-    const results: {
-        id: string;
-        displayName: string;
-        viewIds: string[];
-        chatParticipants: string[];
-        commands: string[];
-    }[] = [];
-
-    const aiPatterns = [
-        'copilot', 'gemini', 'geminicodeassist', 'cloudcode',
-        'claude', 'anthropic', 'codeium', 'tabnine',
-        'amazonq', 'amazon-q', 'continue', 'cody',
-        'sourcegraph', 'cursor', 'supermaven', 'windsurf',
-        'antigravity', 'google',
-    ];
-
-    for (const ext of vscode.extensions.all) {
-        const extIdLower = ext.id.toLowerCase();
-        const isAi = aiPatterns.some((p) => extIdLower.includes(p));
-        if (!isAi) { continue; }
-
-        const pkg = ext.packageJSON;
-        const displayName: string = pkg?.displayName || ext.id;
-
-        // Collect view IDs
-        const viewIds: string[] = [];
-        if (pkg?.contributes?.views) {
-            for (const views of Object.values(pkg.contributes.views)) {
-                if (!Array.isArray(views)) { continue; }
-                for (const v of views) {
-                    if (typeof v === 'object' && v.id) {
-                        viewIds.push(v.id);
-                    }
-                }
-            }
-        }
-
-        // Collect chat participants
-        const chatParticipants: string[] = [];
-        if (pkg?.contributes?.chatParticipants) {
-            for (const cp of pkg.contributes.chatParticipants) {
-                if (cp?.id || cp?.name) {
-                    chatParticipants.push(cp.id || cp.name);
-                }
-            }
-        }
-
-        // Collect all commands from this extension that are actually registered
-        const prefix = ext.id.split('.').pop()?.toLowerCase() || '';
-        const extCommands = allCommands.filter((c) => {
-            const lower = c.toLowerCase();
-            return lower.includes(prefix) || lower.includes(extIdLower.replace('.', ''));
-        });
-
-        results.push({
-            id: ext.id,
-            displayName,
-            viewIds,
-            chatParticipants,
-            commands: extCommands,
-        });
-    }
-
-    return results;
-}
 
 async function focusGroup3(): Promise<void> {
     try {
@@ -1194,10 +1007,10 @@ async function focusGroup3(): Promise<void> {
 
 function updateStatusBar(): void {
     if (isLayoutActive) {
-        statusBarItem.text = 'R Quadrant ●';
+        statusBarItem.text = 'R Layout ●';
         statusBarItem.tooltip = 'Click to deactivate RStudio layout';
     } else {
-        statusBarItem.text = 'R Quadrant';
+        statusBarItem.text = 'R Layout';
         statusBarItem.tooltip = 'Click to activate RStudio layout';
     }
 }
@@ -1208,18 +1021,18 @@ function updateStatusBar(): void {
 
 /**
  * Resolve the R binary path from multiple configuration sources:
- *   1. Our own setting: r-quadrant.rConsolePath  (e.g. "radian")
+ *   1. Our own setting: r-layout.rConsolePath  (e.g. "radian")
  *   2. R extension's terminal path: r.rterm.mac  (e.g. "/usr/local/bin/radian")
  *   3. R extension's R binary path: r.rpath.mac  (e.g. "/usr/local/bin/R")
  *   4. Default: "R"
  *
- * This lets R Quadrant respect the user's existing R extension
+ * This lets R Layout respect the user's existing R extension
  * configuration (radian, custom paths) without calling r.createRTerm
  * — which would trigger "No text editor active" warnings.
  */
-function resolveRPath(rQuadrantConfig: vscode.WorkspaceConfiguration): string {
+function resolveRPath(rLayoutConfig: vscode.WorkspaceConfiguration): string {
     // 1. Our own setting takes priority
-    const ours = rQuadrantConfig.get<string>('rConsolePath', '');
+    const ours = rLayoutConfig.get<string>('rConsolePath', '');
     if (ours && ours !== 'R') {
         return ours;
     }
@@ -1228,14 +1041,14 @@ function resolveRPath(rQuadrantConfig: vscode.WorkspaceConfiguration): string {
     const rConfig = vscode.workspace.getConfiguration('r');
     const rTermMac = rConfig.get<string>('rterm.mac', '');
     if (rTermMac) {
-        console.log(`[R Quadrant] Using R extension's r.rterm.mac: ${rTermMac}`);
+        console.log(`[R Layout] Using R extension's r.rterm.mac: ${rTermMac}`);
         return rTermMac;
     }
 
     // 3. R extension's R path
     const rPathMac = rConfig.get<string>('rpath.mac', '');
     if (rPathMac) {
-        console.log(`[R Quadrant] Using R extension's r.rpath.mac: ${rPathMac}`);
+        console.log(`[R Layout] Using R extension's r.rpath.mac: ${rPathMac}`);
         return rPathMac;
     }
 
@@ -1263,9 +1076,13 @@ function _buildWatcherRprofile(): string | undefined {
     const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!wf) { return undefined; }
 
-    const outDir = path.join(wf, '.r-quadrant');
+    const outDir = path.join(wf, '.r-layout');
     if (!fs.existsSync(outDir)) {
         fs.mkdirSync(outDir, { recursive: true });
+    }
+    const plotsDir = path.join(outDir, 'plots');
+    if (!fs.existsSync(plotsDir)) {
+        fs.mkdirSync(plotsDir, { recursive: true });
     }
 
     const scriptPath = path.join(outDir, '.workspace_watcher.R');
@@ -1274,7 +1091,7 @@ function _buildWatcherRprofile(): string | undefined {
     // startup and in the task callback. We use TSV to avoid base R JSON serialization issues.
     const snapshotCode = `
   tryCatch({
-    dir.create(".r-quadrant", showWarnings = FALSE, recursive = TRUE)
+    dir.create(".r-layout/plots", showWarnings = FALSE, recursive = TRUE)
     .vars <- ls(envir = .GlobalEnv)
     .info <- if (length(.vars) == 0) character(0) else vapply(.vars, function(nm) {
       obj <- get(nm, envir = .GlobalEnv)
@@ -1292,15 +1109,15 @@ function _buildWatcherRprofile(): string | undefined {
       is_df <- if (is.data.frame(obj)) "true" else "false"
       paste(nm, cls, dims, prev, is_df, sep = "\\t")
     }, character(1))
-    writeLines(.info, ".r-quadrant/.workspace_vars.tsv")
-    writeLines(loadedNamespaces(), ".r-quadrant/.workspace_loaded.tsv")
-    writeLines(search(), ".r-quadrant/.workspace_attached.tsv")
+    writeLines(.info, ".r-layout/.workspace_vars.tsv")
+    writeLines(loadedNamespaces(), ".r-layout/.workspace_loaded.tsv")
+    writeLines(search(), ".r-layout/.workspace_attached.tsv")
   }, error = function(e) NULL)`;
 
 
 
     const rCode = `
-# R Quadrant workspace watcher — auto-loaded via R_PROFILE_USER
+# R Layout workspace watcher — auto-loaded via R_PROFILE_USER
 
 # 1. Source the standard user profile (~/.Rprofile).
 #    R_PROFILE_USER overrides it, so we must source it explicitly.
@@ -1318,60 +1135,60 @@ local({
 # 3. Pre-set fixed Data Viewer temp paths.
 #    These are defined ONCE here at startup — silently, via Rprofile — so the
 #    extension never needs to send a path-setting command to the R console.
-.rquad_csv  <- ".r-quadrant/dv.csv"
-.rquad_meta <- ".r-quadrant/dv-meta.txt"
-.rquad_active_df_to_export <- NULL
-.rquad_last_plot_hash <- NULL
-.rquad_current_plot_id <- 0
+.rlayout_csv  <- ".r-layout/dv.csv"
+.rlayout_meta <- ".r-layout/dv-meta.txt"
+.rlayout_active_df_to_export <- NULL
+.rlayout_last_plot_hash <- NULL
+.rlayout_current_plot_id <- 0
 
 # Set default device to null pdf to enable invisible plot recording
 options(device = function(...) { pdf(file="/dev/null", ...); dev.control("enable") })
 
 # Hook plot.new to increment plot ID, so lines() etc. overwrite the same file
-setHook("before.plot.new", function() { .rquad_current_plot_id <<- .rquad_current_plot_id + 1 })
+setHook("before.plot.new", function() { .rlayout_current_plot_id <<- .rlayout_current_plot_id + 1 })
 
-# 4. Wipe stale R Quadrant data at startup so previous sessions don't bleed over.
+# 4. Wipe stale R Layout data at startup so previous sessions don't bleed over.
 #    We hook into .First which runs immediately when the R session begins.
 if (exists(".First", envir = .GlobalEnv)) {
-  .rquad_orig_First <- get(".First", envir = .GlobalEnv)
+  .rlayout_orig_First <- get(".First", envir = .GlobalEnv)
   .First <- function() {
-    unlink(".r-quadrant/.workspace_*.tsv")
-    unlink(".r-quadrant/plots/*")
-    tryCatch(.rquad_orig_First(), error = function(e) {})
+    unlink(".r-layout/.workspace_*.tsv")
+    unlink(".r-layout/plots/*")
+    tryCatch(.rlayout_orig_First(), error = function(e) {})
   }
 } else {
   .First <- function() {
-    unlink(".r-quadrant/.workspace_*.tsv")
-    unlink(".r-quadrant/plots/*")
+    unlink(".r-layout/.workspace_*.tsv")
+    unlink(".r-layout/plots/*")
   }
 }
 
 # 5. Data Viewer export function.
-#    .rquad_csv and .rquad_meta are already set above — no paths needed at call time.
-.r_quadrant_export_data <- function(varName) {
-  .rquad_active_df_to_export <<- varName
+#    .rlayout_csv and .rlayout_meta are already set above — no paths needed at call time.
+.r_layout_export_data <- function(varName) {
+  .rlayout_active_df_to_export <<- varName
   tryCatch({
     obj <- get(varName, envir = .GlobalEnv)
     if (!is.data.frame(obj)) obj <- as.data.frame(obj)
-    writeLines(c(as.character(nrow(obj)), as.character(ncol(obj))), .rquad_meta)
-    write.csv(head(obj, 1000), .rquad_csv, row.names = FALSE, na = "NA")
+    writeLines(c(as.character(nrow(obj)), as.character(ncol(obj))), .rlayout_meta)
+    write.csv(head(obj, 1000), .rlayout_csv, row.names = FALSE, na = "NA")
   }, error = function(e) {
-    writeLines(paste0("ERROR:", conditionMessage(e)), .rquad_meta)
+    writeLines(paste0("ERROR:", conditionMessage(e)), .rlayout_meta)
   })
   invisible(NULL)
 }
 
 # 6. Install the task callback. It fires after every top-level R command.
 invisible(local({
-  if (!any(vapply(getTaskCallbackNames(), function(n) n == ".r-quadrant.watcher", logical(1)))) {
+  if (!any(vapply(getTaskCallbackNames(), function(n) n == ".r-layout.watcher", logical(1)))) {
     addTaskCallback(function(expr, value, ok, visible) {
       # 1. Update Data Viewer quietly if active
-      if (!is.null(.rquad_active_df_to_export) && exists(.rquad_active_df_to_export, envir = .GlobalEnv)) {
+      if (!is.null(.rlayout_active_df_to_export) && exists(.rlayout_active_df_to_export, envir = .GlobalEnv)) {
         try({
-          obj <- get(.rquad_active_df_to_export, envir = .GlobalEnv)
+          obj <- get(.rlayout_active_df_to_export, envir = .GlobalEnv)
           if (!is.data.frame(obj)) obj <- as.data.frame(obj)
-          writeLines(c(as.character(nrow(obj)), as.character(ncol(obj))), .rquad_meta)
-          write.csv(head(obj, 1000), .rquad_csv, row.names = FALSE, na = "NA")
+          writeLines(c(as.character(nrow(obj)), as.character(ncol(obj))), .rlayout_meta)
+          write.csv(head(obj, 1000), .rlayout_csv, row.names = FALSE, na = "NA")
         }, silent = TRUE)
       }
 
@@ -1380,11 +1197,11 @@ invisible(local({
         .p <- recordPlot()
         if (!is.null(.p) && length(.p[[1]]) > 0) {
           .hash <- sum(as.numeric(serialize(.p, NULL)))
-          if (!identical(.hash, .rquad_last_plot_hash)) {
-            .rquad_last_plot_hash <<- .hash
+          if (!identical(.hash, .rlayout_last_plot_hash)) {
+            .rlayout_last_plot_hash <<- .hash
             # If no plot ID yet (startup), start at 1
-            if (.rquad_current_plot_id == 0) .rquad_current_plot_id <<- 1
-            .file <- sprintf(".r-quadrant/plots/plot_%05d.png", .rquad_current_plot_id)
+            if (.rlayout_current_plot_id == 0) .rlayout_current_plot_id <<- 1
+            .file <- sprintf(".r-layout/plots/plot_%05d.png", .rlayout_current_plot_id)
             # Explicitly set background to white for the generated PNG file
             png(filename = .file, width = 800, height = 600, res = 100, bg = "white")
             try(replayPlot(.p), silent = TRUE)
@@ -1396,7 +1213,7 @@ invisible(local({
       # 3. Snapshot Workspace
       ${snapshotCode}
       TRUE
-    }, name = ".r-quadrant.watcher")
+    }, name = ".r-layout.watcher")
   }
 }))
 `;

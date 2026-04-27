@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { registerLayoutCommand, resetStaleLayout, fireImmediateLayoutReset, collapseLayoutForShutdown } from './layout/layoutManager';
 
 export function activate(context: vscode.ExtensionContext) {
-    console.log('R Quadrant extension is now active.');
+    console.log('R Layout extension is now active.');
 
     // ── Immediate layout guard (fire-and-forget) ────────────
     //    This is the VERY FIRST thing we do — before any awaits.
@@ -25,7 +25,7 @@ export function activate(context: vscode.ExtensionContext) {
  * and completing a window reload. By collapsing the layout here,
  * VS Code writes a single-group layout to its session store —
  * so on the next startup, there is no multi-group layout to restore
- * and the quadrant flash never happens.
+ * and the layout flash never happens.
  */
 export async function deactivate(): Promise<void> {
     await collapseLayoutForShutdown();

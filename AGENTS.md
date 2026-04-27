@@ -1,19 +1,19 @@
-# R Quadrant — Agent Rules
+# R Layout — Agent Rules
 
 This file defines non-negotiable layout rules and project conventions for AI agents working on this codebase.
 
 ## Non-Negotiable Layout Rules
 
-### Quadrant Arrangement
+### Layout Arrangement
 
 | | |
 |---|---|
 | ① Source Editor (ViewColumn.One) | ③ Chat → Help (ViewColumn.Three) |
 | ② R Console → Terminal → Problems (ViewColumn.Two) | ④ Workspace → Plots → Data Viewer (ViewColumn.Four) |
 
-### Tab Order (STRICT — left to right within each quadrant)
+### Tab Order (STRICT — left to right within each layout)
 
-| Quadrant       | Tab Order                              |
+| Layout       | Tab Order                              |
 |----------------|----------------------------------------|
 | Top-left (①)   | User's source files                    |
 | Bottom-left (②)| R Console → Terminal → Problems        |
@@ -22,7 +22,7 @@ This file defines non-negotiable layout rules and project conventions for AI age
 
 ### Default Focused Tab (STRICT — which tab is visible/active on activation)
 
-| Quadrant       | Focused Tab     |
+| Layout       | Focused Tab     |
 |----------------|-----------------|
 | Top-left (①)   | Last open file  |
 | Bottom-left (②)| R Console        |
@@ -41,17 +41,17 @@ This file defines non-negotiable layout rules and project conventions for AI age
 
 ## Settings
 
-- `r-quadrant.rConsolePath` — path to R binary (default `"R"`)
-- `r-quadrant.useArkInteractiveConsole` — boolean, use Jupyter Interactive instead of terminal
-- `r-quadrant.plotOutputDir` — directory to watch for plot images
+- `r-layout.rConsolePath` — path to R binary (default `"R"`)
+- `r-layout.useArkInteractiveConsole` — boolean, use Jupyter Interactive instead of terminal
+- `r-layout.plotOutputDir` — directory to watch for plot images
 
 ## Key State Variables
 
 ```typescript
-let isLayoutActive: boolean;     // whether 4-quadrant layout is active
+let isLayoutActive: boolean;     // whether 4-layout layout is active
 let rConsoleTerminal: vscode.Terminal | undefined;  // R Console terminal (reuse, never dispose)
 let shellTerminal: vscode.Terminal | undefined;     // Bash/shell terminal (reuse, never dispose)
 let statusBarItem: vscode.StatusBarItem;
 let extensionContext: vscode.ExtensionContext;
-const STATE_KEY = 'r-quadrant.layoutActive';       // persisted workspace state key
+const STATE_KEY = 'r-layout.layoutActive';       // persisted workspace state key
 ```

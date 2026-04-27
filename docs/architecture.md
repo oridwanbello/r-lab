@@ -1,10 +1,10 @@
-# R Quadrant — Technical Architecture
+# R Layout — Technical Architecture
 
-This document describes the internal architecture of the R Quadrant VS Code extension.
+This document describes the internal architecture of the R Layout VS Code extension.
 
 ## Overview
 
-R Quadrant follows a modular architecture where `extension.ts` acts as a thin orchestrator that delegates to specialized modules:
+R Layout follows a modular architecture where `extension.ts` acts as a thin orchestrator that delegates to specialized modules:
 
 ```
 extension.ts (entry point)
@@ -19,14 +19,14 @@ extension.ts (entry point)
 
 ### Layout Manager (`layout/layoutManager.ts`)
 
-Registers the `r-quadrant.toggleLayout` command and the Status Bar button. Uses `vscode.setEditorLayout` to snap the editor into a 65/35 asymmetrical 4-pane grid. Reads `r-quadrant.aiAgent` from settings to summon the appropriate AI chat panel.
+Registers the `r-layout.toggleLayout` command and the Status Bar button. Uses `vscode.setEditorLayout` to snap the editor into a 65/35 asymmetrical 4-pane grid. Reads `r-layout.aiAgent` from settings to summon the appropriate AI chat panel.
 
 ### Environment Explorer (`views/environmentExplorer.ts`)
 
 | Aspect | Detail |
 |---|---|
 | **Type** | `TreeDataProvider<VariableItem>` |
-| **View ID** | `r-quadrant.environmentExplorer` |
+| **View ID** | `r-layout.environmentExplorer` |
 | **Data Source** | VS Code Debug Adapter Protocol (DAP) |
 | **Refresh Trigger** | Debug session changes, manual refresh command |
 
@@ -46,9 +46,9 @@ Each `VariableItem` displays:
 | Aspect | Detail |
 |---|---|
 | **Type** | `WebviewViewProvider` |
-| **View ID** | `r-quadrant.plotGallery` |
+| **View ID** | `r-layout.plotGallery` |
 | **Data Source** | `FileSystemWatcher` on configurable directory |
-| **Default Watch Dir** | `.r-quadrant/plots/` |
+| **Default Watch Dir** | `.r-layout/plots/` |
 | **Supported Formats** | PNG, JPG, JPEG, SVG, GIF, BMP, WebP |
 
 **Message protocol (webview → extension):**
@@ -63,7 +63,7 @@ Each `VariableItem` displays:
 | Aspect | Detail |
 |---|---|
 | **Type** | `WebviewViewProvider` |
-| **View ID** | `r-quadrant.dataViewer` |
+| **View ID** | `r-layout.dataViewer` |
 | **Data Source** | DAP `evaluate` request |
 | **Row Limit** | 500 rows (head) |
 
@@ -99,9 +99,9 @@ All Webview panels implement:
 
 | Setting | Type | Default | Description |
 |---|---|---|---|
-| `r-quadrant.aiAgent` | `string` (enum) | `"terminal"` | AI agent for the console quadrant |
-| `r-quadrant.plotOutputDir` | `string` | `".r-quadrant/plots"` | Plot output directory path |
+| `r-layout.aiAgent` | `string` (enum) | `"terminal"` | AI agent for the console layout |
+| `r-layout.plotOutputDir` | `string` | `".r-layout/plots"` | Plot output directory path |
 
 ## View Container
 
-R Quadrant registers a custom Activity Bar container (`r-quadrant-sidebar`) with three views. The sidebar icon is a 4-quadrant grid SVG (`resources/quadrant-icon.svg`).
+R Layout registers a custom Activity Bar container (`r-layout-sidebar`) with three views. The sidebar icon is a 4-layout grid SVG (`resources/layout-icon.svg`).
