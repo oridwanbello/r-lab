@@ -74,12 +74,12 @@
       "editor/title": [
         {
           "command": "r-layout.maximizeTopRight",
-          "when": "r-layout.layoutActive && !r-layout.isTopRightMaximized",
+          "when": "r-layout.layoutActive && !r-layout.isTopRightMaximized && activeEditorGroupIndex != 1",
           "group": "navigation@1"
         },
         {
           "command": "r-layout.restoreRightSplit",
-          "when": "r-layout.layoutActive && r-layout.isTopRightMaximized",
+          "when": "r-layout.layoutActive && r-layout.isTopRightMaximized && activeEditorGroupIndex != 1",
           "group": "navigation@1"
         }
       ]
