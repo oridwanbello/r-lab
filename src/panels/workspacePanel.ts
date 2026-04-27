@@ -618,6 +618,7 @@ tryCatch({
             padding: 2px 8px;
             border-radius: 3px;
             font-size: 11px;
+            font-weight: normal;
             z-index: 1000;
             pointer-events: none;
             display: none;
@@ -689,11 +690,13 @@ tryCatch({
                     if (msg.autoOn) {
                         autoBtn.classList.add('active');
                         autoBtn.innerHTML = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M3 3h4v10H3V3zm6 0h4v10H9V3z"/></svg>';
-                        autoBtn.title = 'Auto-Refresh On (3s)';
+                        autoBtn.setAttribute('data-tooltip', 'Auto-Refresh On (3s)');
+                        autoBtn.title = '';
                     } else {
                         autoBtn.classList.remove('active');
                         autoBtn.innerHTML = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.7 8.5L4.5 13.5V3.5l8.2 5z"/></svg>';
-                        autoBtn.title = 'Auto-Refresh Off';
+                        autoBtn.setAttribute('data-tooltip', 'Auto-Refresh Off');
+                        autoBtn.title = '';
                     }
 
                     if (msg.isLoading && !msg.errorMessage && msg.variables.length === 0) {

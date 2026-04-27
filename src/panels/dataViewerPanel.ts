@@ -459,6 +459,7 @@ export class DataViewerPanel {
             padding: 2px 8px;
             border-radius: 3px;
             font-size: 11px;
+            font-weight: normal;
             z-index: 1000;
             pointer-events: none;
             display: none;
