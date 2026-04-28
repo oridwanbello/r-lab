@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getRConsoleTerminal } from '../layout/layoutManager';
 
 /**
  * Plots Panel — a WebviewPanel (editor tab) that watches a directory
@@ -19,6 +20,7 @@ export class PlotsPanel {
     private _disposables: vscode.Disposable[] = [];
     private _isNightMode: boolean = false;
     private _customPlotDir?: string;
+    private _lastDirAction: 'view' | 'outview' | undefined = undefined;
     private _extensionUri: vscode.Uri;
 
     // ── Factory ─────────────────────────────────────────────
@@ -101,7 +103,10 @@ export class PlotsPanel {
                         this._render();
                         break;
                     case 'setCustomDir':
-                        this._handleSetCustomDir((msg as any).path);
+                        this._handleSetCustomDir((msg as any).path, false);
+                        break;
+                    case 'setOutViewDir':
+                        this._handleSetCustomDir((msg as any).path, true);
                         break;
                     case 'browseCustomDir':
                         this._handleBrowseCustomDir();
@@ -113,13 +118,14 @@ export class PlotsPanel {
         );
     }
 
-    private _handleSetCustomDir(dirPath: string | undefined): void {
-        this._customPlotDir = dirPath && dirPath.trim() ? dirPath.trim() : undefined;
+    private _handleSetCustomDir(dirPath: string | undefined, setOutput: boolean): void {
+        const resolved = dirPath && dirPath.trim() ? dirPath.trim() : undefined;
+        this._customPlotDir = resolved;
 
         // Update localResourceRoots to allow loading images from the new directory
         const roots = PlotsPanel._getResourceRoots(this._extensionUri);
         if (this._customPlotDir) {
-            const base = vscode.workspace.workspaceFolders?.[0].uri.fsPath;
+            const base = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
             const normalizedPath = path.isAbsolute(this._customPlotDir) || !base
                 ? path.normalize(this._customPlotDir)
                 : path.join(base, this._customPlotDir);
@@ -130,6 +136,23 @@ export class PlotsPanel {
             ...this._panel.webview.options,
             localResourceRoots: roots
         };
+
+        // If setOutput is true, redirect R's plot output to this directory via options().
+        // If clearing (resolved is undefined), reset back to the default .r-layout/plots.
+        if (setOutput) {
+            const term = getRConsoleTerminal();
+            if (term) {
+                if (resolved) {
+                    const escaped = resolved.replace(/\\/g, '/');
+                    term.sendText(`options(.rlayout_plot_dir = "${escaped}")`, true);
+                } else {
+                    term.sendText('options(.rlayout_plot_dir = NULL)', true);
+                }
+            }
+        }
+
+        // Track which action was last used so we can show persistent active state in the UI.
+        this._lastDirAction = resolved ? (setOutput ? 'outview' : 'view') : undefined;
 
         this.clear(); // Clear existing plots
         this._startWatcher(); // Restart watcher on new dir
@@ -149,13 +172,27 @@ export class PlotsPanel {
         });
 
         if (uris && uris.length > 0) {
-            this._handleSetCustomDir(uris[0].fsPath);
+            // Browse only sets the view dir — user must click Set Out/View Dir to redirect output
+            this._handleSetCustomDir(uris[0].fsPath, false);
         }
     }
 
     private _handleDeleteCurrent(): void {
         if (this._currentIndex < 0 || this._currentIndex >= this._plots.length) { return; }
         const uri = this._plots[this._currentIndex];
+
+        // Only allow physical deletion for files inside the .r-layout directory.
+        // User-specified directories must not be modified — we only display them.
+        const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const rLayoutDir = wf ? path.join(wf, '.r-layout') : undefined;
+        if (!rLayoutDir || !uri.fsPath.startsWith(rLayoutDir)) {
+            vscode.window.showWarningMessage(
+                'Deletion is only permitted for plots in the .r-layout directory. ' +
+                'To remove plots from a custom folder, delete them manually.'
+            );
+            return;
+        }
+
         try {
             if (fs.existsSync(uri.fsPath)) {
                 fs.unlinkSync(uri.fsPath);
@@ -506,24 +543,18 @@ export class PlotsPanel {
             gap: 6px;
         }
         .dir-dropdown .action-row button {
-            background: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
-            padding: 4px 12px;
-            border-radius: 2px;
-            cursor: pointer;
-            font-size: 12px;
-            opacity: 1;
-        }
-        .dir-dropdown .action-row button:hover {
-            background: var(--vscode-button-hoverBackground);
-        }
-        .dir-dropdown .action-row button.btn-clear {
             background: transparent;
             color: var(--vscode-button-background);
             border: 1px solid var(--vscode-button-background);
+            padding: 4px 8px;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 11.5px;
+            opacity: 1;
+            white-space: nowrap;
         }
-        .dir-dropdown .action-row button.btn-clear:hover {
+        .dir-dropdown .action-row button:hover,
+        .dir-dropdown .action-row button.active {
             background: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
         }
@@ -554,7 +585,8 @@ export class PlotsPanel {
         </div>
         <div class="action-row">
             <button id="btn-clear-dir" class="btn-clear">Clear</button>
-            <button id="btn-apply-dir">Apply</button>
+            <button id="btn-set-view-dir" class="${this._lastDirAction === 'view' ? 'active' : ''}">Set View Dir</button>
+            <button id="btn-set-out-view-dir" class="${this._lastDirAction === 'outview' ? 'active' : ''}">Set View/Out Dir</button>
         </div>
     </div>
     <div id="tooltip" class="tooltip"></div>
@@ -612,7 +644,8 @@ export class PlotsPanel {
             // Custom Directory Dropdown Logic
             const btnCustomDir = document.getElementById('btn-custom-dir');
             const dropdown = document.getElementById('dir-dropdown');
-            const btnApply = document.getElementById('btn-apply-dir');
+            const btnSetViewDir = document.getElementById('btn-set-view-dir');
+            const btnSetOutViewDir = document.getElementById('btn-set-out-view-dir');
             const btnClearDir = document.getElementById('btn-clear-dir');
             const btnBrowse = document.getElementById('btn-browse');
             const dirInput = document.getElementById('dir-input');
@@ -633,9 +666,16 @@ export class PlotsPanel {
                 dropdown.classList.remove('open');
             });
 
-            btnApply?.addEventListener('click', () => {
+            // Set View Dir: only changes what the panel watches/displays
+            btnSetViewDir?.addEventListener('click', () => {
                 dropdown.classList.remove('open');
                 vscode.postMessage({ type: 'setCustomDir', path: dirInput.value });
+            });
+
+            // Set Out/View Dir: redirects R plot output AND changes panel view
+            btnSetOutViewDir?.addEventListener('click', () => {
+                dropdown.classList.remove('open');
+                vscode.postMessage({ type: 'setOutViewDir', path: dirInput.value });
             });
 
             dirInput?.addEventListener('keydown', (e) => {
@@ -645,10 +685,11 @@ export class PlotsPanel {
                 }
             });
 
+            // Clear: reset both view dir and R output dir to defaults
             btnClearDir?.addEventListener('click', () => {
                 dropdown.classList.remove('open');
                 dirInput.value = '';
-                vscode.postMessage({ type: 'setCustomDir', path: '' });
+                vscode.postMessage({ type: 'setOutViewDir', path: '' });
             });
 
             btnBrowse?.addEventListener('click', () => {

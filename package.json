@@ -55,7 +55,10 @@
       {
         "command": "r-layout.sourceFile",
         "title": "Source File to R Console",
-        "icon": "resources/run-source.svg"
+        "icon": {
+          "light": "resources/run-source-light.svg",
+          "dark": "resources/run-source-dark.svg"
+        }
       }
     ],
     "keybindings": [
@@ -100,45 +103,7 @@
         {
           "command": "r-layout.sourceFile",
           "when": "r-layout.layoutActive && resourceLangId == 'r' && activeEditorGroupIndex == 1",
-          "group": "navigation@0"
-        }
-      ]
-    },
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "r-layout-sidebar",
-          "title": "R Layout",
-          "icon": "resources/r-layout-icon.svg"
-        }
-      ]
-    },
-    "views": {
-      "r-layout-sidebar": [
-        {
-          "id": "r-layout.workspacePanel",
-          "name": "Workspace",
-          "type": "webview"
-        },
-        {
-          "id": "r-layout.plotGallery",
-          "name": "Plot Gallery",
-          "type": "webview"
-        },
-        {
-          "id": "r-layout.dataViewerPanel",
-          "name": "Data Viewer",
-          "type": "webview"
-        },
-        {
-          "id": "r-layout.helpPanel",
-          "name": "Help",
-          "type": "webview"
-        },
-        {
-          "id": "r-layout.problemsPanel",
-          "name": "Problems",
-          "type": "webview"
+          "group": "navigation@-100"
         }
       ]
     }

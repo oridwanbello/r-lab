@@ -144,7 +144,7 @@ export function registerLayoutCommand(
     // ── Track terminal disposal ─────────────────────────────
     context.subscriptions.push(
         vscode.window.onDidCloseTerminal((t) => {
-            if (t === rConsoleTerminal) {
+            if (t === rConsoleTerminal || (t.name === 'R Console' && !rConsoleTerminal)) {
                 rConsoleTerminal = undefined;
                 savedDataViewerState = undefined;
                 savedHelpState = undefined;
@@ -274,9 +274,25 @@ export async function resetStaleLayout(
         }
     }
 
-    // Close stale tabs (webviews, terminals-as-editors, etc.)
+    // Close stale tabs (webviews, notebooks, etc.) but PRESERVE terminal-as-editor
+    // tabs. The R Console and Shell terminals live as editor tabs and must survive
+    // this cleanup so activation can reuse them without losing the R session.
+    const terminalTabs: vscode.Tab[] = [];
+    for (const group of groups) {
+        for (const tab of group.tabs) {
+            if (tab.input instanceof vscode.TabInputTerminal) {
+                terminalTabs.push(tab);
+            }
+        }
+    }
+
+    const nonTerminalTabs = groups.flatMap(g =>
+        g.tabs.filter(t => !(t.input instanceof vscode.TabInputTerminal))
+    );
     try {
-        await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+        if (nonTerminalTabs.length > 0) {
+            await vscode.window.tabGroups.close(nonTerminalTabs);
+        }
     } catch {}
 
     // Collapse to a clean single-group layout
@@ -317,8 +333,24 @@ export async function resetStaleLayout(
  * our activation code can collapse it.
  */
 export async function collapseLayoutForShutdown(): Promise<void> {
+    // Always clean up the .r-layout temp directory on shutdown, regardless of
+    // whether the layout is currently active. After an extension-host restart
+    // during development, isLayoutActive is false in memory even though the
+    // directory exists from the previous session.
+    const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (wf) {
+        const rLayoutDir = path.join(wf, '.r-layout');
+        try {
+            if (fs.existsSync(rLayoutDir)) {
+                fs.rmSync(rLayoutDir, { recursive: true, force: true });
+            }
+        } catch (e) {
+            console.error('[R Layout] Failed to delete .r-layout on shutdown', e);
+        }
+    }
+
     if (!isLayoutActive) {
-        // Layout wasn't active — nothing to collapse.
+        // Layout wasn't active — no layout state to collapse.
         return;
     }
 
@@ -364,6 +396,7 @@ export async function collapseLayoutForShutdown(): Promise<void> {
         Promise.resolve(
             wsConfig.update('workbench.editor.closeEmptyGroups', undefined, cfgTarget)
         ).catch(() => {}),
+
     ]);
 }
 
@@ -564,15 +597,28 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     if (rConsoleTerminal) {
             // Reuse the existing terminal — do NOT recreate (that kills the R session).
-            // show(false) ensures this terminal is the active one in the terminal panel.
+            // Detect whether the terminal is already placed as an editor tab (e.g. after
+            // an extension-host restart during development). If it is already an editor
+            // tab we must NOT call moveToEditor — that command is a no-op or causes the
+            // tab to vanish. We only call moveToEditor when the terminal is still sitting
+            // in the bottom panel.
+            const isAlreadyEditorTab = vscode.window.tabGroups.all.some(g =>
+                g.tabs.some(tab => {
+                    const input = tab.input as any;
+                    return input instanceof vscode.TabInputTerminal;
+                })
+            );
+
             rConsoleTerminal.show(false);
             await delay(10);
 
-            // Fallback for older terminals or tricky states: use moveToEditor
-            await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
-            await delay(10);
-            await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
-            await delay(10);
+            if (!isAlreadyEditorTab) {
+                // Terminal is in the bottom panel — move it into Group 2.
+                await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+                await delay(10);
+                await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
+                await delay(10);
+            }
 
             // Restore focus to Group 1
             try { await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'); } catch {}
@@ -597,10 +643,20 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         shellTerminal.show(false);
         await delay(10);
 
-        await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
-        await delay(10);
-        await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
-        await delay(10);
+        // Only move if it's still in the bottom panel, not already an editor tab.
+        const shellIsEditorTab = vscode.window.tabGroups.all.some(g =>
+            g.tabs.some(tab => {
+                const input = tab.input as any;
+                return input instanceof vscode.TabInputTerminal &&
+                    (tab.label === 'Terminal' || tab.label === shellTerminal?.name);
+            })
+        );
+        if (!shellIsEditorTab) {
+            await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+            await delay(10);
+            await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
+            await delay(10);
+        }
 
         try { await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'); } catch {}
     } else {
@@ -1213,6 +1269,11 @@ local({
 .rlayout_last_plot_hash <- NULL
 .rlayout_current_plot_id <- 0
 
+# Default plot output directory — can be overridden mid-session via:
+#   options(.rlayout_plot_dir = "/your/custom/path")
+# Resetting: options(.rlayout_plot_dir = NULL)  → reverts to .r-layout/plots
+options(.rlayout_plot_dir = NULL)
+
 # Set default device to null pdf to enable invisible plot recording
 options(device = function(...) { pdf(file="/dev/null", ...); dev.control("enable") })
 
@@ -1273,7 +1334,10 @@ invisible(local({
             .rlayout_last_plot_hash <<- .hash
             # If no plot ID yet (startup), start at 1
             if (.rlayout_current_plot_id == 0) .rlayout_current_plot_id <<- 1
-            .file <- sprintf(".r-layout/plots/plot_%05d.png", .rlayout_current_plot_id)
+            # Resolve output directory: user override via options() or default .r-layout/plots
+            .out_dir <- getOption(".rlayout_plot_dir", ".r-layout/plots")
+            dir.create(.out_dir, showWarnings = FALSE, recursive = TRUE)
+            .file <- file.path(.out_dir, sprintf("plot_%05d.png", .rlayout_current_plot_id))
             # Explicitly set background to white for the generated PNG file
             png(filename = .file, width = 800, height = 600, res = 100, bg = "white")
             try(replayPlot(.p), silent = TRUE)
