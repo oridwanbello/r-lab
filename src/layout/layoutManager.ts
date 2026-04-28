@@ -1277,8 +1277,25 @@ options(.rlayout_plot_dir = NULL)
 # Set default device to null pdf to enable invisible plot recording
 options(device = function(...) { pdf(file="/dev/null", ...); dev.control("enable") })
 
-# Hook plot.new to increment plot ID, so lines() etc. overwrite the same file
-setHook("before.plot.new", function() { .rlayout_current_plot_id <<- .rlayout_current_plot_id + 1 })
+# Hook plot.new to increment plot ID. Instead of naive +1, we scan the directory
+# to find the highest existing plot number and append. This is safe for custom
+# directories and idempotent if multiple hooks fire for the same plot.
+.rlayout_update_plot_id <- function() {
+  .out_dir <- getOption(".rlayout_plot_dir", ".r-layout/plots")
+  if (!dir.exists(.out_dir)) {
+    .rlayout_current_plot_id <<- 1
+    return()
+  }
+  files <- list.files(.out_dir, pattern = "^plot_[0-9]{5}\\\\.png$")
+  if (length(files) == 0) {
+    .rlayout_current_plot_id <<- 1
+  } else {
+    nums <- as.numeric(sub("^plot_([0-9]{5})\\\\.png$", "\\\\1", files))
+    .rlayout_current_plot_id <<- max(nums, na.rm = TRUE) + 1
+  }
+}
+setHook("before.plot.new", .rlayout_update_plot_id)
+setHook("before.grid.newpage", .rlayout_update_plot_id)
 
 # 4. Wipe stale R Layout data at startup so previous sessions don't bleed over.
 #    We hook into .First which runs immediately when the R session begins.
@@ -1332,8 +1349,8 @@ invisible(local({
           .hash <- sum(as.numeric(serialize(.p, NULL)))
           if (!identical(.hash, .rlayout_last_plot_hash)) {
             .rlayout_last_plot_hash <<- .hash
-            # If no plot ID yet (startup), start at 1
-            if (.rlayout_current_plot_id == 0) .rlayout_current_plot_id <<- 1
+            # If no plot ID yet (startup), calculate the next available ID safely
+            if (.rlayout_current_plot_id == 0) .rlayout_update_plot_id()
             # Resolve output directory: user override via options() or default .r-layout/plots
             .out_dir <- getOption(".rlayout_plot_dir", ".r-layout/plots")
             dir.create(.out_dir, showWarnings = FALSE, recursive = TRUE)

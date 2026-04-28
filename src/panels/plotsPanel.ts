@@ -259,10 +259,14 @@ export class PlotsPanel {
             this._plots.push(uri);
             this._currentIndex = this._plots.length - 1;
             this._render();
+            // Automatically bring Plots panel to front without stealing focus
+            this._panel.reveal(undefined, true);
         });
         this._watcher.onDidChange(() => {
             // Re-render current plot to pick up the updated file content
             this._render();
+            // Automatically bring Plots panel to front without stealing focus
+            this._panel.reveal(undefined, true);
         });
         this._watcher.onDidDelete((uri) => {
             const idx = this._plots.findIndex(p => p.fsPath === uri.fsPath);
@@ -486,7 +490,7 @@ export class PlotsPanel {
             background: var(--vscode-editorHoverWidget-background, #252526);
             border: 1px solid var(--vscode-editorHoverWidget-border, #454545);
             box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-            border-radius: 4px;
+            border-radius: 6px;
             padding: 10px;
             display: none;
             z-index: 1000;
@@ -507,7 +511,7 @@ export class PlotsPanel {
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border, transparent);
             padding: 4px 6px;
-            border-radius: 2px;
+            border-radius: 4px;
             font-size: 12px;
             outline: none;
         }
@@ -523,7 +527,7 @@ export class PlotsPanel {
             color: var(--vscode-button-secondaryForeground);
             border: none;
             padding: 4px 8px;
-            border-radius: 2px;
+            border-radius: 4px;
             cursor: pointer;
             font-size: 12px;
             opacity: 1;
@@ -543,11 +547,11 @@ export class PlotsPanel {
             gap: 6px;
         }
         .dir-dropdown .action-row button {
-            background: transparent;
+            background: color-mix(in srgb, var(--vscode-button-background) 25%, transparent);
             color: var(--vscode-button-background);
             border: 1px solid var(--vscode-button-background);
             padding: 4px 8px;
-            border-radius: 2px;
+            border-radius: 4px;
             cursor: pointer;
             font-size: 11.5px;
             opacity: 1;
