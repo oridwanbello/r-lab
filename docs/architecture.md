@@ -1,107 +1,48 @@
-# R Layout — Technical Architecture
+# Architecture
 
-This document describes the internal architecture of the R Layout VS Code extension.
+## 1. High-Level Concept
 
-## Overview
+The R Layout extension orchestrates a 3-pane layout within VS Code tailored for R development, visually mirroring the standard RStudio interface. Rather than relying on standard VS Code sidebar views, it implements all major UI components (Workspace Explorer, Data Viewer, Plots Gallery, Help) as WebviewPanels integrated directly into the editor grid.
 
-R Layout follows a modular architecture where `extension.ts` acts as a thin orchestrator that delegates to specialized modules:
+## 2. Core Modules
 
-```
-extension.ts (entry point)
-    ├── layout/layoutManager.ts     → Layout toggle + Status Bar
-    ├── views/environmentExplorer.ts → TreeDataProvider (DAP)
-    ├── views/plotGallery.ts        → WebviewViewProvider (FileSystemWatcher)
-    ├── views/dataViewer.ts         → WebviewViewProvider (DAP evaluate)
-    └── util/debugSession.ts        → Shared DAP helpers
-```
+The architecture is divided into three primary concerns:
 
-## Component Details
+- extension.ts: The minimal entry point. It registers the layout orchestration command and delegates execution to layoutManager.ts.
+- layoutManager.ts: The engine of the extension. It manages the physical grid layout, component instantiation, and lifecycle state.
+- panels/: A directory containing singleton classes that govern individual UI components (e.g., WorkspacePanel, DataViewerPanel, PlotsPanel).
 
-### Layout Manager (`layout/layoutManager.ts`)
+## 3. Layout Manager
 
-Registers the `r-layout.toggleLayout` command and the Status Bar button. Uses `vscode.setEditorLayout` to snap the editor into a 65/35 asymmetrical 4-pane grid. Reads `r-layout.aiAgent` from settings to summon the appropriate AI chat panel.
+The layout manager handles the complex sequence of safely restructuring the VS Code environment.
 
-### Environment Explorer (`views/environmentExplorer.ts`)
+### Activation Sequence
 
-| Aspect | Detail |
-|---|---|
-| **Type** | `TreeDataProvider<VariableItem>` |
-| **View ID** | `r-layout.environmentExplorer` |
-| **Data Source** | VS Code Debug Adapter Protocol (DAP) |
-| **Refresh Trigger** | Debug session changes, manual refresh command |
+When a user triggers the layout:
+1. State Preservation: It records the exact values of global settings like workbench.editor.closeEmptyGroups.
+2. Clean Slate: It closes all sidebars, auxiliary bars, and terminal panels.
+3. Grid Construction: It forces a 3-pane layout via vscode.setEditorLayout.
+4. Component Placement:
+    - Group 1 (Left): Receives the user's active source files.
+    - Group 2 (Top-Right): Populated with the R Console, standard Terminal, Problems anchor, and Help panel.
+    - Group 3 (Bottom-Right): Populated with the Workspace Explorer, Plots Gallery, and Data Viewer.
 
-**DAP request chain:**
-```
-threads → stackTrace → scopes → variables
-```
+### Deactivation Sequence
 
-Each `VariableItem` displays:
-- **Label**: Variable name
-- **Description**: Truncated value (max 60 chars)
-- **Icon**: Type-aware ThemeIcon (number, string, bool, array, dataframe, function, etc.)
-- **Expandable**: If `variablesReference > 0`, children can be drilled into
+1. Serialization: Current states of the webviews (e.g., which variable is being inspected) are saved to memory.
+2. Teardown: All custom WebviewPanel tabs are disposed.
+3. Terminal Restoration: Existing terminals are moved back to the default bottom panel, remaining active to preserve the R session.
+4. Settings Restoration: Overridden VS Code settings are meticulously restored to their pre-activation states using the workspaceState cache.
 
-### Plot Gallery (`views/plotGallery.ts`)
+## 4. UI Panels (WebviewPanels)
 
-| Aspect | Detail |
-|---|---|
-| **Type** | `WebviewViewProvider` |
-| **View ID** | `r-layout.plotGallery` |
-| **Data Source** | `FileSystemWatcher` on configurable directory |
-| **Default Watch Dir** | `.r-layout/plots/` |
-| **Supported Formats** | PNG, JPG, JPEG, SVG, GIF, BMP, WebP |
+Each tool is implemented as a WebviewPanel managed by a singleton class pattern.
 
-**Message protocol (webview → extension):**
-| Message Type | Action |
-|---|---|
-| `navigatePrev` | Show previous plot |
-| `navigateNext` | Show next plot |
-| `clear` | Clear all plot history |
+### WorkspacePanel
+Connects to the active Debug Adapter Protocol (DAP) session. When the debugger hits a breakpoint or pauses, this panel requests variable scopes and renders them as a hierarchical tree inside an HTML webview.
 
-### Data Viewer (`views/dataViewer.ts`)
+### DataViewerPanel
+Receives dataframe inspection requests from the WorkspacePanel. It renders interactive HTML tables with sorting, filtering, and theme-responsive styling.
 
-| Aspect | Detail |
-|---|---|
-| **Type** | `WebviewViewProvider` |
-| **View ID** | `r-layout.dataViewer` |
-| **Data Source** | DAP `evaluate` request |
-| **Row Limit** | 500 rows (head) |
-
-**Serialization strategies** (tried in order):
-1. **R**: `jsonlite::toJSON(head(var, 500), auto_unbox = TRUE)`
-2. **Python**: `__import__('json').dumps(var.head(500).to_dict('records'))`
-
-**Message protocol (webview → extension):**
-| Message Type | Payload | Action |
-|---|---|---|
-| `sortColumn` | `{ column, direction }` | Sort by column |
-| `filterRows` | `{ query }` | Filter rows (debounced 250ms) |
-
-### Debug Session Utilities (`util/debugSession.ts`)
-
-Shared helper functions used by the Environment Explorer and Data Viewer:
-
-| Function | Purpose |
-|---|---|
-| `getTopFrameId(session)` | Get frame ID from topmost stack frame |
-| `getLocalVariables(session, frameId)` | Get local scope variables |
-| `getVariableChildren(session, ref)` | Drill into a `variablesReference` |
-| `evaluateExpression(session, expr)` | Evaluate an expression in the top frame |
-
-## Security
-
-All Webview panels implement:
-- **Content Security Policy (CSP)** with nonce-based script authorization
-- **Restricted `localResourceRoots`** — only extension URI and workspace folders
-- **Input sanitization** via HTML escaping for all user data rendered in tables
-
-## Extension Settings
-
-| Setting | Type | Default | Description |
-|---|---|---|---|
-| `r-layout.aiAgent` | `string` (enum) | `"terminal"` | AI agent for the console layout |
-| `r-layout.plotOutputDir` | `string` | `".r-layout/plots"` | Plot output directory path |
-
-## View Container
-
-R Layout registers a custom Activity Bar container (`r-layout-sidebar`) with three views. The sidebar icon is a 4-layout grid SVG (`resources/layout-icon.svg`).
+### PlotsPanel
+Monitors a specific directory (default: .r-layout/plots/) for image files. It automatically synchronizes and updates the webview to display the latest plot generated by the R session.

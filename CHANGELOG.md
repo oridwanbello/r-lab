@@ -1,28 +1,41 @@
 # Change Log
 
-All notable changes to the "R Layout" extension will be documented in this file.
+All notable changes to the R Layout extension will be documented in this file.
 
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
-
-## [0.1.0] — 2026-04-09
+## [0.5.0] - 2026-04-29
 
 ### Added
-- **Environment Explorer**: TreeView displaying variables from the active debug session via DAP requests. Supports type-aware icons, expandable nested objects, and auto-refresh on debug events.
-- **Plot Gallery**: WebviewView that watches a configurable directory (`.layout/plots/`) for new image files. Includes previous/next navigation and clear history.
-- **Data Viewer**: WebviewView for inspecting dataframes with click-to-sort columns and real-time row filtering. Supports R (jsonlite) and Python (pandas) serialization.
-- **R Layout Sidebar**: Custom Activity Bar view container housing all three analysis views.
-- **New commands**: `layout.environmentExplorer.refresh`, `layout.plotGallery.clear`, `layout.dataViewer.inspect`.
-- **New setting**: `layout.plotOutputDir` for configuring the plot output directory.
-- **Architecture docs**: Added `docs/architecture.md` describing the modular component structure.
+- RStudio 3-Pane Editor Layout: Reorganized the layout so the Source editor occupies the full left side, with two panes on the right.
+- Plot Redirection: Added Set View Dir and Set View/Out Dir to the Plots panel for real-time redirection of R plot output.
+- Smart Plot Appending: Implemented directory scanning to automatically increment plot IDs and prevent overwriting.
+- Integrated R Help: Help documentation is now rendered as a tab within the editor layout.
+- Run Source Icon: Added a theme-responsive Source File icon to the editor title bar.
+- Stability Rules: Added AGENTS.md to enforce technical best practices.
 
 ### Changed
-- **Source refactored** into modular structure: `layout/`, `views/`, `util/` directories.
-- **`extension.ts`** simplified to a thin orchestrator that delegates to dedicated modules.
-- **Version bumped** to 0.1.0.
-- **README** rewritten with full feature documentation.
-- **`docs/setup.md`** updated with new project structure.
-- **`docs/executive_blueprint.md`** updated — Phase 2 checked off, Phase 3 & 4 roadmap added.
+- Webview Architecture: Migrated all sidebar panels (Environment Explorer, Data Viewer, Plots) from Activity Bar WebviewViews to Editor Grid WebviewPanels for deep layout integration.
+- Terminal Management: Implemented robust terminal reuse and vanishing console protection.
+- Settings Preservation: The layout toggle now meticulously saves and restores global VS Code settings (closeEmptyGroups, terminal.integrated.defaultLocation) to avoid destructive overwrites.
+- Cleanup Logic: The .r-layout directory is now cleaned up unconditionally on shutdown.
+- UI Polish: Updated plot gallery with theme-responsive backgrounds and refined rounding.
 
-## [Unreleased]
+## [0.2.0] - 2026-04-15
 
-- Initial release
+### Added
+- Custom Plot Directory: Added toolbar tool to override plot locations with native folder picker support.
+
+### Changed
+- Silent Manual Refresh: Transitioned Data Viewer to a manual, zero-resource refresh mechanism.
+- UI/UX Polish: Implemented premium canvas aesthetics for plots, Day/Night mode toggles, and instant tooltips.
+
+## [0.1.0] - 2026-04-09
+
+### Added
+- Environment Explorer: Tree view displaying variables from the active debug session.
+- Plot Gallery: Initial implementation watching .layout/plots/ for image files.
+- Data Viewer: Initial implementation for inspecting dataframes.
+- R Layout Sidebar: Initial Activity Bar view container (Since Deprecated).
+
+## [0.0.1] - 2026-04-01
+
+- Initial scaffold with layout toggle command and terminal configuration.

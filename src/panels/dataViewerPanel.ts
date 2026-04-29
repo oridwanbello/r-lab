@@ -5,9 +5,9 @@ import * as nodeFs from 'fs';
 import { execFile } from 'child_process';
 
 /**
- * Data Viewer Panel — displays R data.frames in a sortable HTML table.
+ * Data Viewer Panel - displays R data.frames in a sortable HTML table.
  *
- * Uses base R write.csv to export data — no external packages required.
+ * Uses base R write.csv to export data - no external packages required.
  *
  * Opens in ViewColumn.Four (bottom-right layout).
  */
@@ -26,7 +26,7 @@ export class DataViewerPanel {
     private _lastRenderHash = '';
     private _disposables: vscode.Disposable[] = [];
 
-    // ── Factory ─────────────────────────────────────────────
+    // Factory
 
     public static createOrShow(
         extensionUri: vscode.Uri,
@@ -53,7 +53,7 @@ export class DataViewerPanel {
         return DataViewerPanel.currentPanel;
     }
 
-    // ── Persistence ─────────────────────────────────────────
+    // Persistence
     public saveState(): { varName: string } {
         return { varName: this._varName };
     }
@@ -64,7 +64,7 @@ export class DataViewerPanel {
         }
     }
 
-    // ── Constructor ─────────────────────────────────────────
+    // Constructor
 
     private constructor(panel: vscode.WebviewPanel) {
         this._panel = panel;
@@ -88,7 +88,7 @@ export class DataViewerPanel {
         );
     }
 
-    // ── Public API ──────────────────────────────────────────
+    // Public API
 
     /** Bring this panel's tab to the front. */
     public reveal(): void {
@@ -201,7 +201,7 @@ export class DataViewerPanel {
         });
     }
 
-    /** RFC-4180 CSV row parser — handles quoted fields and escaped quotes. */
+    /** RFC-4180 CSV row parser - handles quoted fields and escaped quotes. */
     private _parseCsvRow(line: string): string[] {
         const result: string[] = [];
         let current = '';
@@ -222,7 +222,7 @@ export class DataViewerPanel {
     }
 
 
-    /** Find the Rscript binary — works regardless of whether rConsolePath is R, radian, or ark. */
+    /** Find the Rscript binary - works regardless of whether rConsolePath is R, radian, or ark. */
     private _findRscript(): Promise<string> {
         const config = vscode.workspace.getConfiguration('r-layout');
         const rPath = config.get<string>('rConsolePath', 'R');
@@ -233,7 +233,7 @@ export class DataViewerPanel {
         if (/[Rr]script$/i.test(rPath)) {
             return Promise.resolve(rPath);
         }
-        // radian / ark / unknown — fall back to 'which Rscript'
+        // radian / ark / unknown - fall back to 'which Rscript'
         return new Promise((resolve) => {
             require('child_process').execFile(
                 'which', ['Rscript'],
@@ -266,7 +266,7 @@ export class DataViewerPanel {
         });
     }
 
-    // ── Rendering ───────────────────────────────────────────
+    // Rendering
 
 
     private _render(): void {
@@ -610,7 +610,7 @@ export class DataViewerPanel {
 </html>`;
     }
 
-    // ── Cleanup ─────────────────────────────────────────────
+    // Cleanup
 
     dispose(): void {
         DataViewerPanel.currentPanel = undefined;
@@ -622,9 +622,7 @@ export class DataViewerPanel {
     }
 }
 
-// ────────────────────────────────────────────────────────────
 //  Utility
-// ────────────────────────────────────────────────────────────
 
 function escapeHtml(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

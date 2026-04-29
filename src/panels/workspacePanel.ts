@@ -54,7 +54,7 @@ export class WorkspacePanel {
     private constructor(panel: vscode.WebviewPanel) {
         this._panel = panel;
 
-        // ── Register ALL handlers BEFORE setting HTML ──────────────────────
+        // Register ALL handlers BEFORE setting HTML
         // If _render() runs first, the webview JS executes and sends 'ready'
         // before onDidReceiveMessage is registered, and the message is dropped.
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
@@ -69,7 +69,7 @@ export class WorkspacePanel {
             async (msg: { type: string; varName?: string }) => {
                 switch (msg.type) {
                     case 'ready':
-                        // Webview JS loaded — safe to postMessage now.
+                        // Webview JS loaded - safe to postMessage now.
                         await this._refreshWorkspace();
                         break;
                     case 'refresh':
@@ -94,7 +94,7 @@ export class WorkspacePanel {
             this._refreshWorkspace();
         }, 3000);
 
-        // Set HTML last — this starts the webview JS which will send 'ready'.
+        // Set HTML last - this starts the webview JS which will send 'ready'.
         this._render();
     }
 
@@ -107,7 +107,7 @@ export class WorkspacePanel {
         this._panel.reveal(undefined, true);
     }
 
-    /** Force an immediate workspace refresh — called on layout re-activation. */
+    /** Force an immediate workspace refresh - called on layout re-activation. */
     public forceRefresh(): void {
         this._refreshWorkspace();
     }
@@ -132,7 +132,7 @@ export class WorkspacePanel {
 
         this._errorMessage = '';
 
-        // ── Priority 1: Try the vscode-R session watcher ──────────
+        // Priority 1: Try the vscode-R session watcher
         const vscodeRData = this._pollVscodeR();
 
         if (vscodeRData && vscodeRData.variables.length > 0) {
@@ -144,10 +144,10 @@ export class WorkspacePanel {
             return;
         }
 
-        // ── Priority 2: Read the auto-updated watcher file ──────────
+        // Priority 2: Read the auto-updated watcher file
         // The R task callback (injected at activation) writes
         // .r-layout/.workspace_data.json after every R command.
-        // We just read it — no terminal interaction needed.
+        // We just read it - no terminal interaction needed.
         const watcherResult = this._readWatcherFile();
         if (watcherResult) {
             this._variables = watcherResult.variables || [];
@@ -158,7 +158,7 @@ export class WorkspacePanel {
             return;
         }
 
-        // ── Priority 3: Fall back to Rscript (only sees .RData) ───
+        // Priority 3: Fall back to Rscript (only sees .RData)
         const rScript = `
 tryCatch({
     if (file.exists(".RData")) load(".RData", envir = .GlobalEnv)
@@ -215,7 +215,7 @@ tryCatch({
 
     /**
      * Read the workspace data file written by the R task callback.
-     * This is a pure file read — no terminal interaction.
+     * This is a pure file read - no terminal interaction.
      */
     private _readWatcherFile(): {
         variables: VariableInfo[];
@@ -299,7 +299,7 @@ tryCatch({
                     sessionDir = path.join(vsRDir, activeData.pid.toString());
                 }
             } else {
-                // No active.json — find the most recently modified session directory
+                // No active.json - find the most recently modified session directory
                 const dirs = fs.readdirSync(vsRDir, { withFileTypes: true })
                     .filter(d => d.isDirectory())
                     .map(d => ({
@@ -315,7 +315,7 @@ tryCatch({
 
             if (!sessionDir || !fs.existsSync(sessionDir)) return null;
 
-            // ── Read global environment ──
+            // Read global environment
             const variables: VariableInfo[] = [];
             const globalEnvPath = path.join(sessionDir, 'globalenv.json');
             if (fs.existsSync(globalEnvPath)) {
@@ -334,7 +334,7 @@ tryCatch({
                 }
             }
 
-            // ── Read loaded namespaces ──
+            // Read loaded namespaces
             let loadedNamespaces: string[] = [];
             const loadedPath = path.join(sessionDir, 'loaded_namespaces.json');
             if (fs.existsSync(loadedPath)) {
@@ -347,7 +347,7 @@ tryCatch({
                 } catch {}
             }
 
-            // ── Read attached namespaces (search path) ──
+            // Read attached namespaces (search path)
             let attachedNamespaces: string[] = [];
             const searchPath = path.join(sessionDir, 'search.json');
             if (fs.existsSync(searchPath)) {
@@ -402,7 +402,7 @@ tryCatch({
      * We try "Rscript" on PATH first, then check common R installation paths.
      */
     private async _findRscript(): Promise<string> {
-        // First, try the R console path setting — if it's plain "R", derive "Rscript"
+        // First, try the R console path setting - if it's plain "R", derive "Rscript"
         const config = vscode.workspace.getConfiguration('r-layout');
         const rPath = config.get<string>('rConsolePath', 'R');
         
@@ -435,7 +435,7 @@ tryCatch({
                                 return;
                             }
                         }
-                        // Last resort — just try "Rscript" and let it fail with a clear error
+                        // Last resort - just try "Rscript" and let it fail with a clear error
                         resolve('Rscript');
                     }
                 }

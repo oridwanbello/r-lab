@@ -1,8 +1,6 @@
 import * as vscode from 'vscode';
 
-// ────────────────────────────────────────────────────────────
-//  Plot Gallery — WebviewViewProvider
-// ────────────────────────────────────────────────────────────
+//  Plot Gallery - WebviewViewProvider
 
 export class PlotGalleryProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'r-layout.plotGallery';
@@ -14,7 +12,7 @@ export class PlotGalleryProvider implements vscode.WebviewViewProvider {
 
     constructor(private readonly _extensionUri: vscode.Uri) {}
 
-    // ── Lifecycle ───────────────────────────────────────────
+    // Lifecycle
 
     resolveWebviewView(
         webviewView: vscode.WebviewView,
@@ -43,7 +41,7 @@ export class PlotGalleryProvider implements vscode.WebviewViewProvider {
         });
     }
 
-    // ── File System Watcher ─────────────────────────────────
+    // File System Watcher
 
     private _startWatcher(): void {
         const config = vscode.workspace.getConfiguration('r-layout');
@@ -64,7 +62,7 @@ export class PlotGalleryProvider implements vscode.WebviewViewProvider {
         });
     }
 
-    // ── Public API ──────────────────────────────────────────
+    // Public API
 
     /** Clear the plot history. */
     clear(): void {
@@ -80,7 +78,7 @@ export class PlotGalleryProvider implements vscode.WebviewViewProvider {
         this._updateWebview();
     }
 
-    // ── Message Handling ────────────────────────────────────
+    // Message Handling
 
     private _onMessage(msg: { type: string }): void {
         switch (msg.type) {
@@ -102,7 +100,7 @@ export class PlotGalleryProvider implements vscode.WebviewViewProvider {
         }
     }
 
-    // ── Update the Webview Content ──────────────────────────
+    // Update the Webview Content
 
     private _updateWebview(): void {
         if (!this._view) {
@@ -111,7 +109,7 @@ export class PlotGalleryProvider implements vscode.WebviewViewProvider {
         this._view.webview.html = this._getHtml(this._view.webview);
     }
 
-    // ── Local Resource Roots ────────────────────────────────
+    // Local Resource Roots
 
     private _getLocalResourceRoots(): vscode.Uri[] {
         const roots: vscode.Uri[] = [this._extensionUri];
@@ -126,7 +124,7 @@ export class PlotGalleryProvider implements vscode.WebviewViewProvider {
         return roots;
     }
 
-    // ── HTML Generation ─────────────────────────────────────
+    // HTML Generation
 
     private _getHtml(webview: vscode.Webview): string {
         const nonce = getNonce();
@@ -261,9 +259,7 @@ export class PlotGalleryProvider implements vscode.WebviewViewProvider {
     }
 }
 
-// ────────────────────────────────────────────────────────────
 //  Registration helper
-// ────────────────────────────────────────────────────────────
 
 export function registerPlotGallery(
     context: vscode.ExtensionContext
@@ -285,9 +281,7 @@ export function registerPlotGallery(
     return provider;
 }
 
-// ────────────────────────────────────────────────────────────
 //  Utility
-// ────────────────────────────────────────────────────────────
 
 function getNonce(): string {
     let text = '';

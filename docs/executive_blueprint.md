@@ -31,13 +31,13 @@ To ensure best-in-class R support, R Layout will integrate with and build upon e
 
 ## 5. Roadmap
 
-### Phase 1: Foundation ✅
+### Phase 1: Foundation 
 - [x] Draft architectural documents.
 - [x] Initialize TypeScript extension.
 - [x] Build layout toggle command and Status Bar button.
 - [x] Implement AI Agent configuration settings in `package.json`.
 
-### Phase 2: Core Analysis Views ✅
+### Phase 2: Core Analysis Views 
 - [x] Implement Environment Explorer (TreeView) using DAP requests.
 - [x] Implement Plot Gallery (Webview) with output interception.
 - [x] Implement Data Viewer (Webview) for high-performance dataframe sorting.

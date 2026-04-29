@@ -4,11 +4,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 /**
- * Help Panel — runs R help lookups in a background `Rscript` process
+ * Help Panel - runs R help lookups in a background `Rscript` process
  * (completely separate from the R Console), captures the output,
  * and displays the rendered documentation inline.
  *
- * This never touches the user's R Console — no disruption.
+ * This never touches the user's R Console - no disruption.
  */
 export class HelpPanel {
     public static currentPanel: HelpPanel | undefined;
@@ -21,7 +21,7 @@ export class HelpPanel {
     private _isLoading = false;
     private _disposables: vscode.Disposable[] = [];
 
-    // ── Factory ─────────────────────────────────────────────
+    // Factory
 
     public static createOrShow(
         extensionUri: vscode.Uri,
@@ -52,7 +52,7 @@ export class HelpPanel {
         this._panel.reveal(column, preserveFocus);
     }
 
-    // ── State Serialization ─────────────────────────────────
+    // State Serialization
 
     public saveState(): any {
         return {
@@ -71,7 +71,7 @@ export class HelpPanel {
         }
     }
 
-    // ── Constructor ─────────────────────────────────────────
+    // Constructor
 
     private _extensionUri: vscode.Uri;
 
@@ -110,7 +110,7 @@ export class HelpPanel {
         );
     }
 
-    // ── R Help via background Rscript ───────────────────────
+    // R Help via background Rscript
 
     private async _searchHelp(query: string): Promise<void> {
         // Update search history
@@ -195,7 +195,7 @@ export class HelpPanel {
         this._render();
     }
 
-    /** Find the Rscript binary — works regardless of whether rConsolePath is R, radian, or ark. */
+    /** Find the Rscript binary - works regardless of whether rConsolePath is R, radian, or ark. */
     private _findRscript(): Promise<string> {
         const config = vscode.workspace.getConfiguration('r-layout');
         const rPath = config.get<string>('rConsolePath', 'R');
@@ -242,7 +242,7 @@ export class HelpPanel {
         });
     }
 
-    // ── Rendering ───────────────────────────────────────────
+    // Rendering
 
     private _render(): void {
         this._panel.webview.html = this._getHtml();
@@ -682,7 +682,7 @@ export class HelpPanel {
 </html>`;
     }
 
-    // ── Cleanup ─────────────────────────────────────────────
+    // Cleanup
 
     dispose(): void {
         HelpPanel.currentPanel = undefined;
@@ -694,9 +694,7 @@ export class HelpPanel {
     }
 }
 
-// ────────────────────────────────────────────────────────────
 //  Utility
-// ────────────────────────────────────────────────────────────
 
 /**
  * Strips terminal overstrike sequences from R's Rd2txt output.

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 
 /**
- * Problems Panel — a WebviewPanel (editor tab) that mirrors
+ * Problems Panel - a WebviewPanel (editor tab) that mirrors
  * VS Code's built-in Problems view by displaying diagnostics
  * from `vscode.languages.getDiagnostics()`.
  *
@@ -16,7 +16,7 @@ export class ProblemsPanel {
     private _diagnosticsListener?: vscode.Disposable;
     private _disposables: vscode.Disposable[] = [];
 
-    // ── Factory ─────────────────────────────────────────────
+    // Factory
 
     public static createOrShow(
         extensionUri: vscode.Uri,
@@ -43,7 +43,7 @@ export class ProblemsPanel {
         return ProblemsPanel.currentPanel;
     }
 
-    // ── Constructor ─────────────────────────────────────────
+    // Constructor
 
     private constructor(panel: vscode.WebviewPanel) {
         this._panel = panel;
@@ -75,7 +75,7 @@ export class ProblemsPanel {
         );
     }
 
-    // ── Rendering ───────────────────────────────────────────
+    // Rendering
 
     private _render(): void {
         this._panel.webview.html = this._getHtml();
@@ -227,7 +227,7 @@ export class ProblemsPanel {
 </html>`;
     }
 
-    // ── Cleanup ─────────────────────────────────────────────
+    // Cleanup
 
     dispose(): void {
         ProblemsPanel.currentPanel = undefined;
@@ -239,9 +239,7 @@ export class ProblemsPanel {
     }
 }
 
-// ────────────────────────────────────────────────────────────
 //  Utility
-// ────────────────────────────────────────────────────────────
 
 function severityIcon(severity: vscode.DiagnosticSeverity): string {
     switch (severity) {

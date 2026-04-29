@@ -4,7 +4,7 @@ import * as path from 'path';
 import { getRConsoleTerminal } from '../layout/layoutManager';
 
 /**
- * Plots Panel — a WebviewPanel (editor tab) that watches a directory
+ * Plots Panel - a WebviewPanel (editor tab) that watches a directory
  * for new plot images and displays them with history navigation.
  *
  * Opens in ViewColumn.Three (bottom-right layout).
@@ -23,7 +23,7 @@ export class PlotsPanel {
     private _lastDirAction: 'view' | 'outview' | undefined = undefined;
     private _extensionUri: vscode.Uri;
 
-    // ── Factory ─────────────────────────────────────────────
+    // Factory
 
     public static createOrShow(
         extensionUri: vscode.Uri,
@@ -64,7 +64,7 @@ export class PlotsPanel {
         this._panel.reveal(column, preserveFocus);
     }
 
-    // ── Constructor ─────────────────────────────────────────
+    // Constructor
 
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
         this._panel = panel;
@@ -172,7 +172,7 @@ export class PlotsPanel {
         });
 
         if (uris && uris.length > 0) {
-            // Browse only sets the view dir — user must click Set Out/View Dir to redirect output
+            // Browse only sets the view dir - user must click Set Out/View Dir to redirect output
             this._handleSetCustomDir(uris[0].fsPath, false);
         }
     }
@@ -182,7 +182,7 @@ export class PlotsPanel {
         const uri = this._plots[this._currentIndex];
 
         // Only allow physical deletion for files inside the .r-layout directory.
-        // User-specified directories must not be modified — we only display them.
+        // User-specified directories must not be modified - we only display them.
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         const rLayoutDir = wf ? path.join(wf, '.r-layout') : undefined;
         if (!rLayoutDir || !uri.fsPath.startsWith(rLayoutDir)) {
@@ -222,7 +222,7 @@ export class PlotsPanel {
         }
     }
 
-    // ── File System Watcher ─────────────────────────────────
+    // File System Watcher
 
     private _startWatcher(): void {
         // Dispose existing watcher if any
@@ -281,7 +281,7 @@ export class PlotsPanel {
         this._disposables.push(this._watcher);
     }
 
-    // ── Public API ──────────────────────────────────────────
+    // Public API
 
     public clear(): void {
         this._plots = [];
@@ -335,7 +335,7 @@ export class PlotsPanel {
         }
     }
 
-    // ── Rendering ───────────────────────────────────────────
+    // Rendering
 
     private _render(): void {
         this._panel.webview.html = this._getHtml();
@@ -351,7 +351,7 @@ export class PlotsPanel {
         const plotUrl = hasPlots ? `${plotUri.toString()}?t=${Date.now()}` : '';
         const counter = hasPlots
             ? `${this._currentIndex + 1} / ${this._plots.length}`
-            : '—';
+            : '-';
         const prevDisabled = this._currentIndex <= 0 ? 'disabled' : '';
         const nextDisabled =
             this._currentIndex >= this._plots.length - 1 ? 'disabled' : '';
@@ -731,7 +731,7 @@ export class PlotsPanel {
 </html>`;
     }
 
-    // ── Cleanup ─────────────────────────────────────────────
+    // Cleanup
 
     dispose(): void {
         PlotsPanel.currentPanel = undefined;
@@ -743,9 +743,7 @@ export class PlotsPanel {
     }
 }
 
-// ────────────────────────────────────────────────────────────
 //  Utility
-// ────────────────────────────────────────────────────────────
 
 function getNonce(): string {
     let text = '';
