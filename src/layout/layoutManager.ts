@@ -809,7 +809,13 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     // Doing this earlier races the webview paint and the message is dropped.
     setTimeout(() => { WorkspacePanel.currentPanel?.forceRefresh(); }, 500);
 
-    vscode.window.showInformationMessage('R Layout layout activated.');
+    vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: 'R Layout layout activated.',
+        cancellable: false
+    }, async () => {
+        await delay(2000);
+    });
 }
 
 //  Deactivate Layout
@@ -957,7 +963,13 @@ async function deactivateLayout(): Promise<void> {
     await extensionContext.workspaceState.update(STATE_KEY, false);
     updateStatusBar();
 
-    vscode.window.showInformationMessage('R Layout layout deactivated.');
+    vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: 'R Layout layout deactivated.',
+        cancellable: false
+    }, async () => {
+        await delay(2000);
+    });
 }
 
 //  Layout Guards - redirect stray content to the right layout
