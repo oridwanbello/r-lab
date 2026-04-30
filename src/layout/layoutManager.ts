@@ -637,7 +637,8 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                 name: 'R Console',
                 shellPath: resolveRPath(config),
                 location: { viewColumn: vscode.ViewColumn.Two },
-                env: Object.keys(rProfileEnv).length > 0 ? rProfileEnv : undefined,
+                env: { ...(process.env as Record<string, string>), ...rProfileEnv },
+                strictEnv: true,
                 iconPath: vscode.Uri.joinPath(context.extensionUri, 'resources', 'r-logo.svg'),
             });
             await delay(10);
@@ -671,6 +672,8 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         shellTerminal = vscode.window.createTerminal({
             name: 'Terminal',
             location: { viewColumn: vscode.ViewColumn.Two },
+            env: { ...(process.env as Record<string, string>) },
+            strictEnv: true,
         });
         await delay(10);
         shellTerminal.show(false);
@@ -1055,7 +1058,8 @@ function registerLayoutGuards(context: vscode.ExtensionContext): void {
                         shellPath: opts.shellPath,
                         shellArgs: opts.shellArgs,
                         cwd: opts.cwd,
-                        env: opts.env,
+                        env: { ...(process.env as Record<string, string>), ...(opts.env || {}) },
+                        strictEnv: true,
                         location: { viewColumn: vscode.ViewColumn.Two },
                     });
                     newTerm.show(false);
