@@ -409,6 +409,11 @@ export async function collapseLayoutForShutdown(): Promise<void> {
 //  Activate Layout
 
 async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
+    return vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: 'Activating R Layout...',
+        cancellable: false
+    }, async () => {
     activationInProgress = true;
     // 1. Load saved positions, and Save references to all currently open TEXT files
     //    so we can reopen them after setting the layout.
@@ -808,19 +813,17 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     // all layout commands complete, then push the latest R environment state.
     // Doing this earlier races the webview paint and the message is dropped.
     setTimeout(() => { WorkspacePanel.currentPanel?.forceRefresh(); }, 500);
-
-    vscode.window.withProgress({
-        location: vscode.ProgressLocation.Notification,
-        title: 'R Layout layout activated.',
-        cancellable: false
-    }, async () => {
-        await delay(2000);
     });
 }
 
 //  Deactivate Layout
 
 async function deactivateLayout(): Promise<void> {
+    return vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: 'Deactivating R Layout...',
+        cancellable: false
+    }, async () => {
     // 1. Clear context key
     await vscode.commands.executeCommand(
         'setContext', 'r-layout.layoutActive', false
@@ -962,13 +965,6 @@ async function deactivateLayout(): Promise<void> {
     currentAnchorUri = undefined;
     await extensionContext.workspaceState.update(STATE_KEY, false);
     updateStatusBar();
-
-    vscode.window.withProgress({
-        location: vscode.ProgressLocation.Notification,
-        title: 'R Layout layout deactivated.',
-        cancellable: false
-    }, async () => {
-        await delay(2000);
     });
 }
 
