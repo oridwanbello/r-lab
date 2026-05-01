@@ -54,7 +54,6 @@ export function registerLayoutCommand(
     context: vscode.ExtensionContext
 ): void {
     extensionContext = context;
-
     // Restore persisted state
     isLayoutActive = context.workspaceState.get<boolean>(STATE_KEY, false);
 
@@ -269,6 +268,9 @@ export async function resetStaleLayout(
     await context.workspaceState.update(STATE_KEY, false);
     isLayoutActive = false;
     updateStatusBar();
+
+    // Silently clean up any leftover .r-layout folder BEFORE UI restores
+    deleteRLayoutDir();
 
     // UNCONDITIONAL settings reset
     // Reset these FIRST, before any other logic, as a safety net.
@@ -1436,7 +1438,6 @@ function deleteRLayoutDir() {
                 fs.rmSync(rLayoutDir, { recursive: true, force: true });
             }
         } catch (e) {
-            // Log to console but don't block the UI
             console.error('[R Layout] Failed to delete .r-layout directory', e);
         }
     }
