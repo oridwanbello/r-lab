@@ -13,6 +13,9 @@ export class PlotsPanel {
     public static currentPanel: PlotsPanel | undefined;
     public static readonly viewType = 'r-layout.plotsPanel';
 
+    private static _sessionCustomPlotDir: string | undefined;
+    private static _sessionLastDirAction: 'view' | 'outview' | undefined;
+
     private readonly _panel: vscode.WebviewPanel;
     private _plots: vscode.Uri[] = [];
     private _currentIndex = -1;
@@ -51,6 +54,11 @@ export class PlotsPanel {
         return PlotsPanel.currentPanel;
     }
 
+    public static resetSessionState(): void {
+        PlotsPanel._sessionCustomPlotDir = undefined;
+        PlotsPanel._sessionLastDirAction = undefined;
+    }
+
     private static _getResourceRoots(extensionUri: vscode.Uri): vscode.Uri[] {
         const roots: vscode.Uri[] = [extensionUri];
         if (vscode.workspace.workspaceFolders) {
@@ -79,6 +87,11 @@ export class PlotsPanel {
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
         this._panel = panel;
         this._extensionUri = extensionUri;
+
+        // Restore persisted state from static session memory
+        this._customPlotDir = PlotsPanel._sessionCustomPlotDir;
+        this._lastDirAction = PlotsPanel._sessionLastDirAction;
+
         this._render();
         this._startWatcher();
 
@@ -98,6 +111,10 @@ export class PlotsPanel {
                             this._currentIndex++;
                             this._render();
                         }
+                        break;
+                    case 'navigateTo':
+                        this._currentIndex = (msg as any).index;
+                        this._render();
                         break;
                     case 'clear':
                         this.clear();
@@ -163,6 +180,10 @@ export class PlotsPanel {
 
         // Track which action was last used so we can show persistent active state in the UI.
         this._lastDirAction = resolved ? (setOutput ? 'outview' : 'view') : undefined;
+
+        // Persist to session memory
+        PlotsPanel._sessionCustomPlotDir = this._customPlotDir;
+        PlotsPanel._sessionLastDirAction = this._lastDirAction;
 
         this.clear(); // Clear existing plots
         this._startWatcher(); // Restart watcher on new dir
@@ -348,27 +369,32 @@ export class PlotsPanel {
     // Rendering
 
     private _render(): void {
-        this._panel.webview.html = this._getHtml();
+        if (!this._panel.webview.html) {
+            this._panel.webview.html = this._getHtml();
+        } else {
+            this._postState();
+        }
+    }
+
+    private _postState(): void {
+        const plots = this._plots.map(uri => this._panel.webview.asWebviewUri(uri).toString() + `?t=${Date.now()}`);
+        this._panel.webview.postMessage({
+            type: 'updateState',
+            state: {
+                plots: plots,
+                currentIndex: this._currentIndex,
+                isNightMode: this._isNightMode,
+                customPlotDir: this._customPlotDir,
+                lastDirAction: this._lastDirAction
+            }
+        });
     }
 
     private _getHtml(): string {
         const nonce = getNonce();
-        const hasPlots = this._plots.length > 0;
-        const plotUri = hasPlots
-            ? this._panel.webview.asWebviewUri(this._plots[this._currentIndex])
-            : '';
-        // Add cache-busting timestamp for the currently viewed image
-        const plotUrl = hasPlots ? `${plotUri.toString()}?t=${Date.now()}` : '';
-        const counter = hasPlots
-            ? `${this._currentIndex + 1} / ${this._plots.length}`
-            : '-';
-        const prevDisabled = this._currentIndex <= 0 ? 'disabled' : '';
-        const nextDisabled =
-            this._currentIndex >= this._plots.length - 1 ? 'disabled' : '';
 
         const moonIcon = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786z"/></svg>';
         const sunIcon = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2A.5.5 0 018 0zm0 13a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2A.5.5 0 018 13zm8-5a.5.5 0 01-.5.5h-2a.5.5 0 010-1h2a.5.5 0 01.5.5zM3 8a.5.5 0 01-.5.5h-2a.5.5 0 010-1h2A.5.5 0 013 8zm10.657-5.657a.5.5 0 010 .707l-1.414 1.415a.5.5 0 11-.707-.708l1.414-1.414a.5.5 0 01.707 0zm-9.193 9.193a.5.5 0 010 .707L3.05 13.657a.5.5 0 01-.707-.707l1.414-1.414a.5.5 0 01.707 0zm9.193 2.121a.5.5 0 01-.707 0l-1.414-1.414a.5.5 0 01.707-.707l1.414 1.414a.5.5 0 010 .707zM4.464 2.343a.5.5 0 01-.707 0L2.343 3.757a.5.5 0 11.707.707l1.414-1.414a.5.5 0 010-.707z"/></svg>';
-        const plotBg = this._isNightMode ? '#C8C8C8' : 'white';
 
         return /* html */ `<!DOCTYPE html>
 <html lang="en">
@@ -403,13 +429,6 @@ export class PlotsPanel {
             background: var(--vscode-editor-background); /* Matches active tab */
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             flex-shrink: 0;
-        }
-        .pane-title {
-            font-weight: 600;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            opacity: 0.7;
         }
         .nav-controls {
             display: flex;
@@ -464,6 +483,57 @@ export class PlotsPanel {
             white-space: nowrap;
         }
 
+        .main-container {
+            display: flex;
+            flex-direction: row;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .thumbnail-sidebar {
+            width: 120px;
+            background: var(--vscode-sideBar-background);
+            border-left: 1px solid var(--vscode-editorGroup-border);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 12px;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+        .thumbnail-sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .thumbnail-sidebar::-webkit-scrollbar-thumb {
+            background: var(--vscode-scrollbarSlider-background);
+            border-radius: 3px;
+        }
+        .thumbnail {
+            width: 100%;
+            height: auto;
+            object-fit: contain;
+            border: 2px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            opacity: 0.6;
+            filter: grayscale(20%);
+        }
+        .thumbnail.active {
+            border-color: var(--vscode-focusBorder);
+            box-shadow: 0 0 8px var(--vscode-focusBorder);
+            opacity: 1;
+            filter: grayscale(0%);
+            transform: scale(1.04);
+        }
+        .thumbnail:hover:not(.active) {
+            border-color: var(--vscode-button-secondaryHoverBackground);
+            opacity: 0.9;
+            filter: grayscale(0%);
+        }
+
         .plot-area {
             flex: 1;
             display: flex;
@@ -476,7 +546,7 @@ export class PlotsPanel {
             max-width: 100%;
             max-height: 100%;
             object-fit: contain;
-            background: ${plotBg};
+            background: white;
             padding: 16px;
             border-radius: 4px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
@@ -494,6 +564,8 @@ export class PlotsPanel {
             border-radius: 3px;
             font-size: 12px;
         }
+
+        /* Dropdown styles */
         .dir-dropdown {
             position: absolute;
             top: 32px;
@@ -582,72 +654,192 @@ export class PlotsPanel {
 <body${this._isMinimized ? ' class="minimized"' : ''}>
     <div class="toolbar">
         <div class="nav-controls">
-            <button id="btn-prev" ${prevDisabled} data-tooltip="Previous Plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M11.354 1.646L12.061 2.354 6.414 8l5.647 5.646-.707.708L5 8l6.354-6.354z"/></svg></button>
-            <span class="counter">${counter}</span>
-            <button id="btn-next" ${nextDisabled} data-tooltip="Next Plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M4.646 1.646L3.939 2.354 9.586 8l-5.647 5.646.707.708L11 8 4.646 1.646z"/></svg></button>
-            <button id="btn-copy" ${!hasPlots ? 'disabled' : ''} data-tooltip="Copy Plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M10,13.33H3.33V4.67c0-0.37-0.3-0.67-0.67-0.67h0C2.3,4,2,4.3,2,4.67v8.67c0,0.73,0.6,1.33,1.33,1.33h6.67c0.37,0,0.67-0.3,0.67-0.67v0C10.67,13.63,10.37,13.33,10,13.33z M13.33,10.67V2.67c0-0.73-0.6-1.33-1.33-1.33H6c-0.73,0-1.33,0.6-1.33,1.33v8c0,0.73,0.6,1.33,1.33,1.33h6c0.73,0,1.33-0.6,1.33-1.33z M12,10.67H6V2.67h6V10.67z"/></svg></button>
-            <button id="btn-save" ${!hasPlots ? 'disabled' : ''} data-tooltip="Save Plot As..."><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12,10v2H4v-2H2.67v2c0,0.73,0.6,1.33,1.33,1.33h8c0.73,0,1.33-0.6,1.33-1.33v-2H12z M11.33,7.33l-0.94-0.94L8.67,8.11V2.67h-1.33v5.45L5.61,6.39L4.67,7.33l3.33,3.33 L11.33,7.33z"/></svg></button>
-            <button id="btn-night-mode" ${!hasPlots ? 'disabled' : ''} data-tooltip="${this._isNightMode ? 'Switch to Day Mode' : 'Switch to Night Mode'}">${this._isNightMode ? sunIcon : moonIcon}</button>
-            <button id="btn-delete" ${!hasPlots ? 'disabled' : ''} data-tooltip="Delete Current Plot"><svg viewBox="0 0 16 16"><path fill="none" d="M9.25,2H6.75a0.25,0.25,0,0,0-0.25,0.25V3h3V2.25A0.25,0.25,0,0,0,9.25,2Z"/><path fill="currentColor" d="M13.5,3H10.5V2.25A1.25,1.25,0,0,0,9.25,1H6.75A1.25,1.25,0,0,0,5.5,2.25V3H2.5a0.5,0.5,0,0,0,0,1H3L3.63,13.53C3.67,14.37,4.31,15,5.13,15h5.75c0.82,0,1.45-.62,1.5-1.47L13,4h0.5a0.5,0.5,0,0,0,0-1ZM6,13H6a0.5,0.5,0,0,1-.5-.48l-0.25-7a0.5,0.5,0,1,1,1-.04l0.25,7A0.5,0.5,0,0,1,6,13ZM8.5,12.5a0.5,0.5,0,0,1-1,0V5.5a0.5,0.5,0,0,1,1,0ZM9.5,3H6.5V2.25a0.25,0.25,0,0,1,.25-.25h2.5a0.25,0.25,0,0,1,.25.25Zm1,9.55a0.5,0.5,0,0,1-.5.45H10a0.5,0.5,0,0,1-.5-.52l0.25-7a0.5,0.5,0,1,1,1,.04Z"/></svg></button>
-            <button id="btn-clear" ${!hasPlots ? 'disabled' : ''} data-tooltip="Clear All Plots"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.91,1.81L13.85,2.76L10.04,6.57C10.75,7.59 10.85,8.83 10.25,9.63L6.04,5.41C6.84,4.81 8.07,4.91 9.1,5.63L12.91,1.81M3.95,11.71C2.61,10.37 1.79,8.77 1.57,7.28L4.82,5.89L9.78,10.85L8.39,14.1C6.89,13.87 5.29,13.05 3.95,11.71Z"/></svg></button>
-            <button id="btn-custom-dir" class="btn-custom-dir ${this._customPlotDir ? 'active' : ''}" data-tooltip="Set Custom Plot Directory"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="m7.52 2c-0.00591-2.1e-4 -0.0118-3.1e-4 -0.0178-3.1e-4l-1.2-1.6c-0.0932-0.124-0.214-0.225-0.353-0.294-0.139-0.0694-0.292-0.106-0.447-0.106h-3.5c-0.53 0-1.04 0.211-1.41 0.586-0.375 0.375-0.586 0.884-0.586 1.41v10c0 0.53 0.211 1.04 0.586 1.41 0.375 0.375 0.884 0.586 1.41 0.586h4v-1h-4c-0.265 0-0.52-0.105-0.707-0.293-0.188-0.188-0.293-0.442-0.293-0.707v-7l3.88 3e-5c0.203 1.9e-4 0.383 3.5e-4 0.557-0.0415 0.153-0.0368 0.299-0.0974 0.434-0.18 0.153-0.0936 0.279-0.221 0.423-0.365l1.41-1.41h6.29c0.265 0 0.52 0.105 0.707 0.293s0.293 0.442 0.293 0.707v2h1v-2c0-0.53-0.211-1.04-0.586-1.41s-0.884-0.586-1.41-0.586h-6.48zm-2.02-1 1.2 1.6-1.08 1.08c-0.19 0.19-0.229 0.225-0.268 0.248-0.0447 0.0274-0.0935 0.0476-0.145 0.0599-0.0442 0.0106-0.0969 0.0138-0.365 0.0138h-3.84v-2c0-0.265 0.105-0.52 0.293-0.707 0.188-0.188 0.442-0.293 0.707-0.293h3.5z" clip-rule="evenodd" fill="currentColor" fill-rule="evenodd"/><path d="m11.5 7c0.276 0 0.5 0.224 0.5 0.5v3.5h3.5c0.276 0 0.5 0.224 0.5 0.5s-0.224 0.5-0.5 0.5h-3.5v3.5c0 0.276-0.224 0.5-0.5 0.5s-0.5-0.224-0.5-0.5v-3.5h-3.5c-0.276 0-0.5-0.224-0.5-0.5s0.224-0.5 0.5-0.5h3.5v-3.5c0-0.276 0.224-0.5 0.5-0.5z" fill="currentColor"/></svg></button>
+            <button id="btn-prev" disabled data-tooltip="Previous Plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M11.354 1.646L12.061 2.354 6.414 8l5.647 5.646-.707.708L5 8l6.354-6.354z"/></svg></button>
+            <span class="counter">-</span>
+            <button id="btn-next" disabled data-tooltip="Next Plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M4.646 1.646L3.939 2.354 9.586 8l-5.647 5.646.707.708L11 8 4.646 1.646z"/></svg></button>
+            <button id="btn-copy" disabled data-tooltip="Copy Plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M10,13.33H3.33V4.67c0-0.37-0.3-0.67-0.67-0.67h0C2.3,4,2,4.3,2,4.67v8.67c0,0.73,0.6,1.33,1.33,1.33h6.67c0.37,0,0.67-0.3,0.67-0.67v0C10.67,13.63,10.37,13.33,10,13.33z M13.33,10.67V2.67c0-0.73-0.6-1.33-1.33-1.33H6c-0.73,0-1.33,0.6-1.33,1.33v8c0,0.73,0.6,1.33,1.33,1.33h6c0.73,0,1.33-0.6,1.33-1.33z M12,10.67H6V2.67h6V10.67z"/></svg></button>
+            <button id="btn-save" disabled data-tooltip="Save Plot As..."><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12,10v2H4v-2H2.67v2c0,0.73,0.6,1.33,1.33,1.33h8c0.73,0,1.33-0.6,1.33-1.33v-2H12z M11.33,7.33l-0.94-0.94L8.67,8.11V2.67h-1.33v5.45L5.61,6.39L4.67,7.33l3.33,3.33 L11.33,7.33z"/></svg></button>
+            <button id="btn-night-mode" disabled data-tooltip="Switch to Night Mode">${moonIcon}</button>
+            <button id="btn-delete" disabled data-tooltip="Delete Current Plot"><svg viewBox="0 0 16 16"><path fill="none" d="M9.25,2H6.75a0.25,0.25,0,0,0-0.25,0.25V3h3V2.25A0.25,0.25,0,0,0,9.25,2Z"/><path fill="currentColor" d="M13.5,3H10.5V2.25A1.25,1.25,0,0,0,9.25,1H6.75A1.25,1.25,0,0,0,5.5,2.25V3H2.5a0.5,0.5,0,0,0,0,1H3L3.63,13.53C3.67,14.37,4.31,15,5.13,15h5.75c0.82,0,1.45-.62,1.5-1.47L13,4h0.5a0.5,0.5,0,0,0,0-1ZM6,13H6a0.5,0.5,0,0,1-.5-.48l-0.25-7a0.5,0.5,0,1,1,1-.04l0.25,7A0.5,0.5,0,0,1,6,13ZM8.5,12.5a0.5,0.5,0,0,1-1,0V5.5a0.5,0.5,0,0,1,1,0ZM9.5,3H6.5V2.25a0.25,0.25,0,0,1,.25-.25h2.5a0.25,0.25,0,0,1,.25.25Zm1,9.55a0.5,0.5,0,0,1-.5.45H10a0.5,0.5,0,0,1-.5-.52l0.25-7a0.5,0.5,0,1,1,1,.04Z"/></svg></button>
+            <button id="btn-clear" disabled data-tooltip="Clear All Plots"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.91,1.81L13.85,2.76L10.04,6.57C10.75,7.59 10.85,8.83 10.25,9.63L6.04,5.41C6.84,4.81 8.07,4.91 9.1,5.63L12.91,1.81M3.95,11.71C2.61,10.37 1.79,8.77 1.57,7.28L4.82,5.89L9.78,10.85L8.39,14.1C6.89,13.87 5.29,13.05 3.95,11.71Z"/></svg></button>
+            <button id="btn-custom-dir" class="btn-custom-dir" data-tooltip="Set Custom Plot Directory"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="m7.52 2c-0.00591-2.1e-4 -0.0118-3.1e-4 -0.0178-3.1e-4l-1.2-1.6c-0.0932-0.124-0.214-0.225-0.353-0.294-0.139-0.0694-0.292-0.106-0.447-0.106h-3.5c-0.53 0-1.04 0.211-1.41 0.586-0.375 0.375-0.586 0.884-0.586 1.41v10c0 0.53 0.211 1.04 0.586 1.41 0.375 0.375 0.884 0.586 1.41 0.586h4v-1h-4c-0.265 0-0.52-0.105-0.707-0.293-0.188-0.188-0.293-0.442-0.293-0.707v-7l3.88 3e-5c0.203 1.9e-4 0.383 3.5e-4 0.557-0.0415 0.153-0.0368 0.299-0.0974 0.434-0.18 0.153-0.0936 0.279-0.221 0.423-0.365l1.41-1.41h6.29c0.265 0 0.52 0.105 0.707 0.293s0.293 0.442 0.293 0.707v2h1v-2c0-0.53-0.211-1.04-0.586-1.41s-0.884-0.586-1.41-0.586h-6.48zm-2.02-1 1.2 1.6-1.08 1.08c-0.19 0.19-0.229 0.225-0.268 0.248-0.0447 0.0274-0.0935 0.0476-0.145 0.0599-0.0442 0.0106-0.0969 0.0138-0.365 0.0138h-3.84v-2c0-0.265 0.105-0.52 0.293-0.707 0.188-0.188 0.442-0.293 0.707-0.293h3.5z" clip-rule="evenodd" fill="currentColor" fill-rule="evenodd"/><path d="m11.5 7c0.276 0 0.5 0.224 0.5 0.5v3.5h3.5c0.276 0 0.5 0.224 0.5 0.5s-0.224 0.5-0.5 0.5h-3.5v3.5c0 0.276-0.224 0.5-0.5 0.5s-0.5-0.224-0.5-0.5v-3.5h-3.5c-0.276 0-0.5-0.224-0.5-0.5s0.224-0.5 0.5-0.5h3.5v-3.5c0-0.276 0.224-0.5 0.5-0.5z" fill="currentColor"/></svg></button>
         </div>
     </div>
     <div id="dir-dropdown" class="dir-dropdown">
         <div class="input-row">
-            <input type="text" id="dir-input" placeholder="Custom plot directory (absolute or relative)..." value="${this._customPlotDir || ''}" />
+            <input type="text" id="dir-input" placeholder="Custom plot directory (absolute or relative)..." value="" />
             <button id="btn-browse" class="btn-browse" data-tooltip="Browse for Folder"><svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="m14 3h-6.5l-1.2-1.6c-0.0932-0.124-0.214-0.225-0.353-0.294-0.139-0.0694-0.292-0.106-0.447-0.106h-3.5c-0.53 0-1.04 0.211-1.41 0.586-0.375 0.375-0.586 0.884-0.586 1.41v10c0 0.53 0.211 1.04 0.586 1.41 0.375 0.375 0.884 0.586 1.41 0.586h12c0.53 0 1.04-0.211 1.41-0.586s0.586-0.884 0.586-1.41v-8c0-0.53-0.211-1.04-0.586-1.41-0.375-0.375-0.884-0.586-1.41-0.586zm-7.3 0.6c0.0932 0.124 0.214 0.225 0.353 0.294 0.139 0.0694 0.292 0.106 0.447 0.106h6.5c0.265 0 0.52 0.105 0.707 0.293 0.188 0.188 0.293 0.442 0.293 0.707v8c0 0.265-0.105 0.52-0.293 0.707s-0.442 0.293-0.707 0.293h-12c-0.265 0-0.52-0.105-0.707-0.293-0.188-0.188-0.293-0.442-0.293-0.707v-10c0-0.265 0.105-0.52 0.293-0.707 0.188-0.188 0.442-0.293 0.707-0.293h3.5l1.2 1.6z" fill="currentColor"/></svg></button>
         </div>
         <div class="action-row">
             <button id="btn-clear-dir" class="btn-clear">Clear</button>
-            <button id="btn-set-view-dir" class="${this._lastDirAction === 'view' ? 'active' : ''}">Set View Dir</button>
-            <button id="btn-set-out-view-dir" class="${this._lastDirAction === 'outview' ? 'active' : ''}">Set View/Out Dir</button>
+            <button id="btn-set-view-dir" class="">Set View Dir</button>
+            <button id="btn-set-out-view-dir" class="">Set View/Out Dir</button>
         </div>
     </div>
     <div id="tooltip" class="tooltip"></div>
-    <div class="plot-area">
-        ${
-            hasPlots
-                ? `<img src="${plotUrl}" alt="Plot ${this._currentIndex + 1}" />`
-                : `<div class="empty-state">
-                       <svg viewBox="0 0 16 16"><path fill="currentColor" d="M2 2h1v11h11v1H2V2zm3 8h2v3H5v-3zm3-4h2v7H8V6zm3-3h2v10h-2V3z"/></svg>
-                       <p>No plots yet.<br/>
-                       Plots generated in the R Console or found in your<br/>
-                       custom directory will automatically appear here.</p>
-                   </div>`
-        }
+    <div class="main-container">
+        <div class="plot-area">
+            <img id="main-image" src="" alt="Plot" style="display: none;" />
+            <div id="empty-state" class="empty-state">
+                <svg viewBox="0 0 16 16"><path fill="currentColor" d="M2 2h1v11h11v1H2V2zm3 8h2v3H5v-3zm3-4h2v7H8V6zm3-3h2v10h-2V3z"/></svg>
+                <p>No plots yet.<br/>
+                Plots generated in the R Console or found in your<br/>
+                custom directory will automatically appear here.</p>
+            </div>
+        </div>
+        <div class="thumbnail-sidebar" id="thumbnail-sidebar"></div>
     </div>
     <script nonce="${nonce}">
+        const moonIcon = \`${moonIcon}\`;
+        const sunIcon = \`${sunIcon}\`;
+        
+        const initialState = {
+            plots: ${JSON.stringify(this._plots.map(uri => this._panel.webview.asWebviewUri(uri).toString() + `?t=${Date.now()}`))},
+            currentIndex: ${this._currentIndex},
+            isNightMode: ${this._isNightMode},
+            customPlotDir: ${JSON.stringify(this._customPlotDir || '')},
+            lastDirAction: ${JSON.stringify(this._lastDirAction || null)}
+        };
+
+        let currentPlots = [];
+
+        function renderState(state) {
+            const hasPlots = state.plots.length > 0;
+            const mainImg = document.getElementById('main-image');
+            const emptyState = document.getElementById('empty-state');
+            const plotBg = state.isNightMode ? '#C8C8C8' : 'white';
+
+            if (hasPlots) {
+                mainImg.src = state.plots[state.currentIndex];
+                mainImg.style.background = plotBg;
+                mainImg.style.display = 'block';
+                emptyState.style.display = 'none';
+            } else {
+                mainImg.style.display = 'none';
+                emptyState.style.display = 'block';
+            }
+
+            const sidebar = document.getElementById('thumbnail-sidebar');
+            if (state.plots.length !== currentPlots.length) {
+                const scrollTop = sidebar.scrollTop;
+                sidebar.innerHTML = state.plots.map((url, i) => 
+                    \`<img src="\${url}" class="thumbnail \${i === state.currentIndex ? 'active' : ''}" data-index="\${i}" loading="lazy" style="background: \${plotBg}" />\`
+                ).join('');
+                sidebar.scrollTop = scrollTop;
+                currentPlots = state.plots;
+            } else {
+                const thumbs = sidebar.querySelectorAll('.thumbnail');
+                thumbs.forEach((t, i) => {
+                    t.style.background = plotBg;
+                    if (i === state.currentIndex) t.classList.add('active');
+                    else t.classList.remove('active');
+                });
+            }
+
+            const activeThumb = sidebar.querySelector('.thumbnail.active');
+            if (activeThumb) {
+                const sidebarRect = sidebar.getBoundingClientRect();
+                const thumbRect = activeThumb.getBoundingClientRect();
+                if (thumbRect.top < sidebarRect.top || thumbRect.bottom > sidebarRect.bottom) {
+                    activeThumb.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            }
+
+            document.querySelector('.counter').textContent = hasPlots ? \`\${state.currentIndex + 1} / \${state.plots.length}\` : '-';
+            
+            const btnPrev = document.getElementById('btn-prev');
+            const btnNext = document.getElementById('btn-next');
+            if (state.currentIndex <= 0) btnPrev.setAttribute('disabled', 'true');
+            else btnPrev.removeAttribute('disabled');
+            if (state.currentIndex >= state.plots.length - 1 || !hasPlots) btnNext.setAttribute('disabled', 'true');
+            else btnNext.removeAttribute('disabled');
+
+            const toggleDisabled = (id, condition) => {
+                const btn = document.getElementById(id);
+                if (condition) btn.setAttribute('disabled', 'true');
+                else btn.removeAttribute('disabled');
+            };
+
+            toggleDisabled('btn-copy', !hasPlots);
+            toggleDisabled('btn-save', !hasPlots);
+            toggleDisabled('btn-night-mode', !hasPlots);
+            toggleDisabled('btn-delete', !hasPlots);
+            toggleDisabled('btn-clear', !hasPlots);
+
+            const nightModeBtn = document.getElementById('btn-night-mode');
+            nightModeBtn.innerHTML = state.isNightMode ? sunIcon : moonIcon;
+            nightModeBtn.setAttribute('data-tooltip', state.isNightMode ? 'Switch to Day Mode' : 'Switch to Night Mode');
+
+            const btnCustomDir = document.getElementById('btn-custom-dir');
+            if (state.customPlotDir) btnCustomDir.classList.add('active');
+            else btnCustomDir.classList.remove('active');
+
+            const dirInput = document.getElementById('dir-input');
+            dirInput.value = state.customPlotDir || '';
+
+            document.getElementById('btn-set-view-dir').className = state.lastDirAction === 'view' ? 'active' : '';
+            document.getElementById('btn-set-out-view-dir').className = state.lastDirAction === 'outview' ? 'active' : '';
+        }
+
         (function() {
             const vscode = acquireVsCodeApi();
+
+            window.addEventListener('message', event => {
+                const message = event.data;
+                if (message.type === 'updateState') {
+                    renderState(message.state);
+                }
+            });
+
+            renderState(initialState);
+
+            document.getElementById('thumbnail-sidebar')?.addEventListener('click', (e) => {
+                if (e.target && e.target.classList.contains('thumbnail')) {
+                    const index = parseInt(e.target.getAttribute('data-index'), 10);
+                    vscode.postMessage({ type: 'navigateTo', index: index });
+                }
+            });
+
             document.getElementById('btn-prev')?.addEventListener('click', () => {
-                vscode.postMessage({ type: 'navigatePrev' });
+                if (!document.getElementById('btn-prev').hasAttribute('disabled')) {
+                    vscode.postMessage({ type: 'navigatePrev' });
+                }
             });
             document.getElementById('btn-next')?.addEventListener('click', () => {
-                vscode.postMessage({ type: 'navigateNext' });
+                if (!document.getElementById('btn-next').hasAttribute('disabled')) {
+                    vscode.postMessage({ type: 'navigateNext' });
+                }
             });
             document.getElementById('btn-clear')?.addEventListener('click', () => {
-                vscode.postMessage({ type: 'clear' });
+                if (!document.getElementById('btn-clear').hasAttribute('disabled')) {
+                    vscode.postMessage({ type: 'clear' });
+                }
             });
             document.getElementById('btn-delete')?.addEventListener('click', () => {
-                vscode.postMessage({ type: 'deleteCurrent' });
+                if (!document.getElementById('btn-delete').hasAttribute('disabled')) {
+                    vscode.postMessage({ type: 'deleteCurrent' });
+                }
             });
             document.getElementById('btn-save')?.addEventListener('click', () => {
-                vscode.postMessage({ type: 'saveAs' });
+                if (!document.getElementById('btn-save').hasAttribute('disabled')) {
+                    vscode.postMessage({ type: 'saveAs' });
+                }
             });
             document.getElementById('btn-night-mode')?.addEventListener('click', () => {
-                vscode.postMessage({ type: 'toggleNightMode' });
+                if (!document.getElementById('btn-night-mode').hasAttribute('disabled')) {
+                    vscode.postMessage({ type: 'toggleNightMode' });
+                }
             });
             document.getElementById('btn-copy')?.addEventListener('click', async () => {
+                if (document.getElementById('btn-copy').hasAttribute('disabled')) return;
                 const img = document.querySelector('.plot-area img');
-                if (!img) return;
+                if (!img || img.style.display === 'none') return;
                 try {
                     const response = await fetch(img.src);
                     const blob = await response.blob();
                     await navigator.clipboard.write([
                         new ClipboardItem({ 'image/png': blob })
                     ]);
-                    // Visual feedback
                     const btn = document.getElementById('btn-copy');
                     const oldHtml = btn.innerHTML;
                     btn.innerHTML = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M6.5 12.2L2.1 7.8l.7-.7 3.7 3.7 7.4-7.4.7.7-8.1 8.1z"/></svg>';
@@ -656,6 +848,7 @@ export class PlotsPanel {
                     console.error('Clipboard failed', err);
                 }
             });
+
             // Custom Directory Dropdown Logic
             const btnCustomDir = document.getElementById('btn-custom-dir');
             const dropdown = document.getElementById('dir-dropdown');
@@ -681,13 +874,11 @@ export class PlotsPanel {
                 dropdown.classList.remove('open');
             });
 
-            // Set View Dir: only changes what the panel watches/displays
             btnSetViewDir?.addEventListener('click', () => {
                 dropdown.classList.remove('open');
                 vscode.postMessage({ type: 'setCustomDir', path: dirInput.value });
             });
 
-            // Set Out/View Dir: redirects R plot output AND changes panel view
             btnSetOutViewDir?.addEventListener('click', () => {
                 dropdown.classList.remove('open');
                 vscode.postMessage({ type: 'setOutViewDir', path: dirInput.value });
@@ -700,7 +891,6 @@ export class PlotsPanel {
                 }
             });
 
-            // Clear: reset both view dir and R output dir to defaults
             btnClearDir?.addEventListener('click', () => {
                 dropdown.classList.remove('open');
                 dirInput.value = '';

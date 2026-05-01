@@ -37,11 +37,7 @@
         "title": "Toggle R Layout",
         "category": "View"
       },
-      {
-        "command": "r-layout.plotGallery.clear",
-        "title": "R Layout: Clear Plot Gallery",
-        "category": "View"
-      },
+
       {
         "command": "r-layout.maximizeTopRight",
         "title": "Maximize Top Pane",

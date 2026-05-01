@@ -198,11 +198,12 @@ export function registerLayoutCommand(
 
     // Track terminal disposal
     context.subscriptions.push(
-        vscode.window.onDidCloseTerminal((t) => {
+        vscode.window.onDidCloseTerminal(async (t) => {
             if (t === rConsoleTerminal || (t.name === 'R Console' && !rConsoleTerminal)) {
                 rConsoleTerminal = undefined;
                 savedDataViewerState = undefined;
                 savedHelpState = undefined;
+                PlotsPanel.resetSessionState();
 
                 // Delete .r-layout directory to prevent left-over files
                 const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -215,6 +216,12 @@ export function registerLayoutCommand(
                     } catch (e) {
                         console.error('Failed to delete .r-layout directory on session end', e);
                     }
+                }
+
+                // If the layout is active, closing the R Console should trigger an exit
+                if (isLayoutActive) {
+                    vscode.window.showInformationMessage('R Console session ended. Exiting R Layout.');
+                    await deactivateLayout();
                 }
             }
             if (t === shellTerminal) { shellTerminal = undefined; }
