@@ -2,6 +2,18 @@
 
 All notable changes to the R Layout extension will be documented in this file.
 
+## [0.6.0] - 2026-05-01
+
+### Added
+- **Seamless Top Pane Maximization**: Implemented a CSS-based content-hiding strategy that minimizes the bottom-right panels to show only their tab bars, maximizing usable workspace without breaking VS Code's editor group constraints.
+- **Robust Layout Restoration**: Engineered a two-step restoration logic (pixel equalization + proportional re-stamping) that prevents horizontal layout corruption on short windows while ensuring panes resize proportionally during window expansion.
+- **Progress-Synced Notifications**: Replaced static informational messages with ephemeral progress-bar notifications that stay in sync with actual activation/deactivation timing.
+
+### Changed
+- **Local Workspace Structure**: Introduced a private `temp/` directory (automatically ignored via `.git/info/exclude`) for local scratchpads and experimental assets.
+- **Documentation Overhaul**: Standardized the README, internal source comments, and project manifests to reflect the latest feature set.
+
+
 ## [0.5.0] - 2026-04-29
 
 ### Added

@@ -15,8 +15,8 @@ Before you begin, ensure you have the following installed:
 Clone the repository and install the dependencies:
 
 ```bash
-git clone https://github.com/oridwanbello/R-Layout.git
-cd R-Layout
+git clone https://github.com/oridwanbello/r-layout.git
+cd r-layout
 npm install
 ```
 

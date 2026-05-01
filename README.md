@@ -8,32 +8,27 @@ R Layout brings the familiar multi-pane workflow of RStudio to VS Code and its f
 
 ### Instant Layout Orchestration
 One click to transform your editor into an asymmetrical 3-pane grid:
-- Left Pane: Main source editor (Full Height).
-- Top-Right Pane: Console, Terminal, Problems, and Help.
-- Bottom-Right Pane: Environment Explorer, Plots, and Data Viewer.
+- **Left Pane**: Main source editor (Full Height).
+- **Top-Right Pane**: R Console, Terminal, Problems, and Help.
+- **Bottom-Right Pane**: Workspace Explorer, Plots, and Data Viewer.
 
-### Universal AI Integration
-Choose your preferred AI assistant for the console layout using the extension settings. The layout seamlessly integrates your terminal and workspace panels alongside standard editor groups.
-
-### Environment Explorer
-A live variable inspector powered by the Debug Adapter Protocol (DAP):
-- Type-aware icons for numbers, strings, arrays, dataframes, and functions.
-- Expandable nested objects.
-- Auto-refreshes when the debugger pauses.
+### Workspace Explorer
+A live variable inspector that synchronizes with your R session to display:
+- Active variables, types, and values.
+- Direct interaction with the Data Viewer for dataframes and tibbles.
 
 ### Plot Gallery
-A dedicated panel that watches for new plot outputs:
-- Custom Plot Directory: Override the default output folder via a native folder picker.
-- Canvas Aesthetic: High-fidelity rendering with internal padding and shadows.
-- Navigate: History navigation with previous and next controls.
-- Supports: PNG, JPG, SVG, GIF, WebP, BMP, and ICO.
+A high-fidelity rendering panel for your R plots:
+- **Auto-Sync**: Automatically detects and displays new plots generated from the console.
+- **Save-As**: Export any plot to PNG or SVG with white-background enforcement.
+- **History**: Navigate through your session's plot history with dedicated controls.
 
 ### Data Viewer
-Inspect dataframes directly from your R session:
-- Silent Manual Refresh: Re-read data from disk with one click, consuming zero background resources.
-- Type-aware Column Formatting: Clean, readable tables with automatic alignment.
-- Sorting and Filtering: Real-time row filtering and click-to-sort columns.
-- Night Mode: Fully dimmed dark mode support for late-night data exploration.
+A high-performance spreadsheet-style inspector:
+- **Silent Refresh**: Zero-resource background footprint; refreshes only on demand.
+- **Search & Sort**: Real-time filtering and multi-column sorting.
+- **Responsive Theme**: Automatic light/dark mode support with curated aesthetics.
+
 
 ## Getting Started
 
@@ -47,7 +42,6 @@ Inspect dataframes directly from your R session:
 | Setting | Default | Description |
 |---|---|---|
 | r-layout.rConsolePath | "R" | Path or command for the R Console terminal. |
-| r-layout.plotOutputDir | ".r-layout/plots" | Relative path to the directory where plot images are saved. |
 | r-layout.useArkInteractiveConsole | false | If true, launches a Jupyter Interactive Window as the R Console. |
 
 ## Commands
@@ -56,9 +50,10 @@ Inspect dataframes directly from your R session:
 |---|---|
 | Toggle R Layout | Snap the editor into or out of the 3-pane grid. |
 | R Layout: Clear Plot Gallery | Clear all plots from the Plot Gallery. |
-| Maximize Top Pane | Expand the top-right pane to fill the right column. |
+| Maximize Top Pane | Expand the top-right pane; minimizes bottom panes to tabs. |
 | Restore Pane Split | Restore the even split between top-right and bottom-right panes. |
 | Source File to R Console | Execute the active R script in the console. |
+
 
 ## Development
 
