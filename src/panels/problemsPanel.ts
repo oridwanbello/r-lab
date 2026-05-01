@@ -164,14 +164,13 @@ export class ProblemsPanel {
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             flex-shrink: 0;
         }
-        .pane-title { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7; }
-        .summary { font-size: 11px; opacity: 0.7; }
+        .pane-title { font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7; }
+        .summary { opacity: 0.7; }
         .content { flex: 1; overflow: auto; }
         .file-group { margin-bottom: 2px; }
         .file-header {
             padding: 4px 12px;
-            font-weight: 900;
-            font-size: 11px;
+            color: var(--vscode-textLink-foreground);
             background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             position: sticky;
@@ -183,7 +182,7 @@ export class ProblemsPanel {
         .diag-row:hover td { background: var(--vscode-list-hoverBackground); }
         td { padding: 3px 6px; vertical-align: top; border-bottom: 1px solid var(--vscode-editorGroup-border); }
         .icon-col { width: 20px; text-align: center; }
-        .loc-col { width: 50px; opacity: 0.6; font-family: var(--vscode-editor-font-family, monospace); font-size: 11px; }
+        .loc-col { width: 50px; opacity: 0.6; font-family: var(--vscode-editor-font-family, monospace); }
         .msg-col { word-break: break-word; white-space: normal; }
         
         /* Empty State Styling */

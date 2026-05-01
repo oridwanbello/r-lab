@@ -501,7 +501,7 @@ tryCatch({
         ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
         body {
             font-family: var(--vscode-font-family);
-            font-weight: 900; font-size: 12px; letter-spacing: 0.3px; color: var(--vscode-editor-foreground); opacity: 1;           background: var(--vscode-editor-background);
+            font-weight: 400; font-size: 12px; letter-spacing: 0.3px; color: var(--vscode-editor-foreground); opacity: 1;           background: var(--vscode-editor-background);
             display: flex;
             flex-direction: column;
             height: 100vh;
@@ -519,8 +519,8 @@ tryCatch({
             flex-shrink: 0;
         }
         .pane-title {
-            font-weight: 600; font-size: 11px;
-            text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7;
+            font-weight: 600;
+            letter-spacing: 0.5px; opacity: 0.7;
         }
         .toolbar-actions { display: flex; align-items: center; gap: 6px; }
         .toolbar button {
@@ -547,7 +547,7 @@ tryCatch({
         }
 
         .tabs { display: flex; border-bottom: 1px solid var(--vscode-editorGroup-border); background: var(--vscode-editor-background); }
-        .tab { padding: 8px 12px; cursor: pointer; opacity: 0.6; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid transparent; }
+        .tab { padding: 8px 12px; cursor: pointer; opacity: 0.6; font-weight: 600; letter-spacing: 0.5px; border-bottom: 2px solid transparent; }
         .tab:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
         .tab.active { opacity: 1; border-bottom: 2px solid var(--vscode-textLink-foreground); color: var(--vscode-textLink-foreground); }
 
@@ -559,7 +559,6 @@ tryCatch({
             position: sticky; top: 0; z-index: 1;
             padding: 4px 8px;
             text-align: left;
-            font-size: 11px;
             font-weight: 900;
             text-transform: none;
             letter-spacing: 0.3px;
@@ -575,22 +574,20 @@ tryCatch({
         .name-col { width: 1%; white-space: nowrap; padding-right: 16px !important; }
         .var-name {
             font-family: var(--vscode-editor-font-family, monospace);
-            font-size: 12px;
             font-weight: 600;
-            color: var(--vscode-textLink-foreground);
         }
         .type-col {
             width: 1%;
             white-space: nowrap;
             padding-right: 16px !important;
             font-family: var(--vscode-editor-font-family, monospace);
-            font-size: 11px; opacity: 0.7;
+            opacity: 0.7;
         }
-        .size-col { width: 1%; white-space: nowrap; padding-right: 16px !important; opacity: 0.6; font-size: 11px; }
+        .size-col { width: 1%; white-space: nowrap; padding-right: 16px !important; opacity: 0.6; }
         .preview-col {
             width: auto;
             font-family: var(--vscode-editor-font-family, monospace);
-            font-size: 11px; opacity: 0.8;
+            opacity: 0.8;
             vertical-align: top;
         }
         .simple-list { list-style: none; padding: 0; margin: 0; }
@@ -598,7 +595,6 @@ tryCatch({
             padding: 5px 12px;
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             font-family: var(--vscode-editor-font-family, monospace);
-            font-size: 12px;
         }
         .view-btn {
             display: inline-flex;
@@ -609,8 +605,8 @@ tryCatch({
             cursor: pointer;
             padding: 0;
             margin-left: 6px;
-            color: var(--vscode-foreground);
-            opacity: 0.4;
+            color: var(--vscode-textLink-foreground);
+            opacity: 1;
             vertical-align: middle;
             flex-shrink: 0;
         }
@@ -626,7 +622,6 @@ tryCatch({
             color: var(--vscode-editorHoverWidget-foreground, #cccccc);
             padding: 2px 8px;
             border-radius: 3px;
-            font-size: 11px;
             font-weight: normal;
             z-index: 1000;
             pointer-events: none;

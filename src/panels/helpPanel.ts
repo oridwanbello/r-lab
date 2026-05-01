@@ -374,7 +374,7 @@ export class HelpPanel {
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             flex-shrink: 0;
         }
-        .pane-title { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7; }
+        .pane-title { font-weight: 600; letter-spacing: 0.5px; opacity: 0.7; }
         .search-bar {
             display: flex; gap: 6px; padding: 8px 12px;
             background: var(--vscode-editor-background);
@@ -443,7 +443,7 @@ export class HelpPanel {
             padding: 1px 5px; border-radius: 3px; font-size: 12px;
         }
         .section-label {
-            display: block; font-size: 11px; text-transform: uppercase;
+            display: block;
             letter-spacing: 0.5px; opacity: 0.5; margin-bottom: 6px; margin-top: 14px;
         }
         .recent-links { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -462,7 +462,8 @@ export class HelpPanel {
             background: var(--vscode-editorGroupHeader-tabsBackground);
             border: 1px solid var(--vscode-editorGroup-border);
             border-radius: 6px; text-decoration: none;
-            color: var(--vscode-foreground); font-size: 12px; cursor: pointer;
+            color: var(--vscode-foreground); cursor: pointer;
+            white-space: nowrap;
         }
         .link-card .icon {
             width: 20px; height: 20px; flex-shrink: 0;
@@ -498,7 +499,6 @@ export class HelpPanel {
             color: var(--vscode-editorHoverWidget-foreground, #cccccc);
             padding: 2px 8px;
             border-radius: 3px;
-            font-size: 11px;
             font-weight: normal;
             z-index: 1000;
             pointer-events: none;

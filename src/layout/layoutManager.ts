@@ -206,17 +206,7 @@ export function registerLayoutCommand(
                 PlotsPanel.resetSessionState();
 
                 // Delete .r-layout directory to prevent left-over files
-                const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-                if (wf) {
-                    const rLayoutDir = path.join(wf, '.r-layout');
-                    try {
-                        if (fs.existsSync(rLayoutDir)) {
-                            fs.rmSync(rLayoutDir, { recursive: true, force: true });
-                        }
-                    } catch (e) {
-                        console.error('Failed to delete .r-layout directory on session end', e);
-                    }
-                }
+                deleteRLayoutDir();
 
                 // If the layout is active, closing the R Console should trigger an exit
                 if (isLayoutActive) {
@@ -394,21 +384,8 @@ export async function resetStaleLayout(
  * our activation code can collapse it.
  */
 export async function collapseLayoutForShutdown(): Promise<void> {
-    // Always clean up the .r-layout temp directory on shutdown, regardless of
-    // whether the layout is currently active. After an extension-host restart
-    // during development, isLayoutActive is false in memory even though the
-    // directory exists from the previous session.
-    const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (wf) {
-        const rLayoutDir = path.join(wf, '.r-layout');
-        try {
-            if (fs.existsSync(rLayoutDir)) {
-                fs.rmSync(rLayoutDir, { recursive: true, force: true });
-            }
-        } catch (e) {
-            console.error('[R Layout] Failed to delete .r-layout on shutdown', e);
-        }
-    }
+    // Always clean up the .r-layout temp directory on shutdown.
+    deleteRLayoutDir();
 
     if (!isLayoutActive) {
         // Layout wasn't active - no layout state to collapse.
@@ -695,9 +672,6 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                 await delay(10);
             }
 
-            // Restore focus to Group 1
-            try { await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'); } catch {}
-            await delay(10);
         } else {
             // New session: create directly in ViewColumn.Two
             rConsoleTerminal = vscode.window.createTerminal({
@@ -734,7 +708,6 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
             await delay(10);
         }
 
-        try { await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'); } catch {}
     } else {
         shellTerminal = vscode.window.createTerminal({
             name: 'Terminal',
@@ -769,7 +742,6 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
         await vscode.commands.executeCommand('workbench.action.firstEditorInGroup');
     } catch {}
-    await delay(10);
 
     // 11. Group 3 (bottom-right): Workspace → Plots → Data Viewer  (Workspace FIRST, Workspace FOCUSED)
     //     Create Workspace first (leftmost tab), then Plots, then Data Viewer.
@@ -1390,7 +1362,7 @@ if (exists(".First", envir = .GlobalEnv)) {
 
 # 5. Data Viewer export function.
 #    .rlayout_csv and .rlayout_meta are already set above - no paths needed at call time.
-.r_layout_export_data <- function(varName) {
+.r_layout_view_data <- function(varName) {
   .rlayout_active_df_to_export <<- varName
   tryCatch({
     obj <- get(varName, envir = .GlobalEnv)
@@ -1451,4 +1423,21 @@ invisible(local({
 
 function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+/**
+ * Deletes the .r-layout temporary directory in the current workspace.
+ */
+function deleteRLayoutDir() {
+    const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (wf) {
+        const rLayoutDir = path.join(wf, '.r-layout');
+        try {
+            if (fs.existsSync(rLayoutDir)) {
+                fs.rmSync(rLayoutDir, { recursive: true, force: true });
+            }
+        } catch (e) {
+            // Log to console but don't block the UI
+            console.error('[R Layout] Failed to delete .r-layout directory', e);
+        }
+    }
 }

@@ -108,7 +108,7 @@ export class DataViewerPanel {
 
     /** Load and display a variable from the LIVE R session.
      *
-     *  We send a single short command (.r_layout_export_data) to the R terminal,
+     *  We send a single short command (.r_layout_view_data) to the R terminal,
      *  which avoids polluting the user's history with massive chunks of code.
      */
     public async loadVariable(varName: string, isAutoRefresh: boolean = false): Promise<void> {
@@ -153,7 +153,7 @@ export class DataViewerPanel {
 
             // Send the clean command directly. The invisible path-setting is no longer needed
             // because the paths are pre-set securely in the Rprofile hook.
-            rTerminal.sendText(`.r_layout_export_data("${varName}")`, true);
+            rTerminal.sendText(`.r_layout_view_data("${varName}")`, true);
         }
 
         // Poll for the meta file (up to 10 s if manual, 0s if auto).
@@ -333,7 +333,7 @@ export class DataViewerPanel {
                 ${truncated}
                 <div class="table-wrapper">
                     <table>
-                        <thead><tr><th class="row-num"><span style="opacity: 0.35;">#</span></th>${headerCells}</tr></thead>
+                        <thead><tr><th class="row-num">#</th>${headerCells}</tr></thead>
                         <tbody id="table-body"></tbody>
                     </table>
                 </div>`;
@@ -377,7 +377,6 @@ export class DataViewerPanel {
             background: none;
         }
         .meta {
-            font-size: 11px;
             font-weight: 600;
             color: var(--vscode-textLink-foreground);
             font-family: var(--vscode-editor-font-family, monospace);
@@ -408,13 +407,12 @@ export class DataViewerPanel {
         }
         .truncation-notice {
             padding: 4px 12px;
-            font-size: 11px;
             background: var(--vscode-editorInfo-background, rgba(60, 130, 250, 0.1));
             color: var(--vscode-editorInfo-foreground, var(--vscode-foreground));
             border-bottom: 1px solid var(--vscode-editorGroup-border);
         }
         .table-wrapper { flex: 1; overflow: auto; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; }
         th, td {
             padding: 4px 10px;
             text-align: left;
@@ -422,13 +420,12 @@ export class DataViewerPanel {
             border-right: 1px solid var(--vscode-editorGroup-border);
             white-space: nowrap; /* Prevent data from spilling to next line */
             font-family: var(--vscode-editor-font-family, monospace);
-            font-size: 11px;
         }
         th {
             position: sticky; top: 0; z-index: 1;
             background: var(--vscode-editor-background);
             font-family: var(--vscode-font-family);
-            font-weight: 900; font-size: 11px; letter-spacing: 0.3px; color: var(--vscode-editor-foreground); opacity: 1;
+            font-weight: 900; letter-spacing: 0.3px; color: var(--vscode-editor-foreground); opacity: 1;
             cursor: pointer; user-select: none;
             border-bottom: 2px solid var(--vscode-editorGroup-border);
         }
@@ -444,13 +441,16 @@ export class DataViewerPanel {
         }
         th.sort-asc .sort-icon, th.sort-desc .sort-icon { opacity: 1; color: var(--vscode-textLink-foreground); font-weight: bold; }
         td.row-num {
-            width: 40px; text-align: right; opacity: 0.35;
-            font-size: 10px; padding-right: 8px !important;
+            width: 40px; text-align: right; 
+            padding-right: 8px !important;
+            font-style: italic;
+            color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 65%);
         }
         th.row-num {
-            width: 40px; text-align: right;
-            font-size: 10px; padding-right: 8px !important;
-            opacity: 1;
+            width: 40px; text-align: right; 
+            padding-right: 8px !important;
+            font-style: italic;
+            color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 65%);
         }
         td {
             max-width: 400px;
@@ -470,7 +470,6 @@ export class DataViewerPanel {
             color: var(--vscode-editorHoverWidget-foreground, #cccccc);
             padding: 2px 8px;
             border-radius: 3px;
-            font-size: 11px;
             font-weight: normal;
             z-index: 1000;
             pointer-events: none;
