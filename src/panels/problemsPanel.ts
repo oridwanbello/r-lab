@@ -146,7 +146,7 @@ export class ProblemsPanel {
         ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
         body {
             font-family: var(--vscode-font-family);
-            font-size: 12px;
+            font-size: var(--vscode-font-size, 13px);
             color: var(--vscode-editor-foreground);
             background: var(--vscode-editor-background);
             display: flex;

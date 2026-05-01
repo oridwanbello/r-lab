@@ -353,7 +353,7 @@ export class DataViewerPanel {
         ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
         body {
             font-family: var(--vscode-font-family);
-            font-size: 12px;
+            font-size: var(--vscode-font-size, 13px);
             color: var(--vscode-editor-foreground);
             background: var(--vscode-editor-background);
             display: flex;
@@ -386,8 +386,8 @@ export class DataViewerPanel {
             background: none;
             color: var(--vscode-foreground);
             border: none; padding: 3px 6px;
-            border-radius: 3px; cursor: pointer;
-            font-size: 13px; opacity: 0.7;
+            border-radius: 6px; cursor: pointer;
+            font-size: var(--vscode-font-size, 13px); opacity: 0.7;
             display: flex; align-items: center; justify-content: center;
         }
         .toolbar button:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground); }
@@ -420,6 +420,7 @@ export class DataViewerPanel {
             border-right: 1px solid var(--vscode-editorGroup-border);
             white-space: nowrap; /* Prevent data from spilling to next line */
             font-family: var(--vscode-editor-font-family, monospace);
+            vertical-align: middle;
         }
         th {
             position: sticky; top: 0; z-index: 1;
@@ -436,18 +437,18 @@ export class DataViewerPanel {
         }
         th.sortable .col-name { margin-right: 6px; }
         th.sortable .sort-icon {
-            font-size: 12px; opacity: 0.4; vertical-align: middle;
+            font-size: 0.9em; opacity: 0.4; vertical-align: middle;
             display: inline-block; min-width: 16px; text-align: center;
         }
         th.sort-asc .sort-icon, th.sort-desc .sort-icon { opacity: 1; color: var(--vscode-textLink-foreground); font-weight: bold; }
         td.row-num {
-            width: 40px; text-align: right; 
+            width: 40px; text-align: right;
             padding-right: 8px !important;
             font-style: italic;
             color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 65%);
         }
         th.row-num {
-            width: 40px; text-align: right; 
+            width: 40px; text-align: right;
             padding-right: 8px !important;
             font-style: italic;
             color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 65%);
@@ -468,8 +469,9 @@ export class DataViewerPanel {
             position: fixed;
             background: var(--vscode-editorHoverWidget-background, #252526);
             color: var(--vscode-editorHoverWidget-foreground, #cccccc);
-            padding: 2px 8px;
-            border-radius: 3px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: calc(1em - 1px);
             font-weight: normal;
             z-index: 1000;
             pointer-events: none;
@@ -484,7 +486,7 @@ export class DataViewerPanel {
             justify-content: center; height: 100%; text-align: center; opacity: 0.3;
         }
         .empty-state svg { width: 64px; height: 64px; margin-bottom: 16px; display: inline-block; }
-        .empty-state p { font-size: 13px; line-height: 1.6; }
+        .empty-state p { font-size: var(--vscode-font-size, 13px); line-height: 1.6; }
     </style>
 </head>
 <body${this._isMinimized ? ' class="minimized"' : ''}>

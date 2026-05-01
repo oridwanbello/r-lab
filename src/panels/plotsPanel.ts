@@ -412,7 +412,7 @@ export class PlotsPanel {
         ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
         body {
             font-family: var(--vscode-font-family);
-            font-size: 13px;
+            font-size: var(--vscode-font-size, 13px);
             color: var(--vscode-editor-foreground);
             background: var(--vscode-editor-background);
             display: flex;
@@ -437,7 +437,7 @@ export class PlotsPanel {
             gap: 6px;
         }
         .counter {
-            font-size: 12px;
+            font-size: 0.9em;
             opacity: 0.7;
             min-width: 44px;
             text-align: center;
@@ -448,9 +448,9 @@ export class PlotsPanel {
             color: var(--vscode-foreground);
             border: none;
             padding: 3px 6px;
-            border-radius: 3px;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 13px;
+            font-size: var(--vscode-font-size, 13px);
             opacity: 0.7;
         }
         .toolbar button:hover:not([disabled]) {
@@ -472,8 +472,9 @@ export class PlotsPanel {
             position: fixed;
             background: var(--vscode-editorHoverWidget-background, #252526);
             color: var(--vscode-editorHoverWidget-foreground, #cccccc);
-            padding: 2px 8px;
-            border-radius: 3px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: calc(1em - 1px);
             font-weight: normal;
             z-index: 1000;
             pointer-events: none;
@@ -506,14 +507,14 @@ export class PlotsPanel {
         }
         .thumbnail-sidebar::-webkit-scrollbar-thumb {
             background: var(--vscode-scrollbarSlider-background);
-            border-radius: 3px;
+            border-radius: 6px;
         }
         .thumbnail {
             width: 100%;
             height: auto;
             object-fit: contain;
             border: 2px solid transparent;
-            border-radius: 4px;
+            border-radius: 6px;
             cursor: pointer;
             transition: all 0.2s ease;
             background: white;
@@ -548,7 +549,7 @@ export class PlotsPanel {
             object-fit: contain;
             background: white;
             padding: 16px;
-            border-radius: 4px;
+            border-radius: 6px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
             transition: background-color 0.2s ease;
         }
@@ -557,12 +558,12 @@ export class PlotsPanel {
             opacity: 0.3;
         }
         .empty-state svg { width: 64px; height: 64px; margin-bottom: 16px; display: inline-block; }
-        .empty-state p { font-size: 13px; line-height: 1.6; }
+        .empty-state p { font-size: var(--vscode-font-size, 13px); line-height: 1.6; }
         .empty-state code {
             background: var(--vscode-textCodeBlock-background);
             padding: 2px 5px;
-            border-radius: 3px;
-            font-size: 12px;
+            border-radius: 6px;
+            font-size: 0.9em;
         }
 
         /* Dropdown styles */
@@ -594,8 +595,8 @@ export class PlotsPanel {
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border, transparent);
             padding: 4px 6px;
-            border-radius: 4px;
-            font-size: 12px;
+            border-radius: 6px;
+            font-size: 0.9em;
             outline: none;
         }
         .dir-dropdown input::placeholder {
@@ -610,9 +611,9 @@ export class PlotsPanel {
             color: var(--vscode-button-secondaryForeground);
             border: none;
             padding: 4px 8px;
-            border-radius: 4px;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 12px;
+            font-size: 0.9em;
             opacity: 1;
         }
         .dir-dropdown .btn-browse:hover {
@@ -634,9 +635,9 @@ export class PlotsPanel {
             color: var(--vscode-button-background);
             border: 1px solid var(--vscode-button-background);
             padding: 4px 8px;
-            border-radius: 4px;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 11.5px;
+            font-size: 0.85em;
             opacity: 1;
             white-space: nowrap;
         }
@@ -692,7 +693,7 @@ export class PlotsPanel {
     <script nonce="${nonce}">
         const moonIcon = \`${moonIcon}\`;
         const sunIcon = \`${sunIcon}\`;
-        
+
         const initialState = {
             plots: ${JSON.stringify(this._plots.map(uri => this._panel.webview.asWebviewUri(uri).toString() + `?t=${Date.now()}`))},
             currentIndex: ${this._currentIndex},
@@ -724,7 +725,7 @@ export class PlotsPanel {
             const sidebar = document.getElementById('thumbnail-sidebar');
             if (state.plots.length !== currentPlots.length) {
                 const scrollTop = sidebar.scrollTop;
-                sidebar.innerHTML = state.plots.map((url, i) => 
+                sidebar.innerHTML = state.plots.map((url, i) =>
                     \`<img src="\${url}" class="thumbnail \${i === state.currentIndex ? 'active' : ''}" data-index="\${i}" loading="lazy" style="background: \${plotBg}" />\`
                 ).join('');
                 sidebar.scrollTop = scrollTop;
@@ -748,7 +749,7 @@ export class PlotsPanel {
             }
 
             document.querySelector('.counter').textContent = hasPlots ? \`\${state.currentIndex + 1} / \${state.plots.length}\` : '-';
-            
+
             const btnPrev = document.getElementById('btn-prev');
             const btnNext = document.getElementById('btn-next');
             if (state.currentIndex <= 0) btnPrev.setAttribute('disabled', 'true');

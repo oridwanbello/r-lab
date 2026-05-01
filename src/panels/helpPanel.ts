@@ -254,7 +254,7 @@ export class HelpPanel {
 
         const rdocIconUri = this._panel.webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'resources', 'rdocumentation.svg'));
         const rLogoUri = this._panel.webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'resources', 'r-logo.svg'));
-        
+
         const tidyverseSvgPath = vscode.Uri.joinPath(this._extensionUri, 'resources', 'tidyverse.svg').fsPath;
         let tidyverseSvg = fs.readFileSync(tidyverseSvgPath, 'utf8');
         // Make it responsive and secure
@@ -328,7 +328,7 @@ export class HelpPanel {
         pre {
             background: var(--vscode-textCodeBlock-background);
             color: var(--vscode-editor-foreground);
-            border-radius: 4px; padding: 10px; overflow-x: auto; margin: 10px 0;
+            border-radius: 6px; padding: 10px; overflow-x: auto; margin: 10px 0;
             font-family: var(--vscode-editor-font-family, monospace);
         }
         code {
@@ -336,7 +336,7 @@ export class HelpPanel {
         }
         /* Removed background on inline code blocks to prevent jarring highlights */
         p > code, li > code {
-            padding: 2px 4px; border-radius: 3px;
+            padding: 2px 4px; border-radius: 6px;
         }
 
         /* Native R Syntax Highlighting Colors - RStudio inspired but theme adaptive */
@@ -357,7 +357,7 @@ export class HelpPanel {
         ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
         body {
             font-family: var(--vscode-font-family);
-            font-size: 13px;
+            font-size: var(--vscode-font-size, 13px);
             color: var(--vscode-editor-foreground);
             background: var(--vscode-editor-background);
             display: flex;
@@ -387,13 +387,13 @@ export class HelpPanel {
             background: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border, transparent);
-            padding: 5px 10px; border-radius: 4px; font-size: 13px; outline: none;
+            padding: 5px 10px; border-radius: 6px; font-size: var(--vscode-font-size, 13px); outline: none;
         }
         .search-bar input:focus { border-color: var(--vscode-focusBorder); }
         .search-bar input::placeholder { color: var(--vscode-input-placeholderForeground); }
         .search-bar button {
             background: var(--vscode-button-background); color: var(--vscode-button-foreground);
-            border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600;
+            border: none; padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 1.1em; font-weight: 600;
         }
         .search-bar button:hover { background: var(--vscode-button-hoverBackground); }
         .btn-home {
@@ -410,20 +410,33 @@ export class HelpPanel {
 
         .help-html-content {
             padding: 16px 20px;
-            font-size: 13px; line-height: 1.6;
+            font-size: var(--vscode-font-size, 13px); line-height: 1.6;
         }
         .help-html-content h2, .help-html-content h3 {
-            margin-top: 1.5em; margin-bottom: 0.8em;
+            margin-top: 2em; margin-bottom: 1em;
             color: var(--vscode-editor-foreground);
-            font-weight: 600;
-            border-bottom: 3px double currentColor;
-            padding-bottom: 4px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--vscode-editorGroup-border);
+            padding-bottom: 8px;
+            position: relative;
         }
-        .help-html-content h2 { font-size: 16px; }
-        .help-html-content h3 { font-size: 14px; }
+        .help-html-content h2::after, .help-html-content h3::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            width: 40px;
+            height: 3px;
+            background: var(--vscode-textLink-foreground);
+            border-radius: 6px;
+        }
+        .help-html-content h2 { font-size: 1.1em; }
+        .help-html-content h3 { font-size: var(--vscode-font-size, 13px); }
         .help-html-content pre {
             padding: 12px;
-            border-radius: 4px;
+            border-radius: 6px;
             overflow-x: auto;
             margin: 10px 0;
         }
@@ -437,10 +450,10 @@ export class HelpPanel {
         }
         .help-html-content th { font-weight: 600; }
         .empty-state { padding: 20px; }
-        .tip { font-size: 13px; opacity: 0.6; line-height: 1.7; margin-bottom: 18px; }
+        .tip { font-size: var(--vscode-font-size, 13px); opacity: 0.6; line-height: 1.7; margin-bottom: 18px; }
         .tip code {
             background: var(--vscode-textCodeBlock-background);
-            padding: 1px 5px; border-radius: 3px; font-size: 12px;
+            padding: 1px 5px; border-radius: 6px; font-size: 0.9em;
         }
         .section-label {
             display: block;
@@ -450,10 +463,10 @@ export class HelpPanel {
         .recent-link {
             color: var(--vscode-textLink-foreground); text-decoration: none;
             font-family: var(--vscode-editor-font-family, monospace);
-            font-size: 12px; cursor: pointer;
+            font-size: 0.9em; cursor: pointer;
             padding: 3px 8px;
             background: var(--vscode-editorGroupHeader-tabsBackground);
-            border-radius: 4px;
+            border-radius: 6px;
         }
         .recent-link:hover { text-decoration: underline; }
         .links-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
@@ -482,7 +495,7 @@ export class HelpPanel {
             white-space: pre !important;
             overflow-x: auto !important;
             font-family: var(--vscode-editor-font-family, monospace) !important;
-            font-size: 13px !important;
+            font-size: var(--vscode-font-size, 13px) !important;
             line-height: 1.6 !important;
         }
         .pkg-func-link, .external-link {
@@ -497,8 +510,9 @@ export class HelpPanel {
             position: fixed;
             background: var(--vscode-editorHoverWidget-background, #252526);
             color: var(--vscode-editorHoverWidget-foreground, #cccccc);
-            padding: 2px 8px;
-            border-radius: 3px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: calc(1em - 1px);
             font-weight: normal;
             z-index: 1000;
             pointer-events: none;

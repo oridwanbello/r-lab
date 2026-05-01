@@ -501,7 +501,7 @@ tryCatch({
         ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
         body {
             font-family: var(--vscode-font-family);
-            font-weight: 400; font-size: 12px; letter-spacing: 0.3px; color: var(--vscode-editor-foreground); opacity: 1;           background: var(--vscode-editor-background);
+            font-weight: 400; font-size: var(--vscode-font-size, 13px); letter-spacing: 0.3px; color: var(--vscode-editor-foreground); opacity: 1;           background: var(--vscode-editor-background);
             display: flex;
             flex-direction: column;
             height: 100vh;
@@ -528,7 +528,7 @@ tryCatch({
             color: var(--vscode-foreground);
             border: none;
             padding: 3px 6px;
-            border-radius: 3px;
+            border-radius: 6px;
             cursor: pointer;
             font-size: 16px;
             line-height: 1;
@@ -557,18 +557,19 @@ tryCatch({
         table { width: 100%; border-collapse: collapse; }
         thead th {
             position: sticky; top: 0; z-index: 1;
-            padding: 4px 8px;
+            padding: 6px 8px;
             text-align: left;
             font-weight: 900;
             text-transform: none;
             letter-spacing: 0.3px;
             background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
+            vertical-align: middle;
         }
         .var-row td {
             padding: 4px 8px;
             border-bottom: 1px solid var(--vscode-editorGroup-border);
-            vertical-align: top;
+            vertical-align: middle;
         }
         .var-row:hover td { background: var(--vscode-list-hoverBackground); }
         .name-col { width: 1%; white-space: nowrap; padding-right: 16px !important; }
@@ -588,13 +589,16 @@ tryCatch({
             width: auto;
             font-family: var(--vscode-editor-font-family, monospace);
             opacity: 0.8;
-            vertical-align: top;
+            vertical-align: middle;
         }
         .simple-list { list-style: none; padding: 0; margin: 0; }
         .simple-list li {
-            padding: 5px 12px;
+            padding: 4px 12px;
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             font-family: var(--vscode-editor-font-family, monospace);
+            display: flex;
+            align-items: center;
+            min-height: 25px; /* Ensures height parity with table rows */
         }
         .view-btn {
             display: inline-flex;
@@ -620,8 +624,9 @@ tryCatch({
             position: fixed;
             background: var(--vscode-editorHoverWidget-background, #252526);
             color: var(--vscode-editorHoverWidget-foreground, #cccccc);
-            padding: 2px 8px;
-            border-radius: 3px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: calc(1em - 1px);
             font-weight: normal;
             z-index: 1000;
             pointer-events: none;
@@ -637,7 +642,7 @@ tryCatch({
             padding: 20px;
         }
         .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
-        .empty-state p { font-size: 13px; line-height: 1.6; }
+        .empty-state p { font-size: var(--vscode-font-size, 13px); line-height: 1.6; }
     </style>
 </head>
 <body>
