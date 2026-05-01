@@ -10,20 +10,21 @@ import { DataViewerPanel } from '../panels/dataViewerPanel';
 /**
  * R Layout Layout Manager
  *
- * Orchestrates a true 4-layout RStudio layout:
+ * Orchestrates an asymmetrical 3-pane RStudio-style layout:
  *
- *   ┌───────────────────┬───────────────────┐
- *   │ 1 Source Editor   │ 3 AI Chat        │
- *   │                   │   + Help          │
- *   ├───────────────────┼───────────────────┤
- *   │ 2 R Console       │ 4 Workspace      │
- *   │  | Terminal        │   | Plots | Data │
- *   │  | Problems        │                  │
- *   └───────────────────┴───────────────────┘
+ *   ┌──────────────────────────────┬──────────────────────────────┐
+ *   │                              │                              │
+ *   │                              │       2 R Console / Term     │
+ *   │                              │                              │
+ *   │      1 Source Editor         ├──────────────────────────────┤
+ *   │       (Full Height)          │                              │
+ *   │                              │       3 Workspace / Plots    │
+ *   │                              │                              │
+ *   └──────────────────────────────┴──────────────────────────────┘
  *
  * On activation:
  *   - Saves open source files, then closes ALL editors & terminals
- *   - Sets the 2×2 layout, opens panels, reopens source files
+ *   - Sets the 3-pane layout, opens panels, reopens source files
  *
  * On deactivation:
  *   - Disposes webview panels, moves terminals back to bottom panel,
@@ -41,6 +42,7 @@ let savedHelpState: any | undefined;
 let statusBarItem: vscode.StatusBarItem;
 let extensionContext: vscode.ExtensionContext;
 let currentAnchorUri: string | undefined;
+let cachedWorkspaceRoots: string[] = [];
 
 export function getRConsoleTerminal(): vscode.Terminal | undefined {
     return rConsoleTerminal;
@@ -56,6 +58,15 @@ export function registerLayoutCommand(
     extensionContext = context;
     // Restore persisted state
     isLayoutActive = context.workspaceState.get<boolean>(STATE_KEY, false);
+
+    // Cache workspace roots early so shutdown cleanup works even if
+    // workspaceFolders is undefined during window close.
+    captureWorkspaceRoots();
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeWorkspaceFolders(() => {
+            captureWorkspaceRoots();
+        })
+    );
 
     // Status Bar Button
     statusBarItem = vscode.window.createStatusBarItem(
@@ -268,9 +279,6 @@ export async function resetStaleLayout(
     await context.workspaceState.update(STATE_KEY, false);
     isLayoutActive = false;
     updateStatusBar();
-
-    // Silently clean up any leftover .r-layout folder BEFORE UI restores
-    deleteRLayoutDir();
 
     // UNCONDITIONAL settings reset
     // Reset these FIRST, before any other logic, as a safety net.
@@ -1426,16 +1434,34 @@ invisible(local({
 function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+function captureWorkspaceRoots(): void {
+    const roots = vscode.workspace.workspaceFolders?.map((f) => f.uri.fsPath) ?? [];
+    if (roots.length > 0) {
+        cachedWorkspaceRoots = roots;
+    }
+}
+
+function getWorkspaceRootsForCleanup(): string[] {
+    const roots = vscode.workspace.workspaceFolders?.map((f) => f.uri.fsPath) ?? [];
+    return roots.length > 0 ? roots : cachedWorkspaceRoots;
+}
+
 /**
  * Deletes the .r-layout temporary directory in the current workspace.
  */
 function deleteRLayoutDir() {
-    const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (wf) {
-        const rLayoutDir = path.join(wf, '.r-layout');
+    const roots = getWorkspaceRootsForCleanup();
+    for (const root of roots) {
+        const rLayoutDir = path.join(root, '.r-layout');
         try {
             if (fs.existsSync(rLayoutDir)) {
-                fs.rmSync(rLayoutDir, { recursive: true, force: true });
+                fs.rmSync(rLayoutDir, {
+                    recursive: true,
+                    force: true,
+                    maxRetries: 3,
+                    retryDelay: 25,
+                });
             }
         } catch (e) {
             console.error('[R Layout] Failed to delete .r-layout directory', e);
