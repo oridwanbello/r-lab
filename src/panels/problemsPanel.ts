@@ -185,17 +185,37 @@ export class ProblemsPanel {
         .icon-col { width: 20px; text-align: center; }
         .loc-col { width: 50px; opacity: 0.6; font-family: var(--vscode-editor-font-family, monospace); font-size: 11px; }
         .msg-col { word-break: break-word; white-space: normal; }
+        
+        /* Empty State Styling */
         .empty-state {
             display: flex; align-items: center; justify-content: center;
-            height: 100%; text-align: center; opacity: 0.5;
+            height: 100%; text-align: center;
         }
-        .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
-        .empty-state p { font-size: 13px; line-height: 1.6; }
+        .success-icon-wrapper {
+            width: 64px; height: 64px;
+            background: #28a74522; /* Soft emerald tint */
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 20px;
+        }
+        .success-icon {
+            width: 32px; height: 16px;
+            border-left: 3px solid #28a745;
+            border-bottom: 3px solid #28a745;
+            transform: rotate(-45deg);
+            margin-top: -6px;
+        }
+        .empty-state p { 
+            font-size: 14px; 
+            font-weight: 500;
+            opacity: 0.6;
+            letter-spacing: 0.2px;
+        }
     </style>
 </head>
 <body>
     <div class="toolbar">
-        <span class="summary">${summary}</span>
+        <span class="summary">${totalCount > 0 ? summary : ''}</span>
     </div>
     <div class="content">
         ${
@@ -203,7 +223,9 @@ export class ProblemsPanel {
                 ? fileGroups.join('')
                 : `<div class="empty-state">
                        <div>
-                           <div class="icon">✅</div>
+                           <div class="success-icon-wrapper">
+                               <div class="success-icon"></div>
+                           </div>
                            <p>No problems detected.</p>
                        </div>
                    </div>`
