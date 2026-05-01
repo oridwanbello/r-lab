@@ -128,8 +128,8 @@ export function registerLayoutCommand(
     // Restore:  read the CURRENT layout (at current window pixel scale),
     //           equalize the vertical sub-split, and re-apply.  This keeps
     //           all values at the same pixel scale — mixing proportional
-    //           values (0-1) with pixel values caused horizontal distortion
-    //           on short windows.  Reading at current scale also ensures
+    //           values (0-1) with pixel values caused distortion on
+    //           short windows.  Reading at current scale also ensures
     //           values are above minimum heights, so proportional resize
     //           works correctly when the window is later resized.
 
@@ -167,12 +167,12 @@ export function registerLayoutCommand(
 
             // Two-step restore:
             // 1) Read current layout (pixel values at current window scale),
-            //    equalize the vertical sub-split, and apply.  This sets the
-            //    correct 50/50 without horizontal distortion (all pixel scale).
+            //    equalize the vertical sub-split, and apply. This sets the
+            //    correct 50/50 without distortion (all pixel scale).
             // 2) Re-apply with proportional values (0.60/0.40 + 0.5/0.5).
             //    Because step 1 already set the correct visual state, the
             //    proportional values just re-stamp the grid with proper
-            //    proportional-resize behaviour so both panes grow/shrink
+            //    proportional-resize behavior so all panes grow/shrink
             //    together when the window is resized.
             try {
                 const current: any = await vscode.commands.executeCommand('vscode.getEditorLayout');
@@ -307,7 +307,7 @@ export async function resetStaleLayout(
     // CONDITIONAL stale-layout cleanup
     // Only close editors and reset the layout if there are actually
     // stale elements from a previous R Layout session:
-    //   • more than one editor group (leftover 4-pane grid), OR
+    //   • more than one editor group (leftover 3-pane grid), OR
     //   • webview / notebook tabs (our panel singletons) still open
     // On a clean startup with no stale layout this is a no-op,
     // which avoids creating a spurious two-group split.

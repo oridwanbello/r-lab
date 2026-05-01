@@ -384,6 +384,7 @@ export class PlotsPanel {
                 plots: plots,
                 currentIndex: this._currentIndex,
                 isNightMode: this._isNightMode,
+                minimized: this._isMinimized,
                 customPlotDir: this._customPlotDir,
                 lastDirAction: this._lastDirAction
             }
@@ -696,6 +697,7 @@ export class PlotsPanel {
             plots: ${JSON.stringify(this._plots.map(uri => this._panel.webview.asWebviewUri(uri).toString() + `?t=${Date.now()}`))},
             currentIndex: ${this._currentIndex},
             isNightMode: ${this._isNightMode},
+            minimized: ${this._isMinimized},
             customPlotDir: ${JSON.stringify(this._customPlotDir || '')},
             lastDirAction: ${JSON.stringify(this._lastDirAction || null)}
         };
@@ -703,6 +705,7 @@ export class PlotsPanel {
         let currentPlots = [];
 
         function renderState(state) {
+            document.body.classList.toggle('minimized', !!state.minimized);
             const hasPlots = state.plots.length > 0;
             const mainImg = document.getElementById('main-image');
             const emptyState = document.getElementById('empty-state');
@@ -924,6 +927,14 @@ export class PlotsPanel {
                 el.addEventListener('mouseleave', () => {
                     tooltip.style.display = 'none';
                 });
+            });
+
+            // Immediate minimize/restore handler
+            window.addEventListener('message', function _minHandler(event) {
+                const msg = event.data;
+                if (msg.command === 'setMinimized') {
+                    document.body.classList.toggle('minimized', msg.minimized);
+                }
             });
         })();
     </script>

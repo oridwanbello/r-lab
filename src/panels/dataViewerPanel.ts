@@ -9,7 +9,7 @@ import { execFile } from 'child_process';
  *
  * Uses base R write.csv to export data - no external packages required.
  *
- * Opens in ViewColumn.Four (bottom-right layout).
+ * Opens in ViewColumn.Three (bottom-right layout).
  */
 export class DataViewerPanel {
     public static currentPanel: DataViewerPanel | undefined;
@@ -31,7 +31,7 @@ export class DataViewerPanel {
 
     public static createOrShow(
         extensionUri: vscode.Uri,
-        column: vscode.ViewColumn = vscode.ViewColumn.Four
+        column: vscode.ViewColumn = vscode.ViewColumn.Three
     ): DataViewerPanel {
         if (DataViewerPanel.currentPanel) {
             DataViewerPanel.currentPanel._panel.reveal(column, true);

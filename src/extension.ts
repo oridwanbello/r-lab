@@ -8,7 +8,7 @@ export function activate(context: vscode.ExtensionContext) {
     //    This is the VERY FIRST thing we do - before any awaits.
     //    We fire setEditorLayout synchronously into VS Code's
     //    command queue so it races (and beats) session-restore
-    //    rendering of any stale 4-pane grid from a previous session.
+    //    rendering of any stale 3-pane grid from a previous session.
     //    resetStaleLayout() does the full async cleanup afterwards.
     fireImmediateLayoutReset(context);
 

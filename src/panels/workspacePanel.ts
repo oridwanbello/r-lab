@@ -28,7 +28,7 @@ export class WorkspacePanel {
 
     public static createOrShow(
         extensionUri: vscode.Uri,
-        column: vscode.ViewColumn = vscode.ViewColumn.Four
+        column: vscode.ViewColumn = vscode.ViewColumn.Three
     ): WorkspacePanel {
         if (WorkspacePanel.currentPanel) {
             WorkspacePanel.currentPanel._panel.reveal(column, true);

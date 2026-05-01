@@ -25,7 +25,7 @@ export class HelpPanel {
 
     public static createOrShow(
         extensionUri: vscode.Uri,
-        column: vscode.ViewColumn = vscode.ViewColumn.Four
+        column: vscode.ViewColumn = vscode.ViewColumn.Two
     ): HelpPanel {
         if (HelpPanel.currentPanel) {
             HelpPanel.currentPanel._panel.reveal(column, true);
