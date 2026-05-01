@@ -107,6 +107,14 @@ export class WorkspacePanel {
         this._panel.reveal(undefined, true);
     }
 
+    /** Hide or show all webview content (toolbar, tabs, data).
+     *  Used when the top-right pane is maximized so only the
+     *  VS Code tab bar remains visible for the bottom-right group.
+     */
+    public setMinimized(minimized: boolean): void {
+        this._panel.webview.postMessage({ command: 'setMinimized', minimized });
+    }
+
     /** Force an immediate workspace refresh - called on layout re-activation. */
     public forceRefresh(): void {
         this._refreshWorkspace();
@@ -200,7 +208,7 @@ tryCatch({
             if (msg.includes('jsonlite')) {
                 this._errorMessage = 'R package "jsonlite" is required.\nRun: install.packages("jsonlite")';
             } else if (msg.includes('ENOENT') || msg.includes('not found')) {
-                this._errorMessage = 
+                this._errorMessage =
                     'Could not find Rscript on PATH.\n' +
                     'Enable the vscode-R session watcher for live environment data,\n' +
                     'or ensure Rscript is available on your system PATH.';
@@ -292,7 +300,7 @@ tryCatch({
         try {
             const activeJsonPath = path.join(vsRDir, 'active.json');
             let sessionDir = '';
-            
+
             if (fs.existsSync(activeJsonPath)) {
                 const activeData = JSON.parse(fs.readFileSync(activeJsonPath, 'utf8'));
                 if (activeData.pid) {
@@ -307,7 +315,7 @@ tryCatch({
                         time: fs.statSync(path.join(vsRDir, d.name)).mtimeMs
                     }))
                     .sort((a, b) => b.time - a.time);
-                
+
                 if (dirs.length > 0) {
                     sessionDir = path.join(vsRDir, dirs[0].name);
                 }
@@ -321,7 +329,7 @@ tryCatch({
             if (fs.existsSync(globalEnvPath)) {
                 const rawEnv = fs.readFileSync(globalEnvPath, 'utf8');
                 const env = JSON.parse(rawEnv);
-                
+
                 for (const key of Object.keys(env)) {
                     const item = env[key];
                     variables.push({
@@ -396,8 +404,8 @@ tryCatch({
 
     /**
      * Find the Rscript binary path.
-     * 
-     * Rscript is a standalone binary that ships with R, independent of 
+     *
+     * Rscript is a standalone binary that ships with R, independent of
      * whether the user's console is standard R, radian, or ark.
      * We try "Rscript" on PATH first, then check common R installation paths.
      */
@@ -405,7 +413,7 @@ tryCatch({
         // First, try the R console path setting - if it's plain "R", derive "Rscript"
         const config = vscode.workspace.getConfiguration('r-layout');
         const rPath = config.get<string>('rConsolePath', 'R');
-        
+
         // Only derive from setting if it looks like it ends with /R or is just "R"
         if (rPath === 'R' || rPath.endsWith('/R')) {
             return rPath.replace(/R$/, 'Rscript');
@@ -413,10 +421,10 @@ tryCatch({
 
         // For radian/ark/other wrappers, try to find Rscript independently
         const { execFile: execFileCb } = require('child_process');
-        
+
         return new Promise<string>((resolve) => {
             // Try "which Rscript" to find it on PATH
-            execFileCb('which', ['Rscript'], { timeout: 3000 }, 
+            execFileCb('which', ['Rscript'], { timeout: 3000 },
                 (error: Error | null, stdout: string) => {
                     if (!error && stdout && stdout.trim()) {
                         resolve(stdout.trim());
@@ -499,6 +507,7 @@ tryCatch({
             height: 100vh;
             overflow: hidden;
         }
+        body.minimized > * { display: none !important; }
         .toolbar {
             display: flex;
             align-items: center;
@@ -536,15 +545,15 @@ tryCatch({
         .toolbar button[disabled]:hover {
             background: none;
         }
-        
+
         .tabs { display: flex; border-bottom: 1px solid var(--vscode-editorGroup-border); background: var(--vscode-editor-background); }
         .tab { padding: 8px 12px; cursor: pointer; opacity: 0.6; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid transparent; }
         .tab:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
         .tab.active { opacity: 1; border-bottom: 2px solid var(--vscode-textLink-foreground); color: var(--vscode-textLink-foreground); }
-        
+
         .content { flex: 1; overflow: auto; display: none; }
         .content.active { display: block; }
-        
+
         table { width: 100%; border-collapse: collapse; }
         thead th {
             position: sticky; top: 0; z-index: 1;
@@ -609,7 +618,7 @@ tryCatch({
         .view-btn svg { display: block; }
         .status-msg { padding: 20px; text-align: center; opacity: 0.6; }
         .status-msg.error { color: var(--vscode-errorForeground); opacity: 0.9; white-space: pre-wrap; }
-        
+
         /* Custom Instant Tooltip */
         .tooltip {
             position: fixed;
@@ -650,7 +659,7 @@ tryCatch({
         <div class="tab" data-target="tab-loaded">Loaded Namespaces <span id="count-loaded"></span></div>
         <div class="tab" data-target="tab-attached">Attached Namespaces <span id="count-attached"></span></div>
     </div>
-    
+
     <div id="tab-global" class="content active"></div>
     <div id="tab-loaded" class="content"></div>
     <div id="tab-attached" class="content"></div>
@@ -770,7 +779,7 @@ tryCatch({
                         tooltip.style.display = 'block';
                         const rect = el.getBoundingClientRect();
                         tooltip.style.top = (rect.bottom + 5) + 'px';
-                        
+
                         // Boundary detection
                         const padding = 10;
                         let left = rect.left + (rect.width/2) - (tooltip.offsetWidth/2);
@@ -790,6 +799,14 @@ tryCatch({
             observer.observe(document.body, { childList: true, subtree: true });
 
             vscode.postMessage({ type: 'ready' });
+
+            // Minimize/restore handler for top-pane maximize
+            window.addEventListener('message', function _minHandler(event) {
+                const msg = event.data;
+                if (msg.command === 'setMinimized') {
+                    document.body.classList.toggle('minimized', msg.minimized);
+                }
+            });
         })();
     </script>
 </body>

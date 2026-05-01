@@ -19,6 +19,7 @@ export class PlotsPanel {
     private _watcher?: vscode.FileSystemWatcher;
     private _disposables: vscode.Disposable[] = [];
     private _isNightMode: boolean = false;
+    private _isMinimized: boolean = false;
     private _customPlotDir?: string;
     private _lastDirAction: 'view' | 'outview' | undefined = undefined;
     private _extensionUri: vscode.Uri;
@@ -62,6 +63,15 @@ export class PlotsPanel {
 
     public reveal(column?: vscode.ViewColumn, preserveFocus?: boolean): void {
         this._panel.reveal(column, preserveFocus);
+    }
+
+    /** Hide or show all webview content (toolbar, plots, controls).
+     *  Used when the top-right pane is maximized so only the
+     *  VS Code tab bar remains visible for the bottom-right group.
+     */
+    public setMinimized(minimized: boolean): void {
+        this._isMinimized = minimized;
+        this._render();
     }
 
     // Constructor
@@ -383,6 +393,7 @@ export class PlotsPanel {
             height: 100vh;
             overflow: hidden;
         }
+        body.minimized > * { display: none !important; }
         .toolbar {
             display: flex;
             align-items: center;
@@ -568,7 +579,7 @@ export class PlotsPanel {
         }
     </style>
 </head>
-<body>
+<body${this._isMinimized ? ' class="minimized"' : ''}>
     <div class="toolbar">
         <div class="nav-controls">
             <button id="btn-prev" ${prevDisabled} data-tooltip="Previous Plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M11.354 1.646L12.061 2.354 6.414 8l5.647 5.646-.707.708L5 8l6.354-6.354z"/></svg></button>

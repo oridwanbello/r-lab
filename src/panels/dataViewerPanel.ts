@@ -23,6 +23,7 @@ export class DataViewerPanel {
     private _totalCols = 0;
     private _isLoading = false;
     private _errorMessage = '';
+    private _isMinimized = false;
     private _lastRenderHash = '';
     private _disposables: vscode.Disposable[] = [];
 
@@ -93,6 +94,16 @@ export class DataViewerPanel {
     /** Bring this panel's tab to the front. */
     public reveal(): void {
         this._panel.reveal(undefined, true);
+    }
+
+    /** Hide or show all webview content (toolbar, table, controls).
+     *  Used when the top-right pane is maximized so only the
+     *  VS Code tab bar remains visible for the bottom-right group.
+     */
+    public setMinimized(minimized: boolean): void {
+        this._isMinimized = minimized;
+        this._lastRenderHash = ''; // force re-render
+        this._render();
     }
 
     /** Load and display a variable from the LIVE R session.
@@ -350,6 +361,7 @@ export class DataViewerPanel {
             height: 100vh;
             overflow: hidden;
         }
+        body.minimized > * { display: none !important; }
         .toolbar {
             display: flex;
             align-items: center;
@@ -476,7 +488,7 @@ export class DataViewerPanel {
         .empty-state p { font-size: 13px; line-height: 1.6; }
     </style>
 </head>
-<body>
+<body${this._isMinimized ? ' class="minimized"' : ''}>
     <div class="toolbar">
         <span>
             ${this._varName ? `<span class="meta">${escapeHtml(this._varName)} (${this._totalRows.toLocaleString()} × ${this._totalCols})</span>` : ''}

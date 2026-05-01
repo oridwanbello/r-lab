@@ -113,30 +113,72 @@ export function registerLayoutCommand(
     );
 
     // Resize Commands
-    const setResizeLayout = async (topSize: number, bottomSize: number) => {
-        if (!isLayoutActive) return;
-        await vscode.commands.executeCommand('vscode.setEditorLayout', {
-            orientation: 0,
-            groups: [
-                { size: 0.60 },
-                {
-                    size: 0.40,
-                    groups: [
-                        { size: topSize },
-                        { size: bottomSize }
-                    ]
-                }
-            ]
-        });
-    };
+    //
+    // Save the full layout state before maximizing so we can restore it
+    // exactly. Using setEditorLayout with ANY proportions (hardcoded or
+    // read-back) destroys and recreates the grid, and on short windows
+    // the recreation distorts the horizontal dimension due to minimum
+    // height constraints cascading across both axes.  By restoring the
+    // exact pre-maximize snapshot, we avoid all proportion math entirely.
+    let savedLayoutBeforeMaximize: any = null;
 
     context.subscriptions.push(
         vscode.commands.registerCommand('r-layout.maximizeTopRight', async () => {
-            await setResizeLayout(0.9, 0.1);
+            if (!isLayoutActive) return;
+
+            // Snapshot the current (working) layout before we change it
+            try {
+                savedLayoutBeforeMaximize = await vscode.commands.executeCommand('vscode.getEditorLayout');
+            } catch {
+                savedLayoutBeforeMaximize = null;
+            }
+
+            await vscode.commands.executeCommand('vscode.setEditorLayout', {
+                orientation: 0,
+                groups: [
+                    { size: 0.60 },
+                    {
+                        size: 0.40,
+                        groups: [
+                            { size: 0.9 },
+                            { size: 0.1 }
+                        ]
+                    }
+                ]
+            });
+
+            // Hide webview content in Group 3 panels so only tabs are visible
+            WorkspacePanel.currentPanel?.setMinimized(true);
+            PlotsPanel.currentPanel?.setMinimized(true);
+            DataViewerPanel.currentPanel?.setMinimized(true);
             await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', true);
         }),
         vscode.commands.registerCommand('r-layout.restoreRightSplit', async () => {
-            await setResizeLayout(0.5, 0.5);
+            if (!isLayoutActive) return;
+
+            // Restore webview content in Group 3 panels
+            WorkspacePanel.currentPanel?.setMinimized(false);
+            PlotsPanel.currentPanel?.setMinimized(false);
+            DataViewerPanel.currentPanel?.setMinimized(false);
+
+            // Restore the exact layout snapshot from before maximize.
+            // Fall back to the default 0.60/0.40 + 0.5/0.5 if no snapshot.
+            const layout = savedLayoutBeforeMaximize ?? {
+                orientation: 0,
+                groups: [
+                    { size: 0.60 },
+                    {
+                        size: 0.40,
+                        groups: [
+                            { size: 0.5 },
+                            { size: 0.5 }
+                        ]
+                    }
+                ]
+            };
+            await vscode.commands.executeCommand('vscode.setEditorLayout', layout);
+            savedLayoutBeforeMaximize = null;
+
             await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', false);
         })
     );
@@ -229,7 +271,7 @@ export async function resetStaleLayout(
             ? vscode.ConfigurationTarget.Workspace
             : vscode.ConfigurationTarget.Global;
         const wsConfig = vscode.workspace.getConfiguration();
-        
+
         const origClose = context.workspaceState.get<boolean | undefined>('r-layout.origCloseEmptyGroups', undefined);
 
         await Promise.all([
@@ -393,7 +435,7 @@ export async function collapseLayoutForShutdown(): Promise<void> {
             const origClose = extensionContext
                 ? extensionContext.workspaceState.get<boolean | undefined>('r-layout.origCloseEmptyGroups', undefined)
                 : undefined;
-            
+
             return Promise.all([
                 Promise.resolve(
                     wsConfig.update('workbench.editor.closeEmptyGroups', origClose, cfgTarget)
