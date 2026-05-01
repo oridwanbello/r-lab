@@ -114,24 +114,18 @@ export function registerLayoutCommand(
 
     // Resize Commands
     //
-    // Save the full layout state before maximizing so we can restore it
-    // exactly. Using setEditorLayout with ANY proportions (hardcoded or
-    // read-back) destroys and recreates the grid, and on short windows
-    // the recreation distorts the horizontal dimension due to minimum
-    // height constraints cascading across both axes.  By restoring the
-    // exact pre-maximize snapshot, we avoid all proportion math entirely.
-    let savedLayoutBeforeMaximize: any = null;
+    // Maximize: apply hardcoded 0.9/0.1 vertical layout (works reliably).
+    // Restore:  read the CURRENT layout (at current window pixel scale),
+    //           equalize the vertical sub-split, and re-apply.  This keeps
+    //           all values at the same pixel scale — mixing proportional
+    //           values (0-1) with pixel values caused horizontal distortion
+    //           on short windows.  Reading at current scale also ensures
+    //           values are above minimum heights, so proportional resize
+    //           works correctly when the window is later resized.
 
     context.subscriptions.push(
         vscode.commands.registerCommand('r-layout.maximizeTopRight', async () => {
             if (!isLayoutActive) return;
-
-            // Snapshot the current (working) layout before we change it
-            try {
-                savedLayoutBeforeMaximize = await vscode.commands.executeCommand('vscode.getEditorLayout');
-            } catch {
-                savedLayoutBeforeMaximize = null;
-            }
 
             await vscode.commands.executeCommand('vscode.setEditorLayout', {
                 orientation: 0,
@@ -161,9 +155,30 @@ export function registerLayoutCommand(
             PlotsPanel.currentPanel?.setMinimized(false);
             DataViewerPanel.currentPanel?.setMinimized(false);
 
-            // Restore the exact layout snapshot from before maximize.
-            // Fall back to the default 0.60/0.40 + 0.5/0.5 if no snapshot.
-            const layout = savedLayoutBeforeMaximize ?? {
+            // Two-step restore:
+            // 1) Read current layout (pixel values at current window scale),
+            //    equalize the vertical sub-split, and apply.  This sets the
+            //    correct 50/50 without horizontal distortion (all pixel scale).
+            // 2) Re-apply with proportional values (0.60/0.40 + 0.5/0.5).
+            //    Because step 1 already set the correct visual state, the
+            //    proportional values just re-stamp the grid with proper
+            //    proportional-resize behaviour so both panes grow/shrink
+            //    together when the window is resized.
+            try {
+                const current: any = await vscode.commands.executeCommand('vscode.getEditorLayout');
+                const subGroups = current?.groups?.[1]?.groups;
+                if (subGroups?.length === 2 && typeof subGroups[0].size === 'number' && typeof subGroups[1].size === 'number') {
+                    const avg = (subGroups[0].size + subGroups[1].size) / 2;
+                    subGroups[0].size = avg;
+                    subGroups[1].size = avg;
+                }
+                await vscode.commands.executeCommand('vscode.setEditorLayout', current);
+            } catch {
+                // ignore – step 2 below will handle it
+            }
+
+            // Step 2: proportional re-stamp
+            await vscode.commands.executeCommand('vscode.setEditorLayout', {
                 orientation: 0,
                 groups: [
                     { size: 0.60 },
@@ -175,9 +190,7 @@ export function registerLayoutCommand(
                         ]
                     }
                 ]
-            };
-            await vscode.commands.executeCommand('vscode.setEditorLayout', layout);
-            savedLayoutBeforeMaximize = null;
+            });
 
             await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', false);
         })
