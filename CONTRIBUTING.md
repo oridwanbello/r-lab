@@ -8,17 +8,18 @@ Welcome to the project! This document outlines our standard operating procedures
 
 We follow a structured environment promotion model to ensure code stability:
 
-* **`dev`**: The active construction zone. All feature branches merge here.
-* **`staging`**: The mirror of production. Used for final sign-off and integration testing.
-* **`main`**: The live production code.
+- **`dev`**: The active construction zone. All feature branches merge here.
+- **`staging`**: The mirror of production. Used for final sign-off and integration testing.
+- **`main`**: The live production code.
 
-*(Optional)* **Release Branches (`release/vX.X`)**: Used to freeze features for a release while development continues on `dev`. Bugs found in staging are fixed on the release branch before final promotion.
+_(Optional)_ **Release Branches (`release/vX.X`)**: Used to freeze features for a release while development continues on `dev`. Bugs found in staging are fixed on the release branch before final promotion.
 
 ---
 
 ## 2. Branch Protections & Governance
 
 Our repository enforces strict branch protections on `dev`, `staging`, and `main`:
+
 1.  **Require a Pull Request before merging**: No direct pushes allowed.
 2.  **Require Signed Commits**: Every commit must be verified via GPG signature.
 3.  **Require Status Checks to pass**: CI pipelines (like branch logic enforcement) must pass.
@@ -30,13 +31,13 @@ Our repository enforces strict branch protections on `dev`, `staging`, and `main
 
 To maintain a clean, readable, and verified Git history, we use specific merge strategies depending on the target branch:
 
-| Merge Path | Strategy | Why? |
-| :--- | :--- | :--- |
-| **Feature $\rightarrow$ `dev`** | **Squash and Merge** | Keeps `dev` history atomic (one commit per feature), hides messy intermediate commits, and allows GitHub to automatically sign the final bundled commit. |
-| **`dev` $\rightarrow$ `staging`** | **Rebase and Merge** | Promotes the exact, clean history from `dev` directly into `staging`. |
-| **`staging` $\rightarrow$ `main`** | **Rebase and Merge** | Ensures `main` matches `staging` exactly. |
+| Merge Path                         | Strategy             | Why?                                                                                                                                                     |
+| :--------------------------------- | :------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Feature $\rightarrow$ `dev`**    | **Squash and Merge** | Keeps `dev` history atomic (one commit per feature), hides messy intermediate commits, and allows GitHub to automatically sign the final bundled commit. |
+| **`dev` $\rightarrow$ `staging`**  | **Rebase and Merge** | Promotes the exact, clean history from `dev` directly into `staging`.                                                                                    |
+| **`staging` $\rightarrow$ `main`** | **Rebase and Merge** | Ensures `main` matches `staging` exactly.                                                                                                                |
 
-*Note: Set your GitHub Squash merge message preference to "Pull request title and description" to ensure context is preserved in the commit body.*
+_Note: Set your GitHub Squash merge message preference to "Pull request title and description" to ensure context is preserved in the commit body._
 
 ---
 
@@ -58,7 +59,7 @@ Follow this 7-step routine for every new feature or fix:
     ```bash
     git push -u origin feature/your-feature-name
     ```
-5.  **Open a Pull Request:** Ensure the PR title is concise (e.g., `feat: add login`) and the description contains the *why*.
+5.  **Open a Pull Request:** Ensure the PR title is concise (e.g., `feat: add login`) and the description contains the _why_.
 6.  **Merge:** Once approved and checks pass, click **Squash and Merge** on GitHub.
 7.  **Clean up your local environment:**
     ```bash

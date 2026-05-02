@@ -1,22 +1,22 @@
 import * as vscode from 'vscode';
 
 /**
- * Problems Panel — a WebviewPanel (editor tab) that mirrors
+ * Problems Panel - a WebviewPanel (editor tab) that mirrors
  * VS Code's built-in Problems view by displaying diagnostics
  * from `vscode.languages.getDiagnostics()`.
  *
- * Opens in ViewColumn.Two (bottom-left quadrant) alongside
+ * Opens in ViewColumn.Two (bottom-left layout) alongside
  * R Console and Terminal tabs.
  */
 export class ProblemsPanel {
     public static currentPanel: ProblemsPanel | undefined;
-    public static readonly viewType = 'r-quadrant.problemsPanel';
+    public static readonly viewType = 'r-layout.problemsPanel';
 
     private readonly _panel: vscode.WebviewPanel;
     private _diagnosticsListener?: vscode.Disposable;
     private _disposables: vscode.Disposable[] = [];
 
-    // ── Factory ─────────────────────────────────────────────
+    // Factory
 
     public static createOrShow(
         extensionUri: vscode.Uri,
@@ -37,12 +37,13 @@ export class ProblemsPanel {
                 retainContextWhenHidden: true,
             }
         );
+        panel.iconPath = vscode.Uri.joinPath(extensionUri, 'resources', 'blank.svg');
 
         ProblemsPanel.currentPanel = new ProblemsPanel(panel);
         return ProblemsPanel.currentPanel;
     }
 
-    // ── Constructor ─────────────────────────────────────────
+    // Constructor
 
     private constructor(panel: vscode.WebviewPanel) {
         this._panel = panel;
@@ -74,7 +75,7 @@ export class ProblemsPanel {
         );
     }
 
-    // ── Rendering ───────────────────────────────────────────
+    // Rendering
 
     private _render(): void {
         this._panel.webview.html = this._getHtml();
@@ -116,10 +117,20 @@ export class ProblemsPanel {
                 })
                 .join('');
 
+            const fileProblemCount = diagnostics.length;
+
             fileGroups.push(`
-                <div class="file-group">
-                    <div class="file-header">${escapeHtml(fileName)}</div>
-                    <table>${rows}</table>
+                <div class="file-group expanded">
+                    <div class="file-header">
+                        <div class="file-header-left">
+                            <i class="codicon codicon-chevron-right chevron"></i>
+                            <span class="file-name">${escapeHtml(fileName)}</span>
+                        </div>
+                        <span class="file-badge">${fileProblemCount}</span>
+                    </div>
+                    <div class="file-content">
+                        <table>${rows}</table>
+                    </div>
                 </div>
             `);
         }
@@ -137,14 +148,17 @@ export class ProblemsPanel {
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy"
           content="default-src 'none';
-                   style-src 'nonce-${nonce}';
+                   style-src 'nonce-${nonce}' https://cdn.jsdelivr.net;
+                   font-src https://cdn.jsdelivr.net;
                    script-src 'nonce-${nonce}';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/@vscode/codicons@0.0.36/dist/codicon.min.css" rel="stylesheet">
     <style nonce="${nonce}">
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
         body {
             font-family: var(--vscode-font-family);
-            font-size: 12px;
+            font-size: var(--vscode-font-size, 13px);
             color: var(--vscode-editor-foreground);
             background: var(--vscode-editor-background);
             display: flex;
@@ -156,44 +170,101 @@ export class ProblemsPanel {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 6px 12px;
-            background: var(--vscode-editorGroupHeader-tabsBackground);
+            padding: 0 12px;
+            height: 32px;
+            background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             flex-shrink: 0;
         }
-        .pane-title { font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7; }
-        .summary { font-size: 11px; opacity: 0.7; }
+        .pane-title { font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7; }
+        .summary { opacity: 0.7; }
         .content { flex: 1; overflow: auto; }
         .file-group { margin-bottom: 2px; }
         .file-header {
-            padding: 4px 12px;
-            font-weight: 600;
-            font-size: 11px;
-            background: var(--vscode-editorGroupHeader-tabsBackground);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 12px 4px 6px;
+            color: var(--vscode-textLink-foreground);
+            background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             position: sticky;
             top: 0;
             z-index: 1;
+            cursor: pointer;
+        }
+        .file-header:hover {
+            background: var(--vscode-list-hoverBackground);
+        }
+        .file-header-left {
+            display: flex;
+            align-items: center;
+        }
+        .file-name { font-weight: 600; }
+        .chevron {
+            margin-right: 4px;
+            transition: transform 0.1s;
+            font-size: 16px;
+        }
+        .file-group.expanded .chevron {
+            transform: rotate(90deg);
+        }
+        .file-content {
+            display: none;
+        }
+        .file-group.expanded .file-content {
+            display: block;
+        }
+        .file-badge {
+            background: var(--vscode-badge-background);
+            color: var(--vscode-badge-foreground);
+            padding: 2px 6px;
+            border-radius: 11px;
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1;
+            min-width: 18px;
+            text-align: center;
         }
         table { width: 100%; border-collapse: collapse; }
         .diag-row { cursor: pointer; }
         .diag-row:hover td { background: var(--vscode-list-hoverBackground); }
-        td { padding: 3px 6px; vertical-align: top; border-bottom: 1px solid var(--vscode-editorGroup-border); }
-        .icon-col { width: 20px; text-align: center; }
-        .loc-col { width: 50px; opacity: 0.6; font-family: var(--vscode-editor-font-family, monospace); font-size: 11px; }
-        .msg-col { word-break: break-word; white-space: normal; }
+        td { padding: 4px 6px; vertical-align: top; border-bottom: 1px solid var(--vscode-editorGroup-border); }
+        .icon-col { width: 24px; text-align: center; vertical-align: middle; }
+        .icon-col i { font-size: 16px; }
+        .loc-col { width: 50px; opacity: 0.6; font-family: var(--vscode-editor-font-family, monospace); vertical-align: middle; }
+        .msg-col { word-break: break-word; white-space: normal; vertical-align: middle; }
+        
+        /* Empty State Styling */
         .empty-state {
             display: flex; align-items: center; justify-content: center;
-            height: 100%; text-align: center; opacity: 0.5;
+            height: 100%; text-align: center;
         }
-        .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
-        .empty-state p { font-size: 13px; line-height: 1.6; }
+        .success-icon-wrapper {
+            width: 64px; height: 64px;
+            background: #28a74522; /* Soft emerald tint */
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 20px;
+        }
+        .success-icon {
+            width: 32px; height: 16px;
+            border-left: 3px solid #28a745;
+            border-bottom: 3px solid #28a745;
+            transform: rotate(-45deg);
+            margin-top: -6px;
+        }
+        .empty-state p { 
+            font-size: 14px; 
+            font-weight: 500;
+            opacity: 0.6;
+            letter-spacing: 0.2px;
+        }
     </style>
 </head>
 <body>
     <div class="toolbar">
-        <span class="pane-title">Problems</span>
-        <span class="summary">${summary}</span>
+        <span class="summary">${totalCount > 0 ? summary : ''}</span>
     </div>
     <div class="content">
         ${
@@ -201,7 +272,9 @@ export class ProblemsPanel {
                 ? fileGroups.join('')
                 : `<div class="empty-state">
                        <div>
-                           <div class="icon">✅</div>
+                           <div class="success-icon-wrapper">
+                               <div class="success-icon"></div>
+                           </div>
                            <p>No problems detected.</p>
                        </div>
                    </div>`
@@ -219,13 +292,20 @@ export class ProblemsPanel {
                     });
                 });
             });
+
+            // File Group Collapsible Logic
+            document.querySelectorAll('.file-header').forEach(header => {
+                header.addEventListener('click', () => {
+                    header.parentElement.classList.toggle('expanded');
+                });
+            });
         })();
     </script>
 </body>
 </html>`;
     }
 
-    // ── Cleanup ─────────────────────────────────────────────
+    // Cleanup
 
     dispose(): void {
         ProblemsPanel.currentPanel = undefined;
@@ -237,17 +317,15 @@ export class ProblemsPanel {
     }
 }
 
-// ────────────────────────────────────────────────────────────
 //  Utility
-// ────────────────────────────────────────────────────────────
 
 function severityIcon(severity: vscode.DiagnosticSeverity): string {
     switch (severity) {
-        case vscode.DiagnosticSeverity.Error: return '⊘';
-        case vscode.DiagnosticSeverity.Warning: return '⚠';
-        case vscode.DiagnosticSeverity.Information: return 'ℹ';
-        case vscode.DiagnosticSeverity.Hint: return '💡';
-        default: return '•';
+        case vscode.DiagnosticSeverity.Error: return '<i class="codicon codicon-error" style="color: var(--vscode-problemsErrorIcon-foreground, #f14c4c)"></i>';
+        case vscode.DiagnosticSeverity.Warning: return '<i class="codicon codicon-warning" style="color: var(--vscode-problemsWarningIcon-foreground, #cca700)"></i>';
+        case vscode.DiagnosticSeverity.Information: return '<i class="codicon codicon-info" style="color: var(--vscode-problemsInfoIcon-foreground, #3794ff)"></i>';
+        case vscode.DiagnosticSeverity.Hint: return '<i class="codicon codicon-lightbulb" style="color: var(--vscode-problemsInfoIcon-foreground, #3794ff)"></i>';
+        default: return '<i class="codicon codicon-record" style="color: var(--vscode-editor-foreground)"></i>';
     }
 }
 

@@ -1,8 +1,9 @@
 {
-  "name": "r-quadrant",
-  "displayName": "R Quadrant",
-  "description": "An RStudio-style 4-pane layout orchestrator for data scientists.",
-  "version": "0.1.0",
+  "name": "r-layout",
+  "displayName": "R Layout",
+  "description": "RStudio-style multi-pane layout orchestrator for VS Code",
+  "version": "0.3.0",
+  "publisher": "oridwanbello",
   "engines": {
     "vscode": "^1.107.0"
   },
@@ -10,58 +11,98 @@
     "Other",
     "Data Science"
   ],
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "configuration": {
-      "title": "R Quadrant",
+      "title": "R Layout",
       "properties": {
-        "r-quadrant.rConsolePath": {
+        "r-layout.rConsolePath": {
           "type": "string",
           "default": "R",
           "description": "Path or command for the R Console terminal. Examples: 'R', 'radian', or a full path to the Ark kernel."
         },
-        "r-quadrant.useArkInteractiveConsole": {
+        "r-layout.useArkInteractiveConsole": {
           "type": "boolean",
           "default": false,
           "description": "If true, launches a VS Code Jupyter Interactive Window as the R Console instead of a standard terminal. Ideal for using the Ark kernel."
-        },
-        "r-quadrant.plotOutputDir": {
-          "type": "string",
-          "default": ".r-quadrant/plots",
-          "description": "Relative path (from workspace root) to the directory where plot images are saved. The Plot Gallery watches this directory for new files."
         }
       }
     },
     "commands": [
       {
-        "command": "r-quadrant.toggleLayout",
-        "title": "R Quadrant: Toggle Layout",
+        "command": "r-layout.toggleLayout",
+        "title": "Toggle R Layout",
         "category": "View"
       },
+
       {
-        "command": "r-quadrant.plotGallery.clear",
-        "title": "R Quadrant: Clear Plot Gallery",
-        "category": "View"
+        "command": "r-layout.maximizeTopRight",
+        "title": "Maximize Top Pane",
+        "icon": "$(screen-full)"
+      },
+      {
+        "command": "r-layout.restoreRightSplit",
+        "title": "Restore Pane Split",
+        "icon": "$(screen-normal)"
+      },
+      {
+        "command": "r-layout.sourceFile",
+        "title": "Source File to R Console",
+        "icon": {
+          "light": "resources/run-source-light.svg",
+          "dark": "resources/run-source-dark.svg"
+        }
       }
     ],
     "keybindings": [
       {
         "command": "workbench.action.focusSecondEditorGroup",
         "key": "cmd+j",
-        "when": "r-quadrant.layoutActive"
+        "when": "r-layout.layoutActive"
       },
       {
         "command": "workbench.action.focusThirdEditorGroup",
         "key": "cmd+alt+b",
-        "when": "r-quadrant.layoutActive"
+        "when": "r-layout.layoutActive"
       },
       {
-        "command": "r-quadrant.noop",
+        "command": "r-layout.noop",
         "key": "cmd+shift+i",
-        "when": "r-quadrant.layoutActive"
+        "when": "r-layout.layoutActive"
+      },
+      {
+        "command": "r-layout.sourceFile",
+        "key": "cmd+shift+s",
+        "when": "r-layout.layoutActive && editorLangId == 'r'"
+      },
+      {
+        "command": "r-layout.sourceFile",
+        "key": "ctrl+shift+s",
+        "when": "r-layout.layoutActive && editorLangId == 'r'"
       }
-    ]
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "r-layout.maximizeTopRight",
+          "when": "r-layout.layoutActive && !r-layout.isTopRightMaximized && activeEditorGroupIndex != 1",
+          "group": "navigation@1"
+        },
+        {
+          "command": "r-layout.restoreRightSplit",
+          "when": "r-layout.layoutActive && r-layout.isTopRightMaximized && activeEditorGroupIndex != 1",
+          "group": "navigation@1"
+        },
+        {
+          "command": "r-layout.sourceFile",
+          "when": "r-layout.layoutActive && resourceLangId == 'r' && activeEditorGroupIndex == 1",
+          "group": "navigation@-100"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

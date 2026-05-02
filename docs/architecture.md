@@ -1,107 +1,60 @@
-# R Quadrant — Technical Architecture
+# Architecture
 
-This document describes the internal architecture of the R Quadrant VS Code extension.
+## 1. High-Level Concept
 
-## Overview
+The R Layout extension orchestrates a 3-pane layout within VS Code tailored for R development, visually mirroring the standard RStudio interface. Rather than relying on standard VS Code sidebar views, it implements all major UI components (Workspace Explorer, Data Viewer, Plots Gallery, Help) as WebviewPanels integrated directly into the editor grid.
 
-R Quadrant follows a modular architecture where `extension.ts` acts as a thin orchestrator that delegates to specialized modules:
+## 2. Core Modules
 
-```
-extension.ts (entry point)
-    ├── layout/layoutManager.ts     → Layout toggle + Status Bar
-    ├── views/environmentExplorer.ts → TreeDataProvider (DAP)
-    ├── views/plotGallery.ts        → WebviewViewProvider (FileSystemWatcher)
-    ├── views/dataViewer.ts         → WebviewViewProvider (DAP evaluate)
-    └── util/debugSession.ts        → Shared DAP helpers
-```
+The architecture is divided into three primary concerns:
 
-## Component Details
+- extension.ts: The minimal entry point. It registers the layout orchestration command and delegates execution to layoutManager.ts.
+- layoutManager.ts: The engine of the extension. It manages the physical grid layout, component instantiation, and lifecycle state.
+- panels/: A directory containing singleton classes that govern individual UI components (e.g., WorkspacePanel, DataViewerPanel, PlotsPanel).
 
-### Layout Manager (`layout/layoutManager.ts`)
+## 3. Layout Manager
 
-Registers the `r-quadrant.toggleLayout` command and the Status Bar button. Uses `vscode.setEditorLayout` to snap the editor into a 65/35 asymmetrical 4-pane grid. Reads `r-quadrant.aiAgent` from settings to summon the appropriate AI chat panel.
+The layout manager handles the complex sequence of safely restructuring the VS Code environment.
 
-### Environment Explorer (`views/environmentExplorer.ts`)
+### Activation Sequence
 
-| Aspect | Detail |
-|---|---|
-| **Type** | `TreeDataProvider<VariableItem>` |
-| **View ID** | `r-quadrant.environmentExplorer` |
-| **Data Source** | VS Code Debug Adapter Protocol (DAP) |
-| **Refresh Trigger** | Debug session changes, manual refresh command |
+When a user triggers the layout:
 
-**DAP request chain:**
-```
-threads → stackTrace → scopes → variables
-```
+1. State Preservation: It records the exact values of global settings like workbench.editor.closeEmptyGroups.
+2. Clean Slate: It closes all sidebars, auxiliary bars, and terminal panels.
+3. Grid Construction: It forces a 3-pane layout via vscode.setEditorLayout.
+4. Component Placement:
+   - Group 1 (Left): Receives the user's active source files.
+   - Group 2 (Top-Right): Populated with the R Console, standard Terminal, Problems anchor, and Help panel.
+   - Group 3 (Bottom-Right): Populated with the Workspace Explorer, Plots Gallery, and Data Viewer.
 
-Each `VariableItem` displays:
-- **Label**: Variable name
-- **Description**: Truncated value (max 60 chars)
-- **Icon**: Type-aware ThemeIcon (number, string, bool, array, dataframe, function, etc.)
-- **Expandable**: If `variablesReference > 0`, children can be drilled into
+### Deactivation Sequence
 
-### Plot Gallery (`views/plotGallery.ts`)
+1. Serialization: Current states of the webviews (e.g., which variable is being inspected) are saved to memory.
+2. Teardown: All custom WebviewPanel tabs are disposed.
+3. Terminal Restoration: Existing terminals are moved back to the default bottom panel, remaining active to preserve the R session.
+4. Settings Restoration: Overridden VS Code settings are meticulously restored to their pre-activation states using the workspaceState cache.
 
-| Aspect | Detail |
-|---|---|
-| **Type** | `WebviewViewProvider` |
-| **View ID** | `r-quadrant.plotGallery` |
-| **Data Source** | `FileSystemWatcher` on configurable directory |
-| **Default Watch Dir** | `.r-quadrant/plots/` |
-| **Supported Formats** | PNG, JPG, JPEG, SVG, GIF, BMP, WebP |
+## 4. UI Panels (WebviewPanels)
 
-**Message protocol (webview → extension):**
-| Message Type | Action |
-|---|---|
-| `navigatePrev` | Show previous plot |
-| `navigateNext` | Show next plot |
-| `clear` | Clear all plot history |
+Each tool is implemented as a WebviewPanel managed by a singleton class pattern.
 
-### Data Viewer (`views/dataViewer.ts`)
+### WorkspacePanel
 
-| Aspect | Detail |
-|---|---|
-| **Type** | `WebviewViewProvider` |
-| **View ID** | `r-quadrant.dataViewer` |
-| **Data Source** | DAP `evaluate` request |
-| **Row Limit** | 500 rows (head) |
+Connects to the active Debug Adapter Protocol (DAP) session. When the debugger hits a breakpoint or pauses, this panel requests variable scopes and renders them as a hierarchical tree inside an HTML webview.
 
-**Serialization strategies** (tried in order):
-1. **R**: `jsonlite::toJSON(head(var, 500), auto_unbox = TRUE)`
-2. **Python**: `__import__('json').dumps(var.head(500).to_dict('records'))`
+### DataViewerPanel
 
-**Message protocol (webview → extension):**
-| Message Type | Payload | Action |
-|---|---|---|
-| `sortColumn` | `{ column, direction }` | Sort by column |
-| `filterRows` | `{ query }` | Filter rows (debounced 250ms) |
+Receives dataframe inspection requests from the WorkspacePanel. It renders interactive HTML tables with sorting, filtering, and theme-responsive styling.
 
-### Debug Session Utilities (`util/debugSession.ts`)
+### PlotsPanel
 
-Shared helper functions used by the Environment Explorer and Data Viewer:
+Monitors a specific directory (default: `.r-layout/plots/`) for image files. It automatically synchronizes and updates the webview to display the latest plot generated by the R session.
 
-| Function | Purpose |
-|---|---|
-| `getTopFrameId(session)` | Get frame ID from topmost stack frame |
-| `getLocalVariables(session, frameId)` | Get local scope variables |
-| `getVariableChildren(session, ref)` | Drill into a `variablesReference` |
-| `evaluateExpression(session, expr)` | Evaluate an expression in the top frame |
+### HelpPanel
 
-## Security
+Intercepts standard `Rd2HTML` documentation output. It parses the HTML and injects custom features such as KaTeX math rendering, a Smart Linker for cross-references, and interactive "Run" buttons that execute example code blocks directly in the R Console.
 
-All Webview panels implement:
-- **Content Security Policy (CSP)** with nonce-based script authorization
-- **Restricted `localResourceRoots`** — only extension URI and workspace folders
-- **Input sanitization** via HTML escaping for all user data rendered in tables
+### ProblemsPanel
 
-## Extension Settings
-
-| Setting | Type | Default | Description |
-|---|---|---|---|
-| `r-quadrant.aiAgent` | `string` (enum) | `"terminal"` | AI agent for the console quadrant |
-| `r-quadrant.plotOutputDir` | `string` | `".r-quadrant/plots"` | Plot output directory path |
-
-## View Container
-
-R Quadrant registers a custom Activity Bar container (`r-quadrant-sidebar`) with three views. The sidebar icon is a 4-quadrant grid SVG (`resources/quadrant-icon.svg`).
+A full-fledged diagnostic renderer that queries `vscode.languages.getDiagnostics()`. It visualizes errors, warnings, and hints using native VS Code Codicons, accordion-style file groupings, and dynamic badges to maintain a native look and feel.

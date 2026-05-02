@@ -1,135 +1,131 @@
-# R Quadrant
+# R Layout
 
-**An RStudio-style 4-pane layout orchestrator for VS Code.**
+An RStudio-style 3-pane layout orchestrator for VS Code.
 
-R Quadrant brings the familiar multi-pane workflow of RStudio to VS Code and its forks (Cursor, Google Antigravity, VSCodium). With a single command, snap your editor into a 4-quadrant layout optimized for data science — complete with a live variable explorer, plot gallery, and interactive data viewer.
+R Layout brings the familiar multi-pane workflow of RStudio to VS Code and its forks. With a single command, snap your editor into a layout optimized for data science, complete with a live variable explorer, plot gallery, and interactive data viewer.
 
----
+## Features
 
-## ✨ Features
+### Instant Layout Orchestration
 
-### 🔲 Instant Layout Orchestration
-One click to transform your editor into a 65/35 asymmetrical 4-pane grid:
-- **Top Left** — Main editor
-- **Bottom Left** — Console / AI Agent (configurable)
-- **Top Right** — Environment Explorer
-- **Bottom Right** — Plots & Data Viewer
+One click to transform your editor into an asymmetrical 3-pane grid:
 
-### 🤖 Universal AI Integration
-Choose your preferred AI assistant for the console quadrant:
-- Standard Terminal / R Console
-- GitHub Copilot
-- Google Antigravity Agent
-- Cursor AI
+- **Left Pane**: Main source editor (Full Height).
+- **Top-Right Pane**: R Console, Terminal, Problems, and Help.
+- **Bottom-Right Pane**: Workspace Explorer, Plots, and Data Viewer.
 
-### 📊 Environment Explorer
-A live TreeView that displays variables from your active debug session:
-- Type-aware icons (numbers, strings, arrays, dataframes, functions)
-- Expandable nested objects
-- Auto-refreshes when the debugger pauses
+### Workspace Explorer
 
-### 🎨 Plot Gallery
-A dedicated panel that watches for new plot outputs:
-- Navigate through plot history with ◀ ▶ controls
-- Supports PNG, JPG, SVG, GIF, WebP, and BMP
-- Configurable watch directory (default: `.r-quadrant/plots/`)
+A live variable inspector that synchronizes with your R session to display:
 
-### 🔍 Data Viewer
-Inspect dataframes directly from debug sessions:
-- Click-to-sort columns (ascending / descending)
-- Real-time row filtering
-- Works with R (`data.frame`, `tibble`) and Python (`pandas.DataFrame`)
+- Active variables, types, and values.
+- Direct interaction with the Data Viewer for dataframes and tibbles.
 
----
+### Plot Gallery
 
-## 🚀 Getting Started
+A high-fidelity rendering panel for your R plots:
 
-1. Install the extension from the VS Code Marketplace (or build from source).
-2. Open a workspace and press `Fn + F5` to try it in the Extension Development Host.
-3. Click the **R Quadrant Layout** button in the Status Bar, or run `R Quadrant: Apply RStudio Layout` from the Command Palette.
-4. Open the **R Quadrant** sidebar from the Activity Bar to access the Environment Explorer, Plot Gallery, and Data Viewer.
+- **Auto-Sync**: Automatically detects and displays new plots generated from the console.
+- **Save-As**: Export any plot to PNG or SVG with white-background enforcement.
+- **History**: Navigate through your session's plot history with dedicated controls.
 
----
+### Data Viewer
 
-## ⚙️ Extension Settings
+A high-performance spreadsheet-style inspector:
 
-| Setting | Default | Description |
-|---|---|---|
-| `r-quadrant.rConsolePath` | `"R"` | Path or command for the R Console terminal. |
-| `r-quadrant.plotOutputDir` | `".r-quadrant/plots"` | Relative path to the directory where plot images are saved. |
+- **Silent Refresh**: Zero-resource background footprint; refreshes only on demand.
+- **Search & Sort**: Real-time filtering and multi-column sorting.
+- **Responsive Theme**: Automatic light/dark mode support with curated aesthetics.
 
----
+### Integrated R Help
 
-## 🎯 Commands
+A professional, high-performance R documentation viewer built natively into the editor layout:
 
-| Command | Description |
-|---|---|
-| `R Quadrant: Apply RStudio Layout` | Snap the editor into the 4-pane grid. |
-| `R Quadrant: Inspect Variable` | Inspect a dataframe variable from the active debug session. |
-| `Refresh Variables` | Refresh the Environment Explorer tree. |
-| `Clear Plot History` | Clear all plots from the Plot Gallery. |
+- **KaTeX Math Rendering**: High-quality mathematical equation rendering out of the box.
+- **Smart Linker**: Automatically detects and links cross-references in documentation.
+- **Interactive Execution**: Dedicated "Run" buttons embedded inside example code blocks that send the code directly to your R Console.
 
----
+### Advanced Problems Panel
 
-## 🛠️ Development
+A modern diagnostic inspector that anchors the top-right pane:
+
+- **Native Codicons**: Full integration with VS Code's official SVG Codicon library for severe, warning, and info states.
+- **Accordion File Groups**: Collapsible file grouping with dynamic problem-count badges.
+- **Theme Responsive**: Inherits native VS Code variables for seamless integration with any light or dark theme.
+
+## Getting Started
+
+1. Install the extension from the VS Code Marketplace.
+2. Open a workspace.
+3. Click the "R Layout" button in the Status Bar, or run "Toggle R Layout" from the Command Palette.
+4. Open an R file and click the "Source File" icon in the editor title bar to run your code.
+
+## Extension Settings
+
+| Setting                           | Default | Description                                                      |
+| --------------------------------- | ------- | ---------------------------------------------------------------- |
+| r-layout.rConsolePath             | "R"     | Path or command for the R Console terminal.                      |
+| r-layout.useArkInteractiveConsole | false   | If true, launches a Jupyter Interactive Window as the R Console. |
+
+## Commands
+
+| Command                      | Description                                                      |
+| ---------------------------- | ---------------------------------------------------------------- |
+| Toggle R Layout              | Snap the editor into or out of the 3-pane grid.                  |
+| R Layout: Clear Plot Gallery | Clear all plots from the Plot Gallery.                           |
+| Maximize Top Pane            | Expand the top-right pane; minimizes bottom panes to tabs.       |
+| Restore Pane Split           | Restore the even split between top-right and bottom-right panes. |
+| Source File to R Console     | Execute the active R script in the console.                      |
+
+## Development
 
 ### Prerequisites
-- Node.js 22+
+
+- Node.js 22 or higher
 - npm
 
 ### Setup
+
 ```bash
-git clone https://github.com/oridwanbello/R-Quadrant.git
-cd R-Quadrant
+git clone https://github.com/oridwanbello/R-Layout.git
+cd R-Layout
 npm install
 ```
 
-### Build & Test
+### Build and Test
+
 ```bash
-npm run compile    # Build via webpack
-npm run watch      # Watch mode for development
-npm run lint       # Run ESLint
-npm run test       # Run tests
+npm run compile
+npm run watch
+npm run lint
+npm run test
 ```
 
-### Debug
-1. Run `npm run watch` in a terminal.
-2. Press `F5` to launch the Extension Development Host.
-3. Test the commands and sidebar views in the new window.
+## Project Structure
 
----
-
-## 📁 Project Structure
-
-```
+```text
 src/
 ├── extension.ts               # Entry point (orchestrator)
 ├── layout/
-│   └── layoutManager.ts       # Layout toggle & Status Bar
-├── views/
-│   ├── environmentExplorer.ts # Variable TreeView (DAP)
-│   ├── plotGallery.ts         # Plot gallery (WebviewView)
-│   └── dataViewer.ts          # Dataframe viewer (WebviewView)
+│   └── layoutManager.ts       # Layout toggle and Status Bar
+├── panels/
+│   ├── workspacePanel.ts      # Variable inspector (DAP)
+│   ├── plotsPanel.ts          # Plot gallery (WebviewPanel)
+│   ├── dataViewerPanel.ts     # Dataframe viewer (WebviewPanel)
+│   ├── helpPanel.ts           # Integrated R Help
+│   └── problemsPanel.ts       # Temporary layout anchor
 └── util/
     └── debugSession.ts        # DAP helper utilities
 ```
 
----
+## Credits
 
-## 📝 Release Notes
+This extension integrates high-quality resources from the R community:
 
-### 0.1.0
-- **Environment Explorer**: Live variable inspection via Debug Adapter Protocol
-- **Plot Gallery**: File-system-based plot capture with history navigation
-- **Data Viewer**: Interactive dataframe viewer with sorting and filtering
-- **R Quadrant Sidebar**: Dedicated Activity Bar container for all views
-- **Modular architecture**: Refactored source into `layout/`, `views/`, and `util/` modules
+- R Logo: Copyright 2016 The R Foundation (CC-BY-SA 4.0).
+- Tidyverse: Trademarks of Posit Software, PBC.
+- Bioconductor: Trademark of the Bioconductor Project.
 
-### 0.0.1
-- Initial scaffold with layout toggle command and AI agent configuration
+## License
 
----
-
-## 📄 License
-
-[MIT](LICENSE)
+MIT
