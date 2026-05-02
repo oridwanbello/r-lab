@@ -7,28 +7,51 @@ R Layout brings the familiar multi-pane workflow of RStudio to VS Code and its f
 ## Features
 
 ### Instant Layout Orchestration
+
 One click to transform your editor into an asymmetrical 3-pane grid:
+
 - **Left Pane**: Main source editor (Full Height).
 - **Top-Right Pane**: R Console, Terminal, Problems, and Help.
 - **Bottom-Right Pane**: Workspace Explorer, Plots, and Data Viewer.
 
 ### Workspace Explorer
+
 A live variable inspector that synchronizes with your R session to display:
+
 - Active variables, types, and values.
 - Direct interaction with the Data Viewer for dataframes and tibbles.
 
 ### Plot Gallery
+
 A high-fidelity rendering panel for your R plots:
+
 - **Auto-Sync**: Automatically detects and displays new plots generated from the console.
 - **Save-As**: Export any plot to PNG or SVG with white-background enforcement.
 - **History**: Navigate through your session's plot history with dedicated controls.
 
 ### Data Viewer
+
 A high-performance spreadsheet-style inspector:
+
 - **Silent Refresh**: Zero-resource background footprint; refreshes only on demand.
 - **Search & Sort**: Real-time filtering and multi-column sorting.
 - **Responsive Theme**: Automatic light/dark mode support with curated aesthetics.
 
+### Integrated R Help
+
+A professional, high-performance R documentation viewer built natively into the editor layout:
+
+- **KaTeX Math Rendering**: High-quality mathematical equation rendering out of the box.
+- **Smart Linker**: Automatically detects and links cross-references in documentation.
+- **Interactive Execution**: Dedicated "Run" buttons embedded inside example code blocks that send the code directly to your R Console.
+
+### Advanced Problems Panel
+
+A modern diagnostic inspector that anchors the top-right pane:
+
+- **Native Codicons**: Full integration with VS Code's official SVG Codicon library for severe, warning, and info states.
+- **Accordion File Groups**: Collapsible file grouping with dynamic problem-count badges.
+- **Theme Responsive**: Inherits native VS Code variables for seamless integration with any light or dark theme.
 
 ## Getting Started
 
@@ -39,29 +62,30 @@ A high-performance spreadsheet-style inspector:
 
 ## Extension Settings
 
-| Setting | Default | Description |
-|---|---|---|
-| r-layout.rConsolePath | "R" | Path or command for the R Console terminal. |
-| r-layout.useArkInteractiveConsole | false | If true, launches a Jupyter Interactive Window as the R Console. |
+| Setting                           | Default | Description                                                      |
+| --------------------------------- | ------- | ---------------------------------------------------------------- |
+| r-layout.rConsolePath             | "R"     | Path or command for the R Console terminal.                      |
+| r-layout.useArkInteractiveConsole | false   | If true, launches a Jupyter Interactive Window as the R Console. |
 
 ## Commands
 
-| Command | Description |
-|---|---|
-| Toggle R Layout | Snap the editor into or out of the 3-pane grid. |
-| R Layout: Clear Plot Gallery | Clear all plots from the Plot Gallery. |
-| Maximize Top Pane | Expand the top-right pane; minimizes bottom panes to tabs. |
-| Restore Pane Split | Restore the even split between top-right and bottom-right panes. |
-| Source File to R Console | Execute the active R script in the console. |
-
+| Command                      | Description                                                      |
+| ---------------------------- | ---------------------------------------------------------------- |
+| Toggle R Layout              | Snap the editor into or out of the 3-pane grid.                  |
+| R Layout: Clear Plot Gallery | Clear all plots from the Plot Gallery.                           |
+| Maximize Top Pane            | Expand the top-right pane; minimizes bottom panes to tabs.       |
+| Restore Pane Split           | Restore the even split between top-right and bottom-right panes. |
+| Source File to R Console     | Execute the active R script in the console.                      |
 
 ## Development
 
 ### Prerequisites
+
 - Node.js 22 or higher
 - npm
 
 ### Setup
+
 ```bash
 git clone https://github.com/oridwanbello/R-Layout.git
 cd R-Layout
@@ -69,6 +93,7 @@ npm install
 ```
 
 ### Build and Test
+
 ```bash
 npm run compile
 npm run watch
@@ -96,6 +121,7 @@ src/
 ## Credits
 
 This extension integrates high-quality resources from the R community:
+
 - R Logo: Copyright 2016 The R Foundation (CC-BY-SA 4.0).
 - Tidyverse: Trademarks of Posit Software, PBC.
 - Bioconductor: Trademark of the Bioconductor Project.

@@ -746,7 +746,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     await delay(10);
 
     // Focus Group 2 and activate R Console (which is usually the 1st or 2nd tab)
-    // Actually, R Console was shown first, let's just make sure Group 2 is focused
+    // Ensure Group 2 retains focus after terminal placement.
     // and then activate the first editor (R Console).
     try {
         await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');

@@ -426,7 +426,7 @@ export class DataViewerPanel {
             position: sticky; top: 0; z-index: 1;
             background: var(--vscode-editor-background);
             font-family: var(--vscode-font-family);
-            font-weight: 900; letter-spacing: 0.3px; color: var(--vscode-editor-foreground); opacity: 1;
+            font-weight: 600; font-style: italic; letter-spacing: 0.3px; color: var(--vscode-editor-foreground); opacity: 1;
             cursor: pointer; user-select: none;
             border-bottom: 2px solid var(--vscode-editorGroup-border);
         }

@@ -1,8 +1,8 @@
 {
   "name": "r-layout",
   "displayName": "R Layout",
-  "description": "An RStudio-style 3-pane layout orchestrator for data scientists.",
-  "version": "0.6.0",
+  "description": "RStudio-style multi-pane layout orchestrator for VS Code",
+  "version": "0.3.0",
   "publisher": "oridwanbello",
   "engines": {
     "vscode": "^1.107.0"

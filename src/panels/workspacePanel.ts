@@ -155,7 +155,7 @@ export class WorkspacePanel {
         // Priority 2: Read the auto-updated watcher file
         // The R task callback (injected at activation) writes
         // .r-layout/.workspace_data.json after every R command.
-        // We just read it - no terminal interaction needed.
+        // Read directly from disk - no terminal interaction needed.
         const watcherResult = this._readWatcherFile();
         if (watcherResult) {
             this._variables = watcherResult.variables || [];
@@ -407,7 +407,7 @@ tryCatch({
      *
      * Rscript is a standalone binary that ships with R, independent of
      * whether the user's console is standard R, radian, or ark.
-     * We try "Rscript" on PATH first, then check common R installation paths.
+     * Attempts "Rscript" on PATH first, then checks common R installation paths.
      */
     private async _findRscript(): Promise<string> {
         // First, try the R console path setting - if it's plain "R", derive "Rscript"
@@ -559,7 +559,8 @@ tryCatch({
             position: sticky; top: 0; z-index: 1;
             padding: 6px 8px;
             text-align: left;
-            font-weight: 900;
+            font-weight: 600;
+            font-style: italic;
             text-transform: none;
             letter-spacing: 0.3px;
             background: var(--vscode-editor-background);

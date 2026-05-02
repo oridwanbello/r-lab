@@ -30,7 +30,7 @@ The project has been refactored into a modular architecture to support the 3-pan
   - dataViewerPanel.ts: Renders dataframe tables.
   - helpPanel.ts: Displays integrated R documentation.
   - plotsPanel.ts: Watches for and renders plot images.
-  - problemsPanel.ts: A dummy panel used strictly to anchor Group 2.
+  - problemsPanel.ts: Visualizes workspace diagnostics with native Codicons.
   - workspacePanel.ts: Renders the DAP variable tree.
 - src/util/: Helper utilities (e.g., Debug Adapter Protocol functions).
 

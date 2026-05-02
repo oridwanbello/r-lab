@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getRConsoleTerminal } from '../layout/layoutManager';
 
 /**
  * Help Panel - runs R help lookups in a background `Rscript` process
@@ -103,6 +104,17 @@ export class HelpPanel {
                             );
                         }
                         break;
+                    case 'runCode':
+                        if (msg.query) {
+                            const term = getRConsoleTerminal();
+                            if (term) {
+                                term.show(false);
+                                term.sendText(msg.query);
+                            } else {
+                                vscode.window.showErrorMessage('R Console terminal not found. Please activate the layout first.');
+                            }
+                        }
+                        break;
                 }
             },
             null,
@@ -183,7 +195,25 @@ export class HelpPanel {
 
             // Extract the body content from the HTML output
             const bodyMatch = raw.match(/<body>([\s\S]*?)<\/body>/i);
-            const content = bodyMatch ? bodyMatch[1] : raw;
+            let content = bodyMatch ? bodyMatch[1] : raw;
+
+            // Post-process: replace broken lifecycle badge <img> tags with styled inline badges.
+            // R's Rd2HTML emits relative paths like ../help/figures/lifecycle-deprecated.svg
+            // which don't resolve inside a VS Code webview.
+            content = content.replace(
+                /<img\s[^>]*src="[^"]*lifecycle[- _]([a-z-]+)\.svg"[^>]*>/gi,
+                (_match, stage: string) => {
+                    const label = stage.charAt(0).toUpperCase() + stage.slice(1);
+                    return `<span class="lifecycle-badge lifecycle-${stage.toLowerCase()}">${label}</span>`;
+                }
+            );
+
+            // Remove any remaining <img> tags with relative src paths (no protocol)
+            // that can't resolve in the webview.
+            content = content.replace(
+                /<img\s[^>]*src="(?!https?:\/\/|data:)[^"]*"[^>]*>/gi,
+                ''
+            );
 
             this._helpText = content;
         } catch (err: unknown) {
@@ -285,13 +315,13 @@ export class HelpPanel {
                     ${
                         this._recentSearches.length > 0
                             ? `<div class="recent-section">
-                                   <span class="section-label">Recent</span>
+                                   <h2>Recent</h2>
                                    <div class="recent-links">${recentItems}</div>
                                </div>`
                             : ''
                     }
                     <div class="quick-links">
-                        <span class="section-label">External Resources</span>
+                        <h2>External Resources</h2>
                         <div class="links-grid">
                             <a class="link-card" data-url="https://www.rdocumentation.org">
                                 <img src="${rdocIconUri}" class="icon" alt="Rdocumentation" />
@@ -320,9 +350,12 @@ export class HelpPanel {
     <meta http-equiv="Content-Security-Policy"
           content="default-src 'none';
                    img-src ${cspSource} https: data:;
-                   style-src 'nonce-${nonce}';
-                   script-src 'nonce-${nonce}';">
+                   font-src https://cdn.jsdelivr.net;
+                   style-src 'nonce-${nonce}' https://cdn.jsdelivr.net;
+                   script-src 'nonce-${nonce}' https://cdn.jsdelivr.net;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
     <style nonce="${nonce}">
         /* Code Block Styling using VS Code theme variables */
         pre {
@@ -412,8 +445,8 @@ export class HelpPanel {
             padding: 16px 20px;
             font-size: var(--vscode-font-size, 13px); line-height: 1.6;
         }
-        .help-html-content h2, .help-html-content h3 {
-            margin-top: 2em; margin-bottom: 1em;
+        h2, h3 {
+            margin-bottom: 1em;
             color: var(--vscode-editor-foreground);
             font-weight: 700;
             text-transform: uppercase;
@@ -422,7 +455,7 @@ export class HelpPanel {
             padding-bottom: 8px;
             position: relative;
         }
-        .help-html-content h2::after, .help-html-content h3::after {
+        h2::after, h3::after {
             content: '';
             position: absolute;
             bottom: -1px;
@@ -432,13 +465,48 @@ export class HelpPanel {
             background: var(--vscode-textLink-foreground);
             border-radius: 6px;
         }
-        .help-html-content h2 { font-size: 1.1em; }
-        .help-html-content h3 { font-size: var(--vscode-font-size, 13px); }
+        h2 { font-size: 1.1em; }
+        h3 { font-size: var(--vscode-font-size, 13px); }
+
+        /* Function Documentation Spacing */
+        .help-html-content h2, .help-html-content h3 {
+            margin-top: 2.2em;
+        }
+        /* Home Page Spacing */
+        .empty-state h2 {
+            margin-top: 1.5em;
+        }
+        .empty-state > div:first-child h2 {
+            margin-top: 0.5em;
+        }
         .help-html-content pre {
+            position: relative;
             padding: 12px;
             border-radius: 6px;
             overflow-x: auto;
             margin: 10px 0;
+        }
+        .run-code-btn {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            background: var(--vscode-button-secondaryBackground, rgba(130, 130, 130, 0.15));
+            color: var(--vscode-button-secondaryForeground, var(--vscode-editor-foreground));
+            border: 1px solid var(--vscode-editorGroup-border);
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-weight: 600;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s ease, background-color 0.2s ease;
+        }
+        .help-html-content pre:hover .run-code-btn {
+            opacity: 1;
+        }
+        .run-code-btn:hover {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
         }
         .help-html-content p { margin-bottom: 1em; }
         .help-html-content a { color: var(--vscode-textLink-foreground); text-decoration: none; }
@@ -455,10 +523,7 @@ export class HelpPanel {
             background: var(--vscode-textCodeBlock-background);
             padding: 1px 5px; border-radius: 6px; font-size: 0.9em;
         }
-        .section-label {
-            display: block;
-            letter-spacing: 0.5px; opacity: 0.5; margin-bottom: 6px; margin-top: 14px;
-        }
+
         .recent-links { display: flex; flex-wrap: wrap; gap: 6px; }
         .recent-link {
             color: var(--vscode-textLink-foreground); text-decoration: none;
@@ -485,6 +550,26 @@ export class HelpPanel {
             height: 20px; width: auto; flex-shrink: 0;
         }
         .link-card:hover { background: var(--vscode-list-hoverBackground); }
+
+        /* Lifecycle Badges (replace broken <img> from Rd2HTML) */
+        .lifecycle-badge {
+            display: inline-block;
+            font-size: 0.85em;
+            font-weight: 600;
+            padding: 1px 7px;
+            border-radius: 4px;
+            vertical-align: middle;
+            border: 1px solid;
+        }
+        .lifecycle-stable       { background: #d0f0d0; color: #1a7a1a; border-color: #a0d0a0; }
+        .lifecycle-experimental  { background: #fff3cd; color: #856404; border-color: #ffc107; }
+        .lifecycle-deprecated    { background: #fdd; color: #c33; border-color: #e99; }
+        .lifecycle-superseded    { background: #d0e8ff; color: #2060a0; border-color: #a0c8f0; }
+        .lifecycle-defunct       { background: #e0e0e0; color: #666; border-color: #bbb; }
+        .lifecycle-questioning   { background: #e8d8f0; color: #6a3d7d; border-color: #c8a8d8; }
+        .lifecycle-maturing      { background: #d0f0d0; color: #1a7a1a; border-color: #a0d0a0; }
+        .lifecycle-soft-deprecated { background: #fdd; color: #c33; border-color: #e99; }
+        .lifecycle-archived      { background: #e0e0e0; color: #666; border-color: #bbb; }
 
         /* Package Index Styling (No Box, Preserves Columns) */
         .package-index {
@@ -629,6 +714,33 @@ export class HelpPanel {
                 if (q) { vscode.postMessage({ type: 'search', query: q }); }
             }
 
+            // Smart Linker: Turn plain <code> tags in "See Also" into clickable links
+            const headers = Array.from(document.querySelectorAll('.help-html-content h3'));
+            const seeAlsoHeader = headers.find(h => h.textContent.trim().toLowerCase() === 'see also');
+            if (seeAlsoHeader) {
+                let node = seeAlsoHeader.nextElementSibling;
+                while (node && node.tagName !== 'H2' && node.tagName !== 'H3') {
+                    node.querySelectorAll('code').forEach(code => {
+                        if (code.closest('a')) return; // skip if already linked
+
+                        const q = code.textContent.trim();
+                        // Only linkify valid R identifiers
+                        if (/^[a-zA-Z._][a-zA-Z0-9._]*$/.test(q)) {
+                            const a = document.createElement('a');
+                            a.href = '#';
+                            a.className = 'pkg-func-link';
+                            a.setAttribute('data-query', q);
+
+                            while(code.firstChild) {
+                                a.appendChild(code.firstChild);
+                            }
+                            code.appendChild(a);
+                        }
+                    });
+                    node = node.nextElementSibling;
+                }
+            }
+
             // Attach listeners to the newly parsed package links
             document.querySelectorAll('.pkg-func-link').forEach(l => {
                 l.addEventListener('click', e => {
@@ -666,6 +778,37 @@ export class HelpPanel {
                 });
             });
 
+            // Run Button specifically for the "Examples" section
+            const examplesHeader = headers.find(h => h.textContent.trim().toLowerCase() === 'examples');
+            if (examplesHeader) {
+                let node = examplesHeader.nextElementSibling;
+                while (node && node.tagName !== 'H2' && node.tagName !== 'H3') {
+                    const preBlocks = node.tagName === 'PRE' ? [node] : Array.from(node.querySelectorAll('pre'));
+                    preBlocks.forEach(pre => {
+                        if (pre.classList.contains('package-index')) return;
+                        const btn = document.createElement('button');
+                        btn.className = 'run-code-btn';
+                        btn.textContent = 'Run';
+                        btn.title = 'Send to R Console';
+
+                        btn.addEventListener('click', () => {
+                            const codeEl = pre.querySelector('code') || pre;
+                            const clone = codeEl.cloneNode(true);
+                            const btnInClone = clone.querySelector('.run-code-btn');
+                            if (btnInClone) btnInClone.remove();
+
+                            let codeText = clone.textContent || '';
+                            if (codeText) {
+                                vscode.postMessage({ type: 'runCode', query: codeText });
+                            }
+                        });
+
+                        pre.appendChild(btn);
+                    });
+                    node = node.nextElementSibling;
+                }
+            }
+
             // Instant Tooltip Controller
             const tooltip = document.getElementById('tooltip');
             document.querySelectorAll('[data-tooltip]').forEach(el => {
@@ -690,6 +833,21 @@ export class HelpPanel {
                     tooltip.style.display = 'none';
                 });
             });
+
+            // Process KaTeX Mathematics
+            function processMathHTML() {
+                if (typeof katex === 'undefined') return;
+                const macros = { "\\R": "\\textsf{R}", "\\mbox": "\\text", "\\code": "\\texttt"};
+                document.querySelectorAll('.reqn').forEach(e => {
+                    try {
+                        katex.render(e.textContent, e, { throwOnError: false, macros });
+                    } catch (err) {
+                        console.error('KaTeX rendering error:', err);
+                    }
+                });
+            }
+            processMathHTML();
+
         })();
     </script>
 </body>
