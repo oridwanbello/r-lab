@@ -1,6 +1,7 @@
 {
   "name": "r-layout",
   "displayName": "R Layout",
+  "preview": true,
   "description": "RStudio-inspired multi-pane layout orchestrator for VS Code",
   "version": "0.3.0",
   "publisher": "oridwanbello",

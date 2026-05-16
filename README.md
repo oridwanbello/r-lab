@@ -2,6 +2,9 @@
 
 An RStudio-inspired multi-pane layout orchestrator for VS Code.
 
+> [!NOTE]
+> This extension is currently in **Preview**. We are actively refining the layout and feature set. Please report any issues on GitHub!
+
 R Layout brings the familiar multi-pane workflow of RStudio to VS Code and its forks. With a single command, snap your editor into a layout optimized for data science, complete with a live variable explorer, plot gallery, and interactive data viewer.
 
 ## Features
