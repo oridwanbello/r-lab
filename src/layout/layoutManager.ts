@@ -298,10 +298,7 @@ export async function resetStaleLayout(
         await Promise.all([
             Promise.resolve(
                 wsConfig.update('workbench.editor.closeEmptyGroups', origClose, cfgTarget)
-            ).catch(() => {}),
-            Promise.resolve(
-                wsConfig.update('terminal.integrated.defaultLocation', undefined, cfgTarget)
-            ).catch(() => {}),
+            ).catch(() => {})
         ]);
     } catch {}
 
@@ -447,10 +444,7 @@ export async function collapseLayoutForShutdown(): Promise<void> {
             return Promise.all([
                 Promise.resolve(
                     wsConfig.update('workbench.editor.closeEmptyGroups', origClose, cfgTarget)
-                ).catch(() => {}),
-                Promise.resolve(
-                    wsConfig.update('terminal.integrated.defaultLocation', undefined, cfgTarget)
-                ).catch(() => {}),
+                ).catch(() => {})
             ]);
         })(),
     ]);
@@ -528,7 +522,6 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     await extensionContext.workspaceState.update('r-layout.origCloseEmptyGroups', origClose);
 
     await wsConfig.update('workbench.editor.closeEmptyGroups', false, cfgTarget);
-    await wsConfig.update('terminal.integrated.defaultLocation', 'editor', cfgTarget);
 
     await delay(10);
 
@@ -944,10 +937,7 @@ async function deactivateLayout(): Promise<void> {
     await Promise.all([
         Promise.resolve(
             wsConfig.update('workbench.editor.closeEmptyGroups', origClose, cfgTarget)
-        ).catch(() => {}),
-        Promise.resolve(
-            wsConfig.update('terminal.integrated.defaultLocation', undefined, cfgTarget)
-        ).catch(() => {}),
+        ).catch(() => {})
     ]);
     await delay(100); // Give VS Code backend time to register the setting change
 
