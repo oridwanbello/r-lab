@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { PlotsPanel } from '../panels/plotsPanel';
 import { HelpPanel } from '../panels/helpPanel';
 import { ProblemsPanel } from '../panels/problemsPanel';
@@ -215,7 +216,7 @@ export function registerLayoutCommand(
                 savedHelpState = undefined;
                 PlotsPanel.resetSessionState();
 
-                // Delete .r-layout directory to prevent left-over files
+                // Delete .r_layout directory to prevent left-over files
                 deleteRLayoutDir();
 
                 // If the layout is active, closing the R Console should trigger an exit
@@ -394,7 +395,7 @@ export async function resetStaleLayout(
  * our activation code can collapse it.
  */
 export async function collapseLayoutForShutdown(): Promise<void> {
-    // Always clean up the .r-layout temp directory on shutdown.
+    // Always clean up the .r_layout temp directory on shutdown.
     deleteRLayoutDir();
 
     if (!isLayoutActive) {
@@ -577,7 +578,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
             const doc = await vscode.workspace.openTextDocument({ content: '', language: 'plaintext' });
             currentAnchorUri = doc.uri.toString();
             anchorEditor = await vscode.window.showTextDocument(
-                doc, { viewColumn: vscode.ViewColumn.One, preserveFocus: true, preview: true }
+                doc, { viewColumn: vscode.ViewColumn.One, preserveFocus: true, preview: false }
             );
         } catch {}
     }
@@ -605,7 +606,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     // 9a. Anchor Group 2 with ProblemsPanel before any terminal placement.
     ProblemsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
-    await delay(10);
+    await delay(150); // Ensure Group 2 is fully mounted in the UI before spawning PTYs
 
     if (useArk) {
         // Ark kernel mode - use Jupyter Interactive
@@ -630,7 +631,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                     name: 'R Console',
                     shellPath: resolveRPath(config),
                     location: { viewColumn: vscode.ViewColumn.Two },
-                    iconPath: vscode.Uri.joinPath(context.extensionUri, 'resources', 'r-logo.svg'),
+                    iconPath: vscode.Uri.joinPath(context.extensionUri, 'resources', 'r_logo.svg'),
                 });
                 rConsoleTerminal.show(false);
             }
@@ -639,9 +640,9 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         // Only delete stale workspace data if we are creating a BRAND-NEW R session.
         // If we found an existing R Console terminal (wasRConsoleReused), R is still
         // running and its variables are still live - do NOT wipe the data file.
-        const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        if (wf && !wasRConsoleReused) {
-            const staleFile = path.join(wf, '.r-layout', '.workspace_data.json');
+        const wf = getEffectiveWorkspaceRoot();
+        if (!wasRConsoleReused) {
+            const staleFile = path.join(wf, '.r_layout', '.workspace_data.json');
             try { fs.unlinkSync(staleFile); } catch {}
 
             // NEW: Clear R Help state for brand-new R sessions
@@ -659,40 +660,43 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     if (rConsoleTerminal) {
             // Reuse the existing terminal - do NOT recreate (that kills the R session).
-            // Detect whether the terminal is already placed as an editor tab (e.g. after
-            // an extension-host restart during development). If it is already an editor
-            // tab we must NOT call moveToEditor - that command is a no-op or causes the
-            // tab to vanish. We only call moveToEditor when the terminal is still sitting
-            // in the bottom panel.
-            const isAlreadyEditorTab = vscode.window.tabGroups.all.some(g =>
+            // Check specifically for the R Console tab by name.
+            const rConsoleIsEditorTab = vscode.window.tabGroups.all.some(g =>
                 g.tabs.some(tab => {
                     const input = tab.input as any;
-                    return input instanceof vscode.TabInputTerminal;
+                    return input instanceof vscode.TabInputTerminal &&
+                        tab.label.includes('R Console');
                 })
             );
 
-            rConsoleTerminal.show(false);
-            await delay(10);
-
-            if (!isAlreadyEditorTab) {
+            if (rConsoleIsEditorTab) {
+                // Already an editor tab - just reveal it without moving.
+                rConsoleTerminal.show(true); // preserveFocus = true
+                await delay(10);
+            } else {
                 // Terminal is in the bottom panel - move it into Group 2.
+                // Use show(true) to make it the active panel terminal without
+                // stealing keyboard focus from the editor group.
+                rConsoleTerminal.show(true);
+                await delay(100);
                 await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
-                await delay(10);
+                await delay(50);
                 await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
-                await delay(10);
+                await delay(100);
             }
 
         } else {
-            // New session: create directly in ViewColumn.Two
+            // New session: create directly in ViewColumn.Two. R Console does not suffer
+            // from the empty PTY bug, so this is safe and guarantees correct placement.
             rConsoleTerminal = vscode.window.createTerminal({
                 name: 'R Console',
                 shellPath: resolveRPath(config),
                 location: { viewColumn: vscode.ViewColumn.Two },
-                env: { ...(process.env as Record<string, string>), ...rProfileEnv },
-                strictEnv: true,
-                iconPath: vscode.Uri.joinPath(context.extensionUri, 'resources', 'r-logo.svg'),
+                env: rProfileEnv, // No strictEnv: let VS Code merge naturally
+                cwd: getEffectiveWorkspaceRoot(), // Prevents PTY hang in no-workspace mode
+                iconPath: vscode.Uri.joinPath(context.extensionUri, 'resources', 'r_logo.svg'),
             });
-            await delay(10);
+            await delay(100); // Give terminal time to attach
             rConsoleTerminal.show(false);
         }
     }
@@ -700,10 +704,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     // Shell terminal
     await delay(10);
     if (shellTerminal) {
-        shellTerminal.show(false);
-        await delay(10);
-
-        // Only move if it's still in the bottom panel, not already an editor tab.
+        // Check specifically for the Shell terminal by name.
         const shellIsEditorTab = vscode.window.tabGroups.all.some(g =>
             g.tabs.some(tab => {
                 const input = tab.input as any;
@@ -711,21 +712,26 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                     (tab.label === 'Terminal' || tab.label === shellTerminal?.name);
             })
         );
-        if (!shellIsEditorTab) {
+        if (shellIsEditorTab) {
+            shellTerminal.show(true);
+            await delay(10);
+        } else {
+            shellTerminal.show(true);
+            await delay(100);
             await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
-            await delay(10);
+            await delay(50);
             await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
-            await delay(10);
+            await delay(100);
         }
 
     } else {
+        // Create directly in ViewColumn.Two, no bottom-pane origin
         shellTerminal = vscode.window.createTerminal({
             name: 'Terminal',
             location: { viewColumn: vscode.ViewColumn.Two },
-            env: { ...(process.env as Record<string, string>) },
-            strictEnv: true,
+            cwd: getEffectiveWorkspaceRoot(),
         });
-        await delay(10);
+        await delay(100); // Give terminal time to attach
         shellTerminal.show(false);
     }
 
@@ -925,20 +931,45 @@ async function deactivateLayout(): Promise<void> {
     WorkspacePanel.currentPanel?.dispose();
     DataViewerPanel.currentPanel?.dispose();
 
-    // 5. Move ALL terminals back to the bottom panel.
-    //    We focus Group 2 (where terminal tabs live during layout mode) and
-    //    call moveToTerminalPanel once per terminal. We deliberately do NOT call
-    //    t.show() here - show() opens the terminal panel which can trigger VS Code
-    //    to auto-create a new default bash terminal before ours arrive.
-    const termCount = vscode.window.terminals.length;
-    if (termCount > 0) {
-        try { await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup'); } catch {}
-        await delay(10);
-        for (let i = 0; i < termCount; i++) {
-            try {
-                await vscode.commands.executeCommand('workbench.action.terminal.moveToTerminalPanel');
-                await delay(10);
-            } catch {}
+    // 5. Restore user settings FIRST - before moving terminals or reopening files -
+    //    so that terminal defaults are correct when moving, and closeEmptyGroups
+    //    is true when showTextDocument runs.
+    const cfgTarget = vscode.workspace.workspaceFolders
+        ? vscode.ConfigurationTarget.Workspace
+        : vscode.ConfigurationTarget.Global;
+    const wsConfig = vscode.workspace.getConfiguration();
+
+    const origClose = extensionContext.workspaceState.get<boolean | undefined>('r-layout.origCloseEmptyGroups', undefined);
+
+    await Promise.all([
+        Promise.resolve(
+            wsConfig.update('workbench.editor.closeEmptyGroups', origClose, cfgTarget)
+        ).catch(() => {}),
+        Promise.resolve(
+            wsConfig.update('terminal.integrated.defaultLocation', undefined, cfgTarget)
+        ).catch(() => {}),
+    ]);
+    await delay(100); // Give VS Code backend time to register the setting change
+
+    // 6. Move only R Layout terminals back to the bottom panel.
+    //    We target ONLY our terminals by reference, not all editor terminals.
+    //    This prevents moving third-party terminals (e.g. Python Debugger) which
+    //    can corrupt panel state and cause PTY crashes on reactivation.
+    for (const terminal of [rConsoleTerminal, shellTerminal]) {
+        if (!terminal) continue;
+        // Check if this specific terminal is an editor tab
+        const isEditorTab = vscode.window.tabGroups.all.some(g =>
+            g.tabs.some(tab => {
+                const input = tab.input as any;
+                return input instanceof vscode.TabInputTerminal &&
+                    (tab.label === terminal.name || tab.label.includes(terminal.name));
+            })
+        );
+        if (isEditorTab) {
+            terminal.show(false); // Activate this terminal in its editor tab
+            await delay(100);
+            await vscode.commands.executeCommand('workbench.action.terminal.moveToTerminalPanel');
+            await delay(100);
         }
     }
     // Keep rConsoleTerminal / shellTerminal references alive so the next
@@ -971,25 +1002,7 @@ async function deactivateLayout(): Promise<void> {
     } catch {}
 
 
-    // 10. Restore user settings FIRST - before reopening files -
-    //     so that closeEmptyGroups is true again when showTextDocument
-    //     runs. If it were still false, reopening files could create
-    //     a spurious second editor group.
-    const cfgTarget = vscode.workspace.workspaceFolders
-        ? vscode.ConfigurationTarget.Workspace
-        : vscode.ConfigurationTarget.Global;
-    const wsConfig = vscode.workspace.getConfiguration();
-
-    const origClose = extensionContext.workspaceState.get<boolean | undefined>('r-layout.origCloseEmptyGroups', undefined);
-
-    await Promise.all([
-        Promise.resolve(
-            wsConfig.update('workbench.editor.closeEmptyGroups', origClose, cfgTarget)
-        ).catch(() => {}),
-        Promise.resolve(
-            wsConfig.update('terminal.integrated.defaultLocation', undefined, cfgTarget)
-        ).catch(() => {}),
-    ]);
+    // (Settings were restored above in step 5)
 
     // 11. Reopen user's source files in the single editor group
     for (const uri of sourceFiles) {
@@ -1045,35 +1058,68 @@ function registerLayoutGuards(context: vscode.ExtensionContext): void {
         }, 2000);
     });
 
-    // Extend the existing tabGuard to also handle terminal tabs
+    // Allowlist of webview viewTypes that BELONG in Groups 2 and 3.
+    // Anything not in this set (and not a terminal we own) is stray and
+    // gets moved to Group 1.
+    const allowedGroup2ViewTypes = new Set([
+        'r-layout.problemsPanel',
+        'r-layout.helpPanel',
+    ]);
+    const allowedGroup3ViewTypes = new Set([
+        'r-layout.workspacePanel',
+        'r-layout.plotsPanel',
+        'r-layout.dataViewerPanel',
+    ]);
+
     const tabAndTermGuard = vscode.window.tabGroups.onDidChangeTabs(async (e) => {
-        if (!isLayoutActive) { return; }
+        if (!isLayoutActive || activationInProgress) { return; }
         for (const tab of e.opened) {
+            const group = vscode.window.tabGroups.all.find((g) => g.tabs.includes(tab));
+            if (!group) continue;
 
-            // Text file guard
-            if (tab.input instanceof vscode.TabInputText) {
-                const group = vscode.window.tabGroups.all.find((g) => g.tabs.includes(tab));
-                if (!group) continue;
-
-                // If opened in Group 1, check if we need to close the empty anchor
-                if (group.viewColumn === vscode.ViewColumn.One) {
-                    if (currentAnchorUri && tab.input.uri.toString() !== currentAnchorUri) {
-                        // A real file was opened in Group 1. Close the anchor file.
-                        const anchorUriStr = currentAnchorUri;
-                        currentAnchorUri = undefined;
-                        setTimeout(async () => {
-                            for (const g of vscode.window.tabGroups.all) {
-                                for (const t of g.tabs) {
-                                    if (t.input instanceof vscode.TabInputText && t.input.uri.toString() === anchorUriStr) {
-                                        try { await vscode.window.tabGroups.close(t); } catch {}
-                                    }
-                                }
+            // --- Anchor cleanup: when a real file opens in Group 1, close the placeholder ---
+            if (group.viewColumn === vscode.ViewColumn.One &&
+                tab.input instanceof vscode.TabInputText &&
+                currentAnchorUri &&
+                tab.input.uri.toString() !== currentAnchorUri) {
+                const anchorUriStr = currentAnchorUri;
+                currentAnchorUri = undefined;
+                setTimeout(async () => {
+                    for (const g of vscode.window.tabGroups.all) {
+                        for (const t of g.tabs) {
+                            if (t.input instanceof vscode.TabInputText && t.input.uri.toString() === anchorUriStr) {
+                                try { await vscode.window.tabGroups.close(t); } catch {}
                             }
-                        }, 50);
+                        }
                     }
-                    continue;
-                }
+                }, 50);
+                continue;
+            }
 
+            // --- Everything in Group 1 is fine ---
+            if (group.viewColumn === vscode.ViewColumn.One) { continue; }
+
+            // --- Group 2: allow our terminals and our panels ---
+            if (group.viewColumn === vscode.ViewColumn.Two) {
+                if (tab.input instanceof vscode.TabInputTerminal) { continue; }
+                if (tab.input instanceof vscode.TabInputWebview) {
+                    const viewType = (tab.input as any).viewType as string | undefined;
+                    if (viewType && allowedGroup2ViewTypes.has(viewType)) { continue; }
+                }
+            }
+
+            // --- Group 3: allow our panels ---
+            if (group.viewColumn === vscode.ViewColumn.Three) {
+                if (tab.input instanceof vscode.TabInputWebview) {
+                    const viewType = (tab.input as any).viewType as string | undefined;
+                    if (viewType && allowedGroup3ViewTypes.has(viewType)) { continue; }
+                }
+            }
+
+            // --- This tab is stray. Move it to Group 1. ---
+
+            // Text documents: close and reopen in Group 1 (reliable for text).
+            if (tab.input instanceof vscode.TabInputText) {
                 const uri = tab.input.uri;
                 try {
                     await vscode.window.tabGroups.close(tab);
@@ -1083,42 +1129,64 @@ function registerLayoutGuards(context: vscode.ExtensionContext): void {
                         preserveFocus: false,
                     });
                 } catch {}
+                continue;
             }
 
-            // Terminal tab guard
+            // Text diffs: close and reopen in Group 1.
+            if (tab.input instanceof vscode.TabInputTextDiff) {
+                const diff = tab.input as vscode.TabInputTextDiff;
+                try {
+                    await vscode.window.tabGroups.close(tab);
+                    await vscode.commands.executeCommand('vscode.diff',
+                        diff.original, diff.modified, undefined,
+                        { viewColumn: vscode.ViewColumn.One, preserveFocus: false }
+                    );
+                } catch {}
+                continue;
+            }
+
+            // Third-party terminal tabs: dispose and recreate in Group 2.
             if (tab.input instanceof vscode.TabInputTerminal) {
-                if (activationInProgress || _termGuardBusy || !_pendingTerminal) { continue; }
-
-                const group = vscode.window.tabGroups.all.find((g) => g.tabs.includes(tab));
-                if (!group || group.viewColumn === vscode.ViewColumn.Two) {
-                    // Correct group - clear pending ref
-                    _pendingTerminal = null;
-                    continue;
-                }
-
-                // Wrong group - dispose and recreate immediately
+                if (_termGuardBusy || !_pendingTerminal) { continue; }
                 const terminal = _pendingTerminal;
                 _pendingTerminal = null;
                 _termGuardBusy = true;
-
                 const opts = terminal.creationOptions as vscode.TerminalOptions;
                 terminal.dispose();
-
                 try {
                     const newTerm = vscode.window.createTerminal({
                         name: opts.name ?? 'Terminal',
                         shellPath: opts.shellPath,
                         shellArgs: opts.shellArgs,
                         cwd: opts.cwd,
-                        env: { ...(process.env as Record<string, string>), ...(opts.env || {}) },
-                        strictEnv: true,
+                        env: opts.env,
                         location: { viewColumn: vscode.ViewColumn.Two },
                     });
                     newTerm.show(false);
                 } finally {
                     setTimeout(() => { _termGuardBusy = false; }, 600);
                 }
+                continue;
             }
+
+            // Everything else (extension info pages, settings, walkthroughs,
+            // notebooks, custom editors, etc.): MOVE the tab to Group 1 without
+            // closing it. We use a deferred approach because onDidChangeTabs fires
+            // when the tab object is created, but before the tab becomes the active
+            // editor in its group. The 300ms delay lets the tab fully render and
+            // become active, so moveEditorToFirstGroup targets the correct tab.
+            const strayGroupColumn = group.viewColumn;
+            setTimeout(async () => {
+                try {
+                    if (strayGroupColumn === vscode.ViewColumn.Two) {
+                        await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+                    } else if (strayGroupColumn === vscode.ViewColumn.Three) {
+                        await vscode.commands.executeCommand('workbench.action.focusThirdEditorGroup');
+                    }
+                    await vscode.commands.executeCommand('workbench.action.moveEditorToFirstGroup');
+                    await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+                } catch {}
+            }, 80);
         }
     });
 
@@ -1258,10 +1326,9 @@ function groupFocusCommand(col: vscode.ViewColumn): string | undefined {
  * so R sources it silently at startup - no command appears in the console.
  */
 function _buildWatcherRprofile(): string | undefined {
-    const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!wf) { return undefined; }
+    const wf = getEffectiveWorkspaceRoot();
 
-    const outDir = path.join(wf, '.r-layout');
+    const outDir = path.join(wf, '.r_layout');
     if (!fs.existsSync(outDir)) {
         fs.mkdirSync(outDir, { recursive: true });
     }
@@ -1272,11 +1339,21 @@ function _buildWatcherRprofile(): string | undefined {
 
     const scriptPath = path.join(outDir, '.workspace_watcher.R');
 
+    // Absolute paths injected into the R script so it works regardless of R's cwd.
+    // On Windows, backslashes must be escaped for R string literals.
+    const absOutDir = outDir.replace(/\\/g, '/');
+    const absPlotsDir = plotsDir.replace(/\\/g, '/');
+    const absDvCsv = path.join(outDir, 'dv.csv').replace(/\\/g, '/');
+    const absDvMeta = path.join(outDir, 'dv-meta.txt').replace(/\\/g, '/');
+    const absVarsTsv = path.join(outDir, '.workspace_vars.tsv').replace(/\\/g, '/');
+    const absLoadedTsv = path.join(outDir, '.workspace_loaded.tsv').replace(/\\/g, '/');
+    const absAttachedTsv = path.join(outDir, '.workspace_attached.tsv').replace(/\\/g, '/');
+
     // Helper R code to snapshot the current workspace - used both at
     // startup and in the task callback. We use TSV to avoid base R JSON serialization issues.
     const snapshotCode = `
   tryCatch({
-    dir.create(".r-layout/plots", showWarnings = FALSE, recursive = TRUE)
+    dir.create("${absPlotsDir}", showWarnings = FALSE, recursive = TRUE)
     .vars <- ls(envir = .GlobalEnv)
     .info <- if (length(.vars) == 0) character(0) else vapply(.vars, function(nm) {
       obj <- get(nm, envir = .GlobalEnv)
@@ -1294,9 +1371,10 @@ function _buildWatcherRprofile(): string | undefined {
       is_df <- if (is.data.frame(obj)) "true" else "false"
       paste(nm, cls, dims, prev, is_df, sep = "\\t")
     }, character(1))
-    writeLines(.info, ".r-layout/.workspace_vars.tsv")
-    writeLines(loadedNamespaces(), ".r-layout/.workspace_loaded.tsv")
-    writeLines(search(), ".r-layout/.workspace_attached.tsv")
+    writeLines(.info, "${absVarsTsv}")
+    .def_pkgs <- getOption("defaultPackages", c("datasets", "utils", "grDevices", "graphics", "stats", "methods"))
+    writeLines(unique(c(loadedNamespaces(), .def_pkgs)), "${absLoadedTsv}")
+    writeLines(unique(c(search(), paste0("package:", .def_pkgs))), "${absAttachedTsv}")
   }, error = function(e) NULL)`;
 
 
@@ -1317,19 +1395,17 @@ local({
   if (nchar(orig) > 0 && file.exists(orig)) source(orig, echo = FALSE)
 })
 
-# 3. Pre-set fixed Data Viewer temp paths.
-#    These are defined ONCE here at startup - silently, via Rprofile - so the
-#    extension never needs to send a path-setting command to the R console.
-.rlayout_csv  <- ".r-layout/dv.csv"
-.rlayout_meta <- ".r-layout/dv-meta.txt"
+# 3. Pre-set fixed Data Viewer temp paths (absolute paths injected by extension).
+.rlayout_csv  <- "${absDvCsv}"
+.rlayout_meta <- "${absDvMeta}"
 .rlayout_active_df_to_export <- NULL
 .rlayout_last_plot_hash <- NULL
 .rlayout_current_plot_id <- 0
 
-# Default plot output directory - can be overridden mid-session via:
-#   options(.rlayout_plot_dir = "/your/custom/path")
-# Resetting: options(.rlayout_plot_dir = NULL)  → reverts to .r-layout/plots
-options(.rlayout_plot_dir = NULL)
+# Default plot output directory (absolute path injected by extension).
+# Can be overridden mid-session via: options(.rlayout_plot_dir = "/your/custom/path")
+# Resetting: options(.rlayout_plot_dir = NULL)  → reverts to default
+options(.rlayout_plot_dir = "${absPlotsDir}")
 
 # Set default device to null pdf to enable invisible plot recording
 options(device = function(...) { pdf(file="/dev/null", ...); dev.control("enable") })
@@ -1338,7 +1414,7 @@ options(device = function(...) { pdf(file="/dev/null", ...); dev.control("enable
 # to find the highest existing plot number and append. This is safe for custom
 # directories and idempotent if multiple hooks fire for the same plot.
 .rlayout_update_plot_id <- function() {
-  .out_dir <- getOption(".rlayout_plot_dir", ".r-layout/plots")
+  .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
   if (!dir.exists(.out_dir)) {
     .rlayout_current_plot_id <<- 1
     return()
@@ -1359,14 +1435,16 @@ setHook("before.grid.newpage", .rlayout_update_plot_id)
 if (exists(".First", envir = .GlobalEnv)) {
   .rlayout_orig_First <- get(".First", envir = .GlobalEnv)
   .First <- function() {
-    unlink(".r-layout/.workspace_*.tsv")
-    unlink(".r-layout/plots/*")
+    unlink("${absVarsTsv}")
+    unlink(file.path("${absPlotsDir}", "*"))
     tryCatch(.rlayout_orig_First(), error = function(e) {})
+    ${snapshotCode}
   }
 } else {
   .First <- function() {
-    unlink(".r-layout/.workspace_*.tsv")
-    unlink(".r-layout/plots/*")
+    unlink("${absVarsTsv}")
+    unlink(file.path("${absPlotsDir}", "*"))
+    ${snapshotCode}
   }
 }
 
@@ -1387,7 +1465,7 @@ if (exists(".First", envir = .GlobalEnv)) {
 
 # 6. Install the task callback. It fires after every top-level R command.
 invisible(local({
-  if (!any(vapply(getTaskCallbackNames(), function(n) n == ".r-layout.watcher", logical(1)))) {
+  if (!any(vapply(getTaskCallbackNames(), function(n) n == ".r_layout.watcher", logical(1)))) {
     addTaskCallback(function(expr, value, ok, visible) {
       # 1. Update Data Viewer quietly if active
       if (!is.null(.rlayout_active_df_to_export) && exists(.rlayout_active_df_to_export, envir = .GlobalEnv)) {
@@ -1408,8 +1486,8 @@ invisible(local({
             .rlayout_last_plot_hash <<- .hash
             # If no plot ID yet (startup), calculate the next available ID safely
             if (.rlayout_current_plot_id == 0) .rlayout_update_plot_id()
-            # Resolve output directory: user override via options() or default .r-layout/plots
-            .out_dir <- getOption(".rlayout_plot_dir", ".r-layout/plots")
+            # Resolve output directory: user override via options() or default absolute plots dir
+            .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
             dir.create(.out_dir, showWarnings = FALSE, recursive = TRUE)
             .file <- file.path(.out_dir, sprintf("plot_%05d.png", .rlayout_current_plot_id))
             # Explicitly set background to white for the generated PNG file
@@ -1423,7 +1501,7 @@ invisible(local({
       # 3. Snapshot Workspace
       ${snapshotCode}
       TRUE
-    }, name = ".r-layout.watcher")
+    }, name = ".r_layout.watcher")
   }
 }))
 `;
@@ -1433,6 +1511,15 @@ invisible(local({
 
 function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Returns the effective workspace root: the first workspace folder if available,
+ * otherwise falls back to the user's home directory. This ensures all features
+ * (R watcher, .r_layout directory, plots, workspace panel) work in no-workspace mode.
+ */
+function getEffectiveWorkspaceRoot(): string {
+    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
 }
 
 function captureWorkspaceRoots(): void {
@@ -1448,12 +1535,15 @@ function getWorkspaceRootsForCleanup(): string[] {
 }
 
 /**
- * Deletes the .r-layout temporary directory in the current workspace.
+ * Deletes the .r_layout temporary directory in the current workspace.
  */
 function deleteRLayoutDir() {
-    const roots = getWorkspaceRootsForCleanup();
+    // Collect all roots: workspace folders (current + cached) AND home directory fallback
+    const roots = new Set<string>(getWorkspaceRootsForCleanup());
+    roots.add(os.homedir());
+
     for (const root of roots) {
-        const rLayoutDir = path.join(root, '.r-layout');
+        const rLayoutDir = path.join(root, '.r_layout');
         try {
             if (fs.existsSync(rLayoutDir)) {
                 fs.rmSync(rLayoutDir, {
@@ -1464,7 +1554,7 @@ function deleteRLayoutDir() {
                 });
             }
         } catch (e) {
-            console.error('[R Layout] Failed to delete .r-layout directory', e);
+            console.error('[R Layout] Failed to delete .r_layout directory', e);
         }
     }
 }

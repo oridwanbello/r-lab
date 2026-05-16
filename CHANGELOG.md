@@ -2,7 +2,7 @@
 
 All notable changes to the R Layout extension will be documented in this file.
 
-## [0.3.0] - 2026-05-01
+## [0.3.0] - 2026-05-15
 
 ### Added
 

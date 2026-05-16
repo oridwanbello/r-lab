@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { getRConsoleTerminal } from '../layout/layoutManager';
 
 /**
@@ -66,6 +67,8 @@ export class PlotsPanel {
                 roots.push(folder.uri);
             }
         }
+        // Also allow loading from home directory fallback for no-workspace mode
+        roots.push(vscode.Uri.file(os.homedir()));
         return roots;
     }
 
@@ -152,8 +155,8 @@ export class PlotsPanel {
         // Update localResourceRoots to allow loading images from the new directory
         const roots = PlotsPanel._getResourceRoots(this._extensionUri);
         if (this._customPlotDir) {
-            const base = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-            const normalizedPath = path.isAbsolute(this._customPlotDir) || !base
+            const base = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
+            const normalizedPath = path.isAbsolute(this._customPlotDir)
                 ? path.normalize(this._customPlotDir)
                 : path.join(base, this._customPlotDir);
             const customUri = vscode.Uri.file(normalizedPath);
@@ -165,7 +168,7 @@ export class PlotsPanel {
         };
 
         // If setOutput is true, redirect R's plot output to this directory via options().
-        // If clearing (resolved is undefined), reset back to the default .r-layout/plots.
+        // If clearing (resolved is undefined), reset back to the default .r_layout/plots.
         if (setOutput) {
             const term = getRConsoleTerminal();
             if (term) {
@@ -192,7 +195,7 @@ export class PlotsPanel {
 
     private async _handleBrowseCustomDir(): Promise<void> {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        const defaultUri = workspaceFolder ? workspaceFolder.uri : undefined;
+        const defaultUri = workspaceFolder ? workspaceFolder.uri : vscode.Uri.file(os.homedir());
 
         const uris = await vscode.window.showOpenDialog({
             canSelectFiles: false,
@@ -212,13 +215,13 @@ export class PlotsPanel {
         if (this._currentIndex < 0 || this._currentIndex >= this._plots.length) { return; }
         const uri = this._plots[this._currentIndex];
 
-        // Only allow physical deletion for files inside the .r-layout directory.
+        // Only allow physical deletion for files inside the .r_layout directory.
         // User-specified directories must not be modified - we only display them.
-        const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        const rLayoutDir = wf ? path.join(wf, '.r-layout') : undefined;
-        if (!rLayoutDir || !uri.fsPath.startsWith(rLayoutDir)) {
+        const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
+        const rLayoutDir = path.join(wf, '.r_layout');
+        if (!uri.fsPath.startsWith(rLayoutDir)) {
             vscode.window.showWarningMessage(
-                'Deletion is only permitted for plots in the .r-layout directory. ' +
+                'Deletion is only permitted for plots in the .r_layout directory. ' +
                 'To remove plots from a custom folder, delete them manually.'
             );
             return;
@@ -266,18 +269,17 @@ export class PlotsPanel {
             this._watcher = undefined;
         }
 
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        if (!workspaceFolder) { return; }
+        const effectiveRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
 
         let watchDirFsPath: string;
         if (this._customPlotDir) {
             watchDirFsPath = path.isAbsolute(this._customPlotDir)
                 ? this._customPlotDir
-                : path.join(workspaceFolder.uri.fsPath, this._customPlotDir);
+                : path.join(effectiveRoot, this._customPlotDir);
         } else {
             const config = vscode.workspace.getConfiguration('r-layout');
-            const plotDir = '.r-layout/plots';
-            watchDirFsPath = path.join(workspaceFolder.uri.fsPath, plotDir);
+            const plotDir = '.r_layout/plots';
+            watchDirFsPath = path.join(effectiveRoot, plotDir);
         }
 
         const pattern = new vscode.RelativePattern(
@@ -287,6 +289,10 @@ export class PlotsPanel {
 
         this._watcher = vscode.workspace.createFileSystemWatcher(pattern);
         this._watcher.onDidCreate((uri) => {
+            // Guard against duplicates: the watcher can fire for pre-existing files
+            // on some platforms (especially in no-workspace mode), which would double
+            // the plots already populated by syncPlots().
+            if (this._plots.some(p => p.fsPath === uri.fsPath)) { return; }
             this._plots.push(uri);
             this._currentIndex = this._plots.length - 1;
             this._render();
@@ -331,18 +337,17 @@ export class PlotsPanel {
      * layout was closed (i.e., not yet in `_plots`). Called on re-activation.
      */
     public syncPlots(): void {
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        if (!workspaceFolder) { return; }
+        const effectiveRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
 
         let dir: string;
         if (this._customPlotDir) {
             dir = path.isAbsolute(this._customPlotDir)
                 ? this._customPlotDir
-                : path.join(workspaceFolder.uri.fsPath, this._customPlotDir);
+                : path.join(effectiveRoot, this._customPlotDir);
         } else {
             const config = vscode.workspace.getConfiguration('r-layout');
-            const plotDir = '.r-layout/plots';
-            dir = path.join(workspaceFolder.uri.fsPath, plotDir);
+            const plotDir = '.r_layout/plots';
+            dir = path.join(effectiveRoot, plotDir);
         }
 
         if (!fs.existsSync(dir)) { return; }
