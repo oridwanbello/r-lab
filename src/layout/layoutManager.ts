@@ -650,6 +650,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
             const existing = process.env['R_PROFILE_USER'];
             if (existing) { rProfileEnv['R_PROFILE_USER_ORIG'] = existing; }
         }
+        console.log(`[R Layout] rProfileEnv=${JSON.stringify(rProfileEnv)}, wasRConsoleReused=${wasRConsoleReused}, rConsoleTerminal=${!!rConsoleTerminal}`);
 
     if (rConsoleTerminal) {
             // Reuse the existing terminal - do NOT recreate (that kills the R session).
@@ -661,6 +662,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                         tab.label.includes('R Console');
                 })
             );
+            console.log(`[R Layout] Reusing rConsoleTerminal, isEditorTab=${rConsoleIsEditorTab}`);
 
             if (rConsoleIsEditorTab) {
                 // Already an editor tab - just reveal it without moving.
@@ -681,12 +683,15 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         } else {
             // New session: create directly in ViewColumn.Two. R Console does not suffer
             // from the empty PTY bug, so this is safe and guarantees correct placement.
+            const shellPath = resolveRPath(config);
+            const cwdPath = getEffectiveWorkspaceRoot();
+            console.log(`[R Layout] Creating NEW R Console: shellPath=${shellPath}, cwd=${cwdPath}, env keys=${Object.keys(rProfileEnv).join(',')}`);
             rConsoleTerminal = vscode.window.createTerminal({
                 name: 'R Console',
-                shellPath: resolveRPath(config),
+                shellPath,
                 location: { viewColumn: vscode.ViewColumn.Two },
                 env: rProfileEnv, // No strictEnv: let VS Code merge naturally
-                cwd: getEffectiveWorkspaceRoot(), // Prevents PTY hang in no-workspace mode
+                cwd: cwdPath, // Prevents PTY hang in no-workspace mode
                 iconPath: vscode.Uri.joinPath(context.extensionUri, 'resources', 'r_logo.svg'),
             });
             await delay(100); // Give terminal time to attach
@@ -1317,6 +1322,7 @@ function groupFocusCommand(col: vscode.ViewColumn): string | undefined {
  */
 function _buildWatcherRprofile(): string | undefined {
     const wf = getEffectiveWorkspaceRoot();
+    console.log(`[R Layout] _buildWatcherRprofile: wf=${wf}, workspaceFolders=${JSON.stringify(vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath))}`);
 
     const outDir = path.join(wf, '.r_layout');
     if (!fs.existsSync(outDir)) {
@@ -1328,6 +1334,7 @@ function _buildWatcherRprofile(): string | undefined {
     }
 
     const scriptPath = path.join(outDir, '.workspace_watcher.R');
+    console.log(`[R Layout] _buildWatcherRprofile: scriptPath=${scriptPath}`);
 
     // Absolute paths injected into the R script so it works regardless of R's cwd.
     // On Windows, backslashes must be escaped for R string literals.
