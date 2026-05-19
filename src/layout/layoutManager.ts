@@ -136,7 +136,9 @@ export function registerLayoutCommand(
 
     context.subscriptions.push(
         vscode.commands.registerCommand('r-layout.maximizeTopRight', async () => {
-            if (!isLayoutActive) return;
+            if (!isLayoutActive) {
+                return;
+            }
 
             await vscode.commands.executeCommand('vscode.setEditorLayout', {
                 orientation: 0,
@@ -159,7 +161,9 @@ export function registerLayoutCommand(
             await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', true);
         }),
         vscode.commands.registerCommand('r-layout.restoreRightSplit', async () => {
-            if (!isLayoutActive) return;
+            if (!isLayoutActive) {
+                return;
+            }
 
             // Restore webview content in Group 3 panels
             WorkspacePanel.currentPanel?.setMinimized(false);
@@ -288,9 +292,7 @@ export async function resetStaleLayout(
     // overrides - causing files to open in a split view and
     // terminals to land in the editor area in pre-layout VS Code.
     try {
-        const cfgTarget = vscode.workspace.workspaceFolders
-            ? vscode.ConfigurationTarget.Workspace
-            : vscode.ConfigurationTarget.Global;
+        const cfgTarget = getConfigTarget();
         const wsConfig = vscode.workspace.getConfiguration();
 
         const origClose = context.workspaceState.get<boolean | undefined>('r-layout.origCloseEmptyGroups', undefined);
@@ -403,9 +405,7 @@ export async function collapseLayoutForShutdown(): Promise<void> {
     console.log('[R Layout] deactivate(): collapsing layout before state is saved.');
 
     // Determine config target once, synchronously, before we fan out.
-    const cfgTarget = vscode.workspace.workspaceFolders
-        ? vscode.ConfigurationTarget.Workspace
-        : vscode.ConfigurationTarget.Global;
+    const cfgTarget = getConfigTarget();
     const wsConfig = vscode.workspace.getConfiguration();
 
     // Fire ALL cleanup operations in parallel.
@@ -511,9 +511,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     );
 
     // 6. Apply workspace overrides
-    const cfgTarget = vscode.workspace.workspaceFolders
-        ? vscode.ConfigurationTarget.Workspace
-        : vscode.ConfigurationTarget.Global;
+    const cfgTarget = getConfigTarget();
     const wsConfig = vscode.workspace.getConfiguration();
 
     // Inspect and save original user settings before modifying them
@@ -797,11 +795,21 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     }
 
     // Reposition custom panels
-    if (panelPositions['problems'] && panelPositions['problems'] !== vscode.ViewColumn.Two) ProblemsPanel.createOrShow(context.extensionUri, panelPositions['problems']);
-    if (panelPositions['help'] && panelPositions['help'] !== vscode.ViewColumn.Two) HelpPanel.createOrShow(context.extensionUri, panelPositions['help']);
-    if (panelPositions['workspace'] && panelPositions['workspace'] !== vscode.ViewColumn.Three) WorkspacePanel.createOrShow(context.extensionUri, panelPositions['workspace']);
-    if (panelPositions['plots'] && panelPositions['plots'] !== vscode.ViewColumn.Three) PlotsPanel.createOrShow(context.extensionUri, panelPositions['plots']);
-    if (panelPositions['dataViewer'] && panelPositions['dataViewer'] !== vscode.ViewColumn.Three) DataViewerPanel.createOrShow(context.extensionUri, panelPositions['dataViewer']);
+    if (panelPositions['problems'] && panelPositions['problems'] !== vscode.ViewColumn.Two) {
+        ProblemsPanel.createOrShow(context.extensionUri, panelPositions['problems']);
+    }
+    if (panelPositions['help'] && panelPositions['help'] !== vscode.ViewColumn.Two) {
+        HelpPanel.createOrShow(context.extensionUri, panelPositions['help']);
+    }
+    if (panelPositions['workspace'] && panelPositions['workspace'] !== vscode.ViewColumn.Three) {
+        WorkspacePanel.createOrShow(context.extensionUri, panelPositions['workspace']);
+    }
+    if (panelPositions['plots'] && panelPositions['plots'] !== vscode.ViewColumn.Three) {
+        PlotsPanel.createOrShow(context.extensionUri, panelPositions['plots']);
+    }
+    if (panelPositions['dataViewer'] && panelPositions['dataViewer'] !== vscode.ViewColumn.Three) {
+        DataViewerPanel.createOrShow(context.extensionUri, panelPositions['dataViewer']);
+    }
 
     // Reposition text files
     if (openFiles.length > 0) {
@@ -894,11 +902,17 @@ async function deactivateLayout(): Promise<void> {
                 sourceFiles.push(tab.input.uri);
                 textFilePositions[tab.input.uri.fsPath] = group.viewColumn;
             } else if (tab.input instanceof vscode.TabInputWebview) {
-                if (tab.label === 'Plots') panelPositions['plots'] = group.viewColumn;
-                else if (tab.label === 'Help') panelPositions['help'] = group.viewColumn;
-                else if (tab.label === 'Workspace') panelPositions['workspace'] = group.viewColumn;
-                else if (tab.label === 'Data Viewer') panelPositions['dataViewer'] = group.viewColumn;
-                else if (tab.label === 'Problems') panelPositions['problems'] = group.viewColumn;
+                if (tab.label === 'Plots') {
+                    panelPositions['plots'] = group.viewColumn;
+                } else if (tab.label === 'Help') {
+                    panelPositions['help'] = group.viewColumn;
+                } else if (tab.label === 'Workspace') {
+                    panelPositions['workspace'] = group.viewColumn;
+                } else if (tab.label === 'Data Viewer') {
+                    panelPositions['dataViewer'] = group.viewColumn;
+                } else if (tab.label === 'Problems') {
+                    panelPositions['problems'] = group.viewColumn;
+                }
             }
         }
     }
@@ -932,9 +946,7 @@ async function deactivateLayout(): Promise<void> {
     // 5. Restore user settings FIRST - before moving terminals or reopening files -
     //    so that terminal defaults are correct when moving, and closeEmptyGroups
     //    is true when showTextDocument runs.
-    const cfgTarget = vscode.workspace.workspaceFolders
-        ? vscode.ConfigurationTarget.Workspace
-        : vscode.ConfigurationTarget.Global;
+    const cfgTarget = getConfigTarget();
     const wsConfig = vscode.workspace.getConfiguration();
 
     const origClose = extensionContext.workspaceState.get<boolean | undefined>('r-layout.origCloseEmptyGroups', undefined);
@@ -951,7 +963,9 @@ async function deactivateLayout(): Promise<void> {
     //    This prevents moving third-party terminals (e.g. Python Debugger) which
     //    can corrupt panel state and cause PTY crashes on reactivation.
     for (const terminal of [rConsoleTerminal, shellTerminal]) {
-        if (!terminal) continue;
+        if (!terminal) {
+            continue;
+        }
         // Check if this specific terminal is an editor tab
         const isEditorTab = vscode.window.tabGroups.all.some(g =>
             g.tabs.some(tab => {
@@ -1070,7 +1084,9 @@ function registerLayoutGuards(context: vscode.ExtensionContext): void {
         if (!isLayoutActive || activationInProgress) { return; }
         for (const tab of e.opened) {
             const group = vscode.window.tabGroups.all.find((g) => g.tabs.includes(tab));
-            if (!group) continue;
+            if (!group) {
+                continue;
+            }
 
             // --- Anchor cleanup: when a real file opens in Group 1, close the placeholder ---
             if (group.viewColumn === vscode.ViewColumn.One &&
@@ -1508,6 +1524,13 @@ invisible(local({
 
 function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getConfigTarget(): vscode.ConfigurationTarget {
+    const folders = vscode.workspace.workspaceFolders;
+    return folders && folders.length > 0
+        ? vscode.ConfigurationTarget.Workspace
+        : vscode.ConfigurationTarget.Global;
 }
 
 /**
