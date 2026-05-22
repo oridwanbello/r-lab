@@ -24,6 +24,7 @@ All notable changes to the R Layout extension will be documented in this file.
 - **Webview Architecture**: Migrated all sidebar panels (Environment Explorer, Data Viewer, Plots) from Activity Bar WebviewViews to Editor Grid WebviewPanels for deep layout integration.
 - **Terminal Management**: Implemented robust terminal reuse and vanishing console protection.
 - **Settings Preservation**: The layout toggle now meticulously saves and restores global VS Code settings (`closeEmptyGroups`, `terminal.integrated.defaultLocation`) to avoid destructive overwrites.
+- **PTY Crash Prevention**: Fixed a critical bug causing yellow caution triangles and terminal re-evaluation crashes in no-workspace scenarios by enforcing `strictEnv` and manually merging environment variables.
 - **Cleanup Logic**: The `.r-layout` directory is now cleaned up unconditionally on shutdown.
 - **UI Polish**: Updated plot gallery with theme-responsive backgrounds and refined rounding.
 
