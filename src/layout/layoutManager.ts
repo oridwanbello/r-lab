@@ -650,6 +650,11 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         }
         console.log(`[R Layout] rProfileEnv=${JSON.stringify(rProfileEnv)}, wasRConsoleReused=${wasRConsoleReused}, rConsoleTerminal=${!!rConsoleTerminal}`);
 
+        // Merge process.env and user settings to emulate normal terminal env while using strictEnv
+        const platform = os.platform() === 'win32' ? 'windows' : (os.platform() === 'darwin' ? 'osx' : 'linux');
+        const userEnv = vscode.workspace.getConfiguration('terminal.integrated.env').get<Record<string, string>>(platform) || {};
+        const strictEnvArgs: Record<string, string> = { ...process.env as any, ...userEnv, ...rProfileEnv };
+
     if (rConsoleTerminal) {
             // Reuse the existing terminal - do NOT recreate (that kills the R session).
             // Check specifically for the R Console tab by name.
@@ -688,7 +693,8 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                 name: 'R Console',
                 shellPath,
                 location: { viewColumn: vscode.ViewColumn.Two },
-                env: rProfileEnv, // No strictEnv: let VS Code merge naturally
+                env: strictEnvArgs,
+                strictEnv: true, // Prevents Python extension from applying its EnvironmentVariableCollection and crashing PTY
                 cwd: cwdPath, // Prevents PTY hang in no-workspace mode
                 iconPath: vscode.Uri.joinPath(context.extensionUri, 'resources', 'r_logo.svg'),
             });
@@ -721,10 +727,16 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         }
 
     } else {
+        const platform = os.platform() === 'win32' ? 'windows' : (os.platform() === 'darwin' ? 'osx' : 'linux');
+        const userEnv = vscode.workspace.getConfiguration('terminal.integrated.env').get<Record<string, string>>(platform) || {};
+        const shellEnvArgs: Record<string, string> = { ...process.env as any, ...userEnv };
+
         // Create directly in ViewColumn.Two, no bottom-pane origin
         shellTerminal = vscode.window.createTerminal({
             name: 'Terminal',
             location: { viewColumn: vscode.ViewColumn.Two },
+            env: shellEnvArgs,
+            strictEnv: true,
             cwd: getEffectiveWorkspaceRoot(),
         });
         await delay(100); // Give terminal time to attach
