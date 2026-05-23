@@ -1,8 +1,7 @@
 # R Layout
 
 An RStudio-inspired multi-pane layout orchestrator for VS Code.
-
-![R Layout Showcase](resources/showcase.png)
+![R Layout Showcase](https://raw.githubusercontent.com/oridwanbello/assets/main/images/r_layout_showcase.png)
 
 > [!NOTE]
 > This extension is currently in **Preview**. We are actively refining the layout and feature set. Please report any issues on GitHub!
