@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { execFile } from 'child_process';
 
 interface VariableInfo {
@@ -154,7 +155,7 @@ export class WorkspacePanel {
 
         // Priority 2: Read the auto-updated watcher file
         // The R task callback (injected at activation) writes
-        // .r-layout/.workspace_data.json after every R command.
+        // .r_layout/.workspace_data.json after every R command.
         // Read directly from disk - no terminal interaction needed.
         const watcherResult = this._readWatcherFile();
         if (watcherResult) {
@@ -230,10 +231,9 @@ tryCatch({
         loadedNamespaces: string[];
         attachedNamespaces: string[];
     } | null {
-        const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        if (!wf) { return null; }
+        const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
 
-        const outDir = path.join(wf, '.r-layout');
+        const outDir = path.join(wf, '.r_layout');
         const varsFile = path.join(outDir, '.workspace_vars.tsv');
         const loadedFile = path.join(outDir, '.workspace_loaded.tsv');
         const attachedFile = path.join(outDir, '.workspace_attached.tsv');
@@ -386,7 +386,7 @@ tryCatch({
                 {
                     timeout: 10000,
                     maxBuffer: 1024 * 1024,
-                    cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+                    cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir(),
                 },
                 (error, stdout, stderr) => {
                     if (error) {

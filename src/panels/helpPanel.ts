@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { getRConsoleTerminal } from '../layout/layoutManager';
 
 /**
@@ -255,7 +256,7 @@ export class HelpPanel {
                 {
                     timeout: 15000, // 15s timeout
                     maxBuffer: 1024 * 1024, // 1 MB
-                    cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+                    cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir(),
                 },
                 (error, stdout, stderr) => {
                     if (error) {
@@ -283,7 +284,7 @@ export class HelpPanel {
         const cspSource = this._panel.webview.cspSource;
 
         const rdocIconUri = this._panel.webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'resources', 'rdocumentation.svg'));
-        const rLogoUri = this._panel.webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'resources', 'r-logo.svg'));
+        const rLogoUri = this._panel.webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'resources', 'r_logo.svg'));
 
         const tidyverseSvgPath = vscode.Uri.joinPath(this._extensionUri, 'resources', 'tidyverse.svg').fsPath;
         let tidyverseSvg = fs.readFileSync(tidyverseSvgPath, 'utf8');

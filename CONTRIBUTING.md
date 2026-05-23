@@ -1,10 +1,83 @@
 # Contributing Guidelines
 
-Welcome to the project! This document outlines our standard operating procedures, repository architecture, and Git workflow. Please read this carefully to ensure your local environment and pull requests meet our professional standards.
+Welcome to the project! This document outlines our development environment setup, codebase architecture, standard operating procedures, and Git workflow. Please read this carefully to ensure your local environment and pull requests meet our professional standards.
 
 ---
 
-## 1. Repository Architecture (3-Tier Environment)
+## 1. Development Environment Setup
+
+### Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- Node.js (version 22.x or higher)
+- npm (comes with Node.js)
+- VS Code (or a compatible fork like VSCodium, Cursor, etc.)
+
+### Project Installation
+
+Clone the repository and install the dependencies:
+
+```bash
+git clone https://github.com/oridwanbello/r-layout.git
+cd r-layout
+npm install
+```
+
+### Building and Running
+
+To compile the TypeScript code and launch the extension in a test environment:
+
+1. Open the project in VS Code.
+2. Press F5. This will compile the code, launch a new "Extension Development Host" window, and attach the debugger.
+
+Alternatively, to compile via the command line:
+
+```bash
+# Compile once
+npm run compile
+
+# Watch mode (recompiles automatically on save)
+npm run watch
+```
+
+### Debugging and Testing
+
+- **Console Logs**: `console.log` statements within the extension code will appear in the "Debug Console" of your primary VS Code window.
+- **Testing the Layout**: In the Extension Development Host, press `Cmd+Shift+P` and execute "Toggle R Layout" to observe the 3-pane orchestration.
+- **Reloading**: If you make changes to the source code, compile them, then run the "Developer: Reload Window" command in the Extension Development Host to see the updates.
+
+### Packaging for Distribution
+
+To bundle the extension into a `.vsix` file for installation or distribution, you need the `vsce` CLI tool:
+
+```bash
+# Install vsce globally if you haven't already
+npm install -g @vscode/vsce
+
+# Package the extension
+vsce package
+```
+
+---
+
+## 2. Codebase Directory Structure
+
+The project has been refactored into a modular architecture to support the 3-pane layout system:
+
+- `src/extension.ts`: The main entry point.
+- `src/layout/layoutManager.ts`: The core engine that orchestrates the VS Code layout, grid groups, and terminal preservation.
+- `src/panels/`: Contains the WebviewPanel singletons for the layout:
+  - `dataViewerPanel.ts`: Renders dataframe tables.
+  - `helpPanel.ts`: Displays integrated R documentation.
+  - `plotsPanel.ts`: Watches for and renders plot images.
+  - `problemsPanel.ts`: Visualizes workspace diagnostics with native Codicons.
+  - `workspacePanel.ts`: Renders the DAP variable tree.
+- `src/util/`: Helper utilities (e.g., Debug Adapter Protocol functions).
+
+---
+
+## 3. Repository Architecture (3-Tier Environment)
 
 We follow a structured environment promotion model to ensure code stability:
 
@@ -16,7 +89,7 @@ _(Optional)_ **Release Branches (`release/vX.X`)**: Used to freeze features for 
 
 ---
 
-## 2. Branch Protections & Governance
+## 4. Branch Protections & Governance
 
 Our repository enforces strict branch protections on `dev`, `staging`, and `main`:
 
@@ -27,7 +100,7 @@ Our repository enforces strict branch protections on `dev`, `staging`, and `main
 
 ---
 
-## 3. The Merge Strategy
+## 5. The Merge Strategy
 
 To maintain a clean, readable, and verified Git history, we use specific merge strategies depending on the target branch:
 
@@ -41,7 +114,7 @@ _Note: Set your GitHub Squash merge message preference to "Pull request title an
 
 ---
 
-## 4. Daily Developer Workflow
+## 6. Daily Developer Workflow
 
 Follow this 7-step routine for every new feature or fix:
 
@@ -70,7 +143,7 @@ Follow this 7-step routine for every new feature or fix:
 
 ---
 
-## 5. Setup & Troubleshooting: GPG + VS Code (Mac)
+## 7. Setup & Troubleshooting: GPG + VS Code (Mac)
 
 Because we require signed commits, you must have GPG configured. If you use VS Code, the integrated "Commit" button often fails (`gpg failed to sign the data`) because GPG tries to prompt for a password in a hidden terminal.
 
