@@ -3,7 +3,7 @@
   "displayName": "R Layout",
   "preview": true,
   "description": "RStudio-inspired multi-pane layout orchestrator for VS Code",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "oridwanbello",
   "icon": "resources/r_logo.png",
   "engines": {
