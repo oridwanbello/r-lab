@@ -1,6 +1,10 @@
 # R Layout
 
-An RStudio-style 3-pane layout orchestrator for VS Code.
+An RStudio-inspired multi-pane layout orchestrator for VS Code.
+![R Layout Showcase](https://raw.githubusercontent.com/oridwanbello/assets/main/images/r_layout_showcase.png)
+
+> [!NOTE]
+> This extension is currently in **Preview**. We are actively refining the layout and feature set. Please report any issues on GitHub!
 
 R Layout brings the familiar multi-pane workflow of RStudio to VS Code and its forks. With a single command, snap your editor into a layout optimized for data science, complete with a live variable explorer, plot gallery, and interactive data viewer.
 
@@ -65,7 +69,6 @@ A modern diagnostic inspector that anchors the top-right pane:
 | Setting                           | Default | Description                                                      |
 | --------------------------------- | ------- | ---------------------------------------------------------------- |
 | r-layout.rConsolePath             | "R"     | Path or command for the R Console terminal.                      |
-| r-layout.useArkInteractiveConsole | false   | If true, launches a Jupyter Interactive Window as the R Console. |
 
 ## Commands
 
@@ -87,8 +90,8 @@ A modern diagnostic inspector that anchors the top-right pane:
 ### Setup
 
 ```bash
-git clone https://github.com/oridwanbello/R-Layout.git
-cd R-Layout
+git clone https://github.com/oridwanbello/r-layout.git
+cd r-layout
 npm install
 ```
 
@@ -108,23 +111,22 @@ src/
 ├── extension.ts               # Entry point (orchestrator)
 ├── layout/
 │   └── layoutManager.ts       # Layout toggle and Status Bar
-├── panels/
-│   ├── workspacePanel.ts      # Variable inspector (DAP)
-│   ├── plotsPanel.ts          # Plot gallery (WebviewPanel)
-│   ├── dataViewerPanel.ts     # Dataframe viewer (WebviewPanel)
-│   ├── helpPanel.ts           # Integrated R Help
-│   └── problemsPanel.ts       # Temporary layout anchor
-└── util/
-    └── debugSession.ts        # DAP helper utilities
+└── panels/
+    ├── workspacePanel.ts      # Variable inspector
+    ├── plotsPanel.ts          # Plot gallery (WebviewPanel)
+    ├── dataViewerPanel.ts     # Dataframe viewer (WebviewPanel)
+    ├── helpPanel.ts           # Integrated R Help
+    └── problemsPanel.ts       # Temporary layout anchor
 ```
 
-## Credits
+## Trademarks & Attribution
 
-This extension integrates high-quality resources from the R community:
+The following trademarks and logos used in this extension are the property of their respective owners:
 
-- R Logo: Copyright 2016 The R Foundation (CC-BY-SA 4.0).
-- Tidyverse: Trademarks of Posit Software, PBC.
-- Bioconductor: Trademark of the Bioconductor Project.
+- **[R Logo](https://www.r-project.org/logo/)**: Copyright © 2016 The R Foundation. Licensed under [CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+- **[Tidyverse](https://tidyverse.org/)**: Trademark of Posit Software, PBC.
+- **[Bioconductor](https://bioconductor.org/)**: Trademark of the Bioconductor Project.
+- **[RDocumentation](https://www.rdocumentation.org/)**: Copyright © DataCamp, Inc.
 
 ## License
 

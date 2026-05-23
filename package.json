@@ -1,9 +1,11 @@
 {
   "name": "r-layout",
   "displayName": "R Layout",
-  "description": "RStudio-style multi-pane layout orchestrator for VS Code",
-  "version": "0.3.0",
+  "preview": true,
+  "description": "RStudio-inspired multi-pane layout orchestrator for VS Code",
+  "version": "0.3.1",
   "publisher": "oridwanbello",
+  "icon": "resources/r_logo.png",
   "engines": {
     "vscode": "^1.107.0"
   },
@@ -11,10 +13,20 @@
     "Other",
     "Data Science"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oridwanbello/r-layout.git"
+  },
+  "license": "MIT",
   "activationEvents": [
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    }
+  },
   "contributes": {
     "configuration": {
       "title": "R Layout",
@@ -23,11 +35,6 @@
           "type": "string",
           "default": "R",
           "description": "Path or command for the R Console terminal. Examples: 'R', 'radian', or a full path to the Ark kernel."
-        },
-        "r-layout.useArkInteractiveConsole": {
-          "type": "boolean",
-          "default": false,
-          "description": "If true, launches a VS Code Jupyter Interactive Window as the R Console instead of a standard terminal. Ideal for using the Ark kernel."
         }
       }
     },
@@ -52,8 +59,8 @@
         "command": "r-layout.sourceFile",
         "title": "Source File to R Console",
         "icon": {
-          "light": "resources/run-source-light.svg",
-          "dark": "resources/run-source-dark.svg"
+          "light": "resources/run_source_light.svg",
+          "dark": "resources/run_source_dark.svg"
         }
       }
     ],

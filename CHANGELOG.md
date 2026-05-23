@@ -2,7 +2,18 @@
 
 All notable changes to the R Layout extension will be documented in this file.
 
-## [0.3.0] - 2026-05-01
+## [0.3.1] - 2026-05-22
+
+### Changed
+
+- **Marketplace Image Fix**: Updated README.md showcase image to use a public HTTPS URL hosted in a separate public assets repository, fixing broken images for private extension deployments.
+- **Refactoring**: Reorganized code structure for improved readability and maintainability.
+
+### Fixed
+
+- **PTY Crash Prevention**: Fixed a critical bug causing yellow caution triangles and terminal re-evaluation crashes in no-workspace scenarios by enforcing `strictEnv` and manually merging environment variables.
+
+## [0.3.0] - 2026-05-15
 
 ### Added
 
@@ -26,6 +37,7 @@ All notable changes to the R Layout extension will be documented in this file.
 - **Settings Preservation**: The layout toggle now meticulously saves and restores global VS Code settings (`closeEmptyGroups`, `terminal.integrated.defaultLocation`) to avoid destructive overwrites.
 - **Cleanup Logic**: The `.r-layout` directory is now cleaned up unconditionally on shutdown.
 - **UI Polish**: Updated plot gallery with theme-responsive backgrounds and refined rounding.
+
 
 ## [0.2.0] - 2026-04-15
 

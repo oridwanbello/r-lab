@@ -122,15 +122,9 @@ export class DataViewerPanel {
             this._render();
         }
 
-        const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        if (!wf) {
-            this._errorMessage = 'No workspace folder open.';
-            this._isLoading = false;
-            if (!isAutoRefresh) this._render();
-            return;
-        }
+        const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
 
-        const outDir = nodePath.join(wf, '.r-layout');
+        const outDir = nodePath.join(wf, '.r_layout');
         if (!nodeFs.existsSync(outDir)) {
             nodeFs.mkdirSync(outDir, { recursive: true });
         }
@@ -261,7 +255,7 @@ export class DataViewerPanel {
                 {
                     timeout: 30000,
                     maxBuffer: 10 * 1024 * 1024, // 10 MB for large dataframes
-                    cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+                    cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir(),
                 },
                 (error, stdout, stderr) => {
                     if (error) {
