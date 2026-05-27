@@ -3,7 +3,7 @@
   "displayName": "R Layout",
   "preview": true,
   "description": "RStudio-inspired multi-pane layout orchestrator for VS Code",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "publisher": "oridwanbello",
   "icon": "resources/r_logo.png",
   "engines": {
@@ -44,7 +44,6 @@
         "title": "Toggle R Layout",
         "category": "View"
       },
-
       {
         "command": "r-layout.maximizeTopRight",
         "title": "Maximize Top Pane",
@@ -58,6 +57,14 @@
       {
         "command": "r-layout.sourceFile",
         "title": "Source File to R Console",
+        "icon": {
+          "light": "resources/run_source_light.svg",
+          "dark": "resources/run_source_dark.svg"
+        }
+      },
+      {
+        "command": "r-layout.runSelection",
+        "title": "Run Selection in R Console",
         "icon": {
           "light": "resources/run_source_light.svg",
           "dark": "resources/run_source_dark.svg"
@@ -105,7 +112,19 @@
         },
         {
           "command": "r-layout.sourceFile",
-          "when": "r-layout.layoutActive && resourceLangId == 'r' && activeEditorGroupIndex == 1",
+          "when": "r-layout.layoutActive && resourceLangId == 'r' && activeEditorGroupIndex == 1 && !editorHasSelection",
+          "group": "navigation@-100"
+        },
+        {
+          "command": "r-layout.runSelection",
+          "when": "r-layout.layoutActive && resourceLangId == 'r' && activeEditorGroupIndex == 1 && editorHasSelection",
+          "group": "navigation@-100"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "r-layout.runSelection",
+          "when": "r-layout.layoutActive && resourceLangId == 'r' && editorHasSelection",
           "group": "navigation@-100"
         }
       ]
@@ -123,16 +142,20 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.107.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
-    "typescript-eslint": "^8.56.1",
+    "@types/vscode": "^1.107.0",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2",
     "eslint": "^9.39.3",
-    "typescript": "^5.9.3",
     "ts-loader": "^9.5.4",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1",
     "webpack": "^5.105.3",
-    "webpack-cli": "^6.0.1",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2"
+    "webpack-cli": "^6.0.1"
+  },
+  "overrides": {
+    "diff": "^5.2.0",
+    "serialize-javascript": "^7.0.5"
   }
 }
