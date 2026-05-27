@@ -2,6 +2,13 @@
 
 All notable changes to the R Layout extension will be documented in this file.
 
+## [0.3.2] - 2026-05-27
+
+### Added
+
+- **Smart Execution Button Behavior**: The "Source File to R Console" button now dynamically changes to "Run Selection in R Console" when text is highlighted in the editor.
+- **Context Menu Integration**: Added a high-priority "Run Selection in R Console" command to the editor context menu.
+
 ## [0.3.1] - 2026-05-22
 
 ### Changed

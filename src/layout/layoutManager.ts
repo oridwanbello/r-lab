@@ -123,6 +123,39 @@ export function registerLayoutCommand(
         vscode.commands.registerCommand('r-layout.sourceFile', doSourceFile)
     );
 
+    // Run Selection in R Console
+    // This command sends the currently selected text to the R Console.
+    const doRunSelection = async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            return;
+        }
+
+        const selection = editor.selection;
+        if (selection.isEmpty) {
+            vscode.window.showWarningMessage('No text selected to run.');
+            return;
+        }
+
+        const text = editor.document.getText(selection);
+        if (!text.trim()) {
+            return; // Ignore empty/whitespace-only selections
+        }
+
+        if (!rConsoleTerminal) {
+            vscode.window.showWarningMessage('R Console is not running. Activate R Layout first.');
+            return;
+        }
+
+        rConsoleTerminal.show(false); // bring it into view without stealing keyboard focus
+        // Send the text. We add a newline to ensure it executes.
+        rConsoleTerminal.sendText(text);
+    };
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('r-layout.runSelection', doRunSelection)
+    );
+
     // Resize Commands
     //
     // Maximize: apply hardcoded 0.9/0.1 vertical layout (works reliably).
