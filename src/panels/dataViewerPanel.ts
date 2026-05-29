@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as nodePath from 'path';
 import * as nodeFs from 'fs';
 import { execFile } from 'child_process';
+import { getRscriptPath } from '../utils/rPathResolver';
 
 /**
  * Data Viewer Panel - displays R data.frames in a sortable HTML table.
@@ -44,6 +45,7 @@ export class DataViewerPanel {
             { viewColumn: column, preserveFocus: true },
             {
                 enableScripts: true,
+                enableFindWidget: true,
                 localResourceRoots: [extensionUri],
                 retainContextWhenHidden: true,
             }
@@ -165,11 +167,11 @@ export class DataViewerPanel {
             if (metaRaw.startsWith('ERROR:')) {
                 throw new Error(metaRaw.slice(6).trim());
             }
-            const metaLines = metaRaw.trim().split('\n');
+            const metaLines = metaRaw.replace(/\r/g, '').trim().split('\n');
             this._totalRows = parseInt(metaLines[0], 10) || 0;
             this._totalCols = parseInt(metaLines[1], 10) || 0;
             const csvRaw = nodeFs.readFileSync(tmpCsv, 'utf8');
-            const lines = csvRaw.trim().split('\n');
+            const lines = csvRaw.replace(/\r/g, '').trim().split('\n');
             this._columns = this._parseCsvRow(lines[0]);
             this._rows = lines.slice(1).map((line: string) => {
                 const vals = this._parseCsvRow(line);
@@ -227,25 +229,7 @@ export class DataViewerPanel {
     }
 
 
-    /** Find the Rscript binary - works regardless of whether rConsolePath is R, radian, or ark. */
-    private _findRscript(): Promise<string> {
-        const config = vscode.workspace.getConfiguration('r-layout');
-        const rPath = config.get<string>('rConsolePath', 'R');
-        // If rConsolePath ends with 'R' or 'Rscript', use that directory.
-        if (/[/\\]R$/.test(rPath)) {
-            return Promise.resolve(rPath.replace(/[/\\]R$/, '/Rscript'));
-        }
-        if (/[Rr]script$/i.test(rPath)) {
-            return Promise.resolve(rPath);
-        }
-        // radian / ark / unknown - fall back to 'which Rscript'
-        return new Promise((resolve) => {
-            require('child_process').execFile(
-                'which', ['Rscript'],
-                (err: Error | null, stdout: string) => resolve(err ? 'Rscript' : stdout.trim() || 'Rscript')
-            );
-        });
-    }
+
 
     private _runRscript(rscriptPath: string, script: string): Promise<string> {
         return new Promise((resolve, reject) => {
@@ -479,7 +463,7 @@ export class DataViewerPanel {
             display: flex; flex-direction: column; align-items: center;
             justify-content: center; height: 100%; text-align: center; opacity: 0.3;
         }
-        .empty-state svg { width: 64px; height: 64px; margin-bottom: 16px; display: inline-block; }
+        .empty-state svg { width: 5em; height: 5em; margin-bottom: 16px; display: inline-block; }
         .empty-state p { font-size: var(--vscode-font-size, 13px); line-height: 1.6; }
     </style>
 </head>

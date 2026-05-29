@@ -7,6 +7,7 @@ import { HelpPanel } from '../panels/helpPanel';
 import { ProblemsPanel } from '../panels/problemsPanel';
 import { WorkspacePanel } from '../panels/workspacePanel';
 import { DataViewerPanel } from '../panels/dataViewerPanel';
+import { getRPath, getRArgs } from '../utils/rPathResolver';
 
 /**
  * R Layout Layout Manager
@@ -107,9 +108,20 @@ export function registerLayoutCommand(
             return;
         }
 
+        // Save the document first if it has unsaved changes
+        if (editor.document.isDirty) {
+            await editor.document.save();
+        }
+
         // Ensure we have a live R Console terminal
         if (!rConsoleTerminal) {
             vscode.window.showWarningMessage('R Console is not running. Activate R Layout first.');
+            return;
+        }
+
+        // Prevent sourcing markdown files as they are not valid R scripts
+        if (filePath.toLowerCase().endsWith('.rmd') || filePath.toLowerCase().endsWith('.qmd')) {
+            vscode.window.showWarningMessage('Cannot source R Markdown or Quarto files. Please highlight specific code chunks and run selection instead.');
             return;
         }
 
@@ -154,6 +166,21 @@ export function registerLayoutCommand(
 
     context.subscriptions.push(
         vscode.commands.registerCommand('r-layout.runSelection', doRunSelection)
+    );
+
+    // Run Smart: Run selection if there is one, otherwise source file.
+    const doRunSmart = async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) return;
+        if (!editor.selection.isEmpty && editor.document.getText(editor.selection).trim()) {
+            await doRunSelection();
+        } else {
+            await doSourceFile();
+        }
+    };
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('r-layout.runSmart', doRunSmart)
     );
 
     // Resize Commands
@@ -333,6 +360,9 @@ export async function resetStaleLayout(
         await Promise.all([
             Promise.resolve(
                 wsConfig.update('workbench.editor.closeEmptyGroups', origClose, cfgTarget)
+            ).catch(() => {}),
+            Promise.resolve(
+                context.workspaceState.update('r-layout.origCloseEmptyGroups', undefined)
             ).catch(() => {})
         ]);
     } catch {}
@@ -477,7 +507,12 @@ export async function collapseLayoutForShutdown(): Promise<void> {
             return Promise.all([
                 Promise.resolve(
                     wsConfig.update('workbench.editor.closeEmptyGroups', origClose, cfgTarget)
-                ).catch(() => {})
+                ).catch(() => {}),
+                extensionContext
+                    ? Promise.resolve(
+                          extensionContext.workspaceState.update('r-layout.origCloseEmptyGroups', undefined)
+                      ).catch(() => {})
+                    : Promise.resolve()
             ]);
         })(),
     ]);
@@ -548,9 +583,16 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     const wsConfig = vscode.workspace.getConfiguration();
 
     // Inspect and save original user settings before modifying them
-    const inspectionClose = wsConfig.inspect<boolean>('workbench.editor.closeEmptyGroups');
-    const origClose = cfgTarget === vscode.ConfigurationTarget.Workspace ? inspectionClose?.workspaceValue : inspectionClose?.globalValue;
-    await extensionContext.workspaceState.update('r-layout.origCloseEmptyGroups', origClose);
+    const existingOrigClose = extensionContext.workspaceState.get<boolean | undefined>('r-layout.origCloseEmptyGroups', undefined);
+    if (existingOrigClose === undefined) {
+        const inspectionClose = wsConfig.inspect<boolean>('workbench.editor.closeEmptyGroups');
+        const origClose = cfgTarget === vscode.ConfigurationTarget.Workspace ? inspectionClose?.workspaceValue : inspectionClose?.globalValue;
+        // If the workspace value is already exactly 'false' when we inspect it, but it's only there 
+        // because of a previous stuck state, we just save undefined. A genuine user setting would be fine to lose
+        // in favor of default behavior (undefined) rather than permanently polluting settings.json.
+        const safeOrigClose = (origClose === false) ? undefined : origClose;
+        await extensionContext.workspaceState.update('r-layout.origCloseEmptyGroups', safeOrigClose);
+    }
 
     await wsConfig.update('workbench.editor.closeEmptyGroups', false, cfgTarget);
 
@@ -592,7 +634,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         try {
             anchorEditor = await vscode.window.showTextDocument(
                 openFiles[0],
-                { viewColumn: vscode.ViewColumn.One, preserveFocus: true, preview: false }
+                { viewColumn: vscode.ViewColumn.One, preserveFocus: false, preview: false }
             );
         } catch {}
     }
@@ -602,7 +644,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
             const doc = await vscode.workspace.openTextDocument({ content: '', language: 'plaintext' });
             currentAnchorUri = doc.uri.toString();
             anchorEditor = await vscode.window.showTextDocument(
-                doc, { viewColumn: vscode.ViewColumn.One, preserveFocus: true, preview: false }
+                doc, { viewColumn: vscode.ViewColumn.One, preserveFocus: false, preview: false }
             );
         } catch {}
     }
@@ -653,7 +695,8 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
             } else {
                 rConsoleTerminal = vscode.window.createTerminal({
                     name: 'R Console',
-                    shellPath: resolveRPath(config),
+                    shellPath: getRPath(),
+                    shellArgs: getRArgs(),
                     location: { viewColumn: vscode.ViewColumn.Two },
                     iconPath: vscode.Uri.joinPath(context.extensionUri, 'resources', 'r_logo.svg'),
                 });
@@ -719,12 +762,13 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         } else {
             // New session: create directly in ViewColumn.Two. R Console does not suffer
             // from the empty PTY bug, so this is safe and guarantees correct placement.
-            const shellPath = resolveRPath(config);
+            const shellPath = getRPath();
             const cwdPath = getEffectiveWorkspaceRoot();
             console.log(`[R Layout] Creating NEW R Console: shellPath=${shellPath}, cwd=${cwdPath}, env keys=${Object.keys(rProfileEnv).join(',')}`);
             rConsoleTerminal = vscode.window.createTerminal({
                 name: 'R Console',
                 shellPath,
+                shellArgs: getRArgs(),
                 location: { viewColumn: vscode.ViewColumn.Two },
                 env: strictEnvArgs,
                 strictEnv: true, // Prevents Python extension from applying its EnvironmentVariableCollection and crashing PTY
@@ -999,6 +1043,9 @@ async function deactivateLayout(): Promise<void> {
     await Promise.all([
         Promise.resolve(
             wsConfig.update('workbench.editor.closeEmptyGroups', origClose, cfgTarget)
+        ).catch(() => {}),
+        Promise.resolve(
+            extensionContext.workspaceState.update('r-layout.origCloseEmptyGroups', undefined)
         ).catch(() => {})
     ]);
     await delay(100); // Give VS Code backend time to register the setting change
@@ -1328,42 +1375,7 @@ function updateStatusBar(): void {
 
 //  Utility
 
-/**
- * Resolve the R binary path from multiple configuration sources:
- *   1. Our own setting: r-layout.rConsolePath  (e.g. "radian")
- *   2. R extension's terminal path: r.rterm.mac  (e.g. "/usr/local/bin/radian")
- *   3. R extension's R binary path: r.rpath.mac  (e.g. "/usr/local/bin/R")
- *   4. Default: "R"
- *
- * This lets R Layout respect the user's existing R extension
- * configuration (radian, custom paths) without calling r.createRTerm
- * - which would trigger "No text editor active" warnings.
- */
-function resolveRPath(rLayoutConfig: vscode.WorkspaceConfiguration): string {
-    // 1. Our own setting takes priority
-    const ours = rLayoutConfig.get<string>('rConsolePath', '');
-    if (ours && ours !== 'R') {
-        return ours;
-    }
 
-    // 2. R extension's terminal path (platform-specific)
-    const rConfig = vscode.workspace.getConfiguration('r');
-    const rTermMac = rConfig.get<string>('rterm.mac', '');
-    if (rTermMac) {
-        console.log(`[R Layout] Using R extension's r.rterm.mac: ${rTermMac}`);
-        return rTermMac;
-    }
-
-    // 3. R extension's R path
-    const rPathMac = rConfig.get<string>('rpath.mac', '');
-    if (rPathMac) {
-        console.log(`[R Layout] Using R extension's r.rpath.mac: ${rPathMac}`);
-        return rPathMac;
-    }
-
-    // 4. Default
-    return ours || 'R';
-}
 
 /** Maps a ViewColumn to the command that focuses that editor group. */
 function groupFocusCommand(col: vscode.ViewColumn): string | undefined {
@@ -1466,7 +1478,8 @@ local({
 options(.rlayout_plot_dir = "${absPlotsDir}")
 
 # Set default device to null pdf to enable invisible plot recording
-options(device = function(...) { pdf(file="/dev/null", ...); dev.control("enable") })
+null_dev <- if (.Platform$OS.type == "windows") "NUL" else "/dev/null"
+options(device = function(...) { pdf(file=null_dev, ...); dev.control("enable") })
 
 # Hook plot.new to increment plot ID. Instead of naive +1, we scan the directory
 # to find the highest existing plot number and append. This is safe for custom

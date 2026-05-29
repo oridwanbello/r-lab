@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { getRConsoleTerminal } from '../layout/layoutManager';
+import { getRscriptPath } from '../utils/rPathResolver';
 
 /**
  * Help Panel - runs R help lookups in a background `Rscript` process
@@ -40,6 +41,7 @@ export class HelpPanel {
             { viewColumn: column, preserveFocus: true },
             {
                 enableScripts: true,
+                enableFindWidget: true,
                 localResourceRoots: [extensionUri],
                 retainContextWhenHidden: true,
             }
@@ -137,26 +139,48 @@ export class HelpPanel {
         this._helpText = '';
         this._render();
 
+        // Use intToUtf8(c(...)) to safely inject arbitrary strings into R script
+        // without risking Windows command line quoting nightmares.
+        const toRString = (str: string) => {
+            if (!str) return '""';
+            const codes = Array.from(str).map(c => c.charCodeAt(0)).join(',');
+            return `intToUtf8(c(${codes}))`;
+        };
+
+        const rQuery = toRString(query);
+
         // Build the R expression
         let helpExpr: string;
         if (query.includes('::')) {
             const [pkg, func] = query.split('::');
-            helpExpr = `help("${func}", package="${pkg}")`;
+            helpExpr = `help(${toRString(func)}, package=${toRString(pkg)})`;
         } else {
-            helpExpr = `help("${query}", package = .packages(all.available = TRUE))`;
+            helpExpr = `help(${rQuery}, package = .packages(all.available = TRUE))`;
         }
 
         // R script that prioritizes package index if the query is an installed package
         const rScript = [
-            `query <- "${query}"`,
+            `options(help_type = "text")`,
+            `query <- ${rQuery}`,
+            `print_pkg <- function(h) {`,
+            `  cat(paste0("<h2>Package '", h$name, "'</h2>\\n"))`,
+            `  if (length(h$info) >= 1) {`,
+            `    cat("<h3>Description</h3><pre class='package-description'>\\n")`,
+            `    cat(paste0(h$info[[1]], collapse="\\n"), "</pre>\\n")`,
+            `  }`,
+            `  if (length(h$info) >= 2 && length(h$info[[2]]) > 0) {`,
+            `    cat("<h3>Index</h3><pre class='package-index'>\\n")`,
+            `    cat(paste0(h$info[[2]], collapse="\\n"), "</pre>\\n")`,
+            `  }`,
+            `}`,
             `is_pkg <- !grepl("::", query) && (query %in% .packages(all.available = TRUE))`,
             `success <- FALSE`,
             `if (is_pkg) {`,
             `  h_pkg <- tryCatch(help(package = (query)), error = function(e) NULL)`,
             `  if (!is.null(h_pkg)) {`,
-            `     cat("<div class='help-html-content'><pre class='package-index'>")`,
-            `     print(h_pkg)`,
-            `     cat("</pre></div>")`,
+            `     cat("<div class='container'><main>")`,
+            `     print_pkg(h_pkg)`,
+            `     cat("</main></div>")`,
             `     success <- TRUE`,
             `  }`,
             `}`,
@@ -174,15 +198,19 @@ export class HelpPanel {
             `       cat("</ul></div>")`,
             `    } else {`,
             `       p <- utils:::.getHelpFile(h)`,
-            `       tools::Rd2HTML(p, out="")`,
+            `       pkg <- basename(dirname(dirname(h[1])))`,
+            `       html_out <- capture.output(tools::Rd2HTML(p))`,
+            `       html_str <- paste(html_out, collapse="\\n")`,
+            `       html_str <- sub("R Documentation", pkg, html_str, fixed=TRUE)`,
+            `       cat(html_str)`,
             `    }`,
             `  } else {`,
             `    # Ultimate fallback to package index in case detection failed`,
             `    h_pkg <- tryCatch(help(package = (query)), error = function(e) NULL)`,
             `    if (!is.null(h_pkg)) {`,
-            `       cat("<div class='help-html-content'><pre class='package-index'>")`,
-            `       print(h_pkg)`,
-            `       cat("</pre></div>")`,
+            `       cat("<div class='container'><main>")`,
+            `       print_pkg(h_pkg)`,
+            `       cat("</main></div>")`,
             `    } else {`,
             `       cat(paste0("<div class='status-msg'>No documentation found for: <code>", query, "</code></div>"))`,
             `    }`,
@@ -191,12 +219,18 @@ export class HelpPanel {
         ].join('\n');
 
         try {
-            const rscriptPath = await this._findRscript();
+            const rscriptPath = await getRscriptPath();
             const raw = await this._runRscript(rscriptPath, rScript);
 
             // Extract the body content from the HTML output
             const bodyMatch = raw.match(/<body>([\s\S]*?)<\/body>/i);
             let content = bodyMatch ? bodyMatch[1] : raw;
+
+            // Post-process: clean up function help top table
+            content = content.replace(
+                /<table[^>]*>.*?<tr>\s*<td>(.*?)<\/td>\s*<td[^>]*>(.*?)<\/td>\s*<\/tr>.*?<\/table>/is,
+                '<div class="help-top-title">$1 {$2}</div>'
+            );
 
             // Post-process: replace broken lifecycle badge <img> tags with styled inline badges.
             // R's Rd2HTML emits relative paths like ../help/figures/lifecycle-deprecated.svg
@@ -225,25 +259,6 @@ export class HelpPanel {
         this._isLoading = false;
         this._render();
     }
-
-    /** Find the Rscript binary - works regardless of whether rConsolePath is R, radian, or ark. */
-    private _findRscript(): Promise<string> {
-        const config = vscode.workspace.getConfiguration('r-layout');
-        const rPath = config.get<string>('rConsolePath', 'R');
-        if (/[/\\]R$/.test(rPath)) {
-            return Promise.resolve(rPath.replace(/[/\\]R$/, '/Rscript'));
-        }
-        if (/[Rr]script$/i.test(rPath)) {
-            return Promise.resolve(rPath);
-        }
-        return new Promise((resolve) => {
-            execFile('which', ['Rscript'], (err, stdout) => {
-                if (!err && stdout) resolve(stdout.trim());
-                else resolve('Rscript');
-            });
-        });
-    }
-
     /**
      * Runs an R script via `Rscript -e` in the background.
      * Returns stdout. Rejects on error.
@@ -446,7 +461,7 @@ export class HelpPanel {
             padding: 16px 20px;
             font-size: var(--vscode-font-size, 13px); line-height: 1.6;
         }
-        h2, h3 {
+        h3 {
             margin-bottom: 1em;
             color: var(--vscode-editor-foreground);
             font-weight: 700;
@@ -455,8 +470,9 @@ export class HelpPanel {
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             padding-bottom: 8px;
             position: relative;
+            font-size: var(--vscode-font-size, 13px);
         }
-        h2::after, h3::after {
+        h3::after {
             content: '';
             position: absolute;
             bottom: -1px;
@@ -466,12 +482,30 @@ export class HelpPanel {
             background: var(--vscode-textLink-foreground);
             border-radius: 6px;
         }
-        h2 { font-size: 1.1em; }
-        h3 { font-size: var(--vscode-font-size, 13px); }
+        h2 {
+            font-size: 1.1em;
+            text-align: center;
+            font-weight: 700;
+            margin-bottom: 0.75em;
+            color: var(--vscode-editor-foreground);
+        }
+        .help-top-title {
+            font-size: 0.9em;
+            opacity: 0.7;
+            margin-bottom: 0.75em;
+            font-weight: 600;
+        }
+        pre.package-index, pre.package-description {
+            background: transparent !important;
+            padding: 0 !important;
+            border: none !important;
+            margin: 0 0 2em 0 !important;
+            font-family: var(--vscode-editor-font-family, monospace) !important;
+        }
 
         /* Function Documentation Spacing */
         .help-html-content h2, .help-html-content h3 {
-            margin-top: 2.2em;
+            margin-top: 1.1em;
         }
         /* Home Page Spacing */
         .empty-state h2 {
@@ -496,7 +530,7 @@ export class HelpPanel {
             border: 1px solid var(--vscode-editorGroup-border);
             padding: 3px 10px;
             border-radius: 4px;
-            font-size: 0.85em;
+            font-size: 0.9em;
             font-weight: 600;
             cursor: pointer;
             opacity: 0;
@@ -615,7 +649,7 @@ export class HelpPanel {
             <svg viewBox="0 0 16 16"><path fill="currentColor" d="M8.3 2.1l6.2 5c.2.1.3.4.1.6l-.1.1v6.2c0 .5-.4.9-1 1h-2v-4H4.5v4H2.5c-.5-.1-1-.5-1-1V7.8c0-.2.1-.4.2-.5l6.2-5.1c.1-.1.3-.1.4 0z"/></svg>
         </button>
         <input id="search-input" type="text"
-               placeholder="Search for a function or package, e.g. mean, dplyr::filter, ggplot2"
+               placeholder="Search R packages, functions, operators, etc."
                value="${escapeHtml(this._lastQuery)}" />
         <button id="btn-search">?</button>
     </div>
@@ -649,17 +683,22 @@ export class HelpPanel {
             });
 
             // Smart Parser: Turn text-based package index into clickable links and URLs
-            const currentPkg = "${escapeHtml(this._lastQuery)}";
+            const currentPkg = ${JSON.stringify(this._lastQuery).replace(/</g, '\\u003c')};
             const urlRegex = /(https?:\\/\\/[^\\s>)]+)/g;
+
+            // Linkify URLs in the plain text description block
+            document.querySelectorAll('pre.package-description').forEach((block) => {
+                let html = escapeHtml(block.textContent || "");
+                html = html.replace(urlRegex, (url) => {
+                    return \`<a href="#" class="external-link" data-url="\${url}">\${url}</a>\`;
+                });
+                block.innerHTML = html;
+            });
 
             document.querySelectorAll('pre.package-index').forEach((block) => {
                 const lines = (block.textContent || "").split('\\n');
-                let indexState = 0; // 0: before, 1: looking for first item, 2: inside list, 3: done
+                let indexState = 1; // 1: looking for first item, 2: inside list, 3: done
                 const newLines = lines.map(line => {
-                    if (indexState === 0 && line.trim() === "Index:") {
-                        indexState = 1;
-                        return line;
-                    }
 
                     if (indexState === 1) {
                         if (line.trim() === "") return line;

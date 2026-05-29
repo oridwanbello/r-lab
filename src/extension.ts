@@ -1,22 +1,29 @@
 import * as vscode from 'vscode';
 import { registerLayoutCommand, resetStaleLayout, fireImmediateLayoutReset, collapseLayoutForShutdown } from './layout/layoutManager';
+import { initializeRPathResolver } from './utils/rPathResolver';
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
     console.log('R Layout extension is now active.');
 
     // Immediate layout guard (fire-and-forget)
-    //    This is the VERY FIRST thing we do - before any awaits.
-    //    We fire setEditorLayout synchronously into VS Code's
-    //    command queue so it races (and beats) session-restore
-    //    rendering of any stale 3-pane grid from a previous session.
-    //    resetStaleLayout() does the full async cleanup afterwards.
     fireImmediateLayoutReset(context);
+
+    // Initialize R Path (and warn user immediately if missing)
+    await initializeRPathResolver();
+
+    // Re-resolve if R configuration changes
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration(e => {
+            if (e.affectsConfiguration('r-layout.rConsolePath') || e.affectsConfiguration('r')) {
+                initializeRPathResolver();
+            }
+        })
+    );
 
     // Register commands & status bar
     registerLayoutCommand(context);
 
     // Full async stale layout cleanup
-    //    Closes stale webview tabs, reopens user's text files, etc.
     resetStaleLayout(context);
 }
 

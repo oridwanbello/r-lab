@@ -383,6 +383,14 @@ export class PlotsPanel {
 
     private _postState(): void {
         const plots = this._plots.map(uri => this._panel.webview.asWebviewUri(uri).toString() + `?t=${Date.now()}`);
+        
+        const effectiveRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
+        const homedir = os.homedir();
+        let defaultDir = effectiveRoot;
+        if (defaultDir.startsWith(homedir)) {
+            defaultDir = defaultDir.replace(homedir, '~');
+        }
+
         this._panel.webview.postMessage({
             type: 'updateState',
             state: {
@@ -391,6 +399,7 @@ export class PlotsPanel {
                 isNightMode: this._isNightMode,
                 minimized: this._isMinimized,
                 customPlotDir: this._customPlotDir,
+                defaultDir: defaultDir,
                 lastDirAction: this._lastDirAction
             }
         });
@@ -398,6 +407,13 @@ export class PlotsPanel {
 
     private _getHtml(): string {
         const nonce = getNonce();
+
+        const effectiveRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
+        const homedir = os.homedir();
+        let defaultDir = effectiveRoot;
+        if (defaultDir.startsWith(homedir)) {
+            defaultDir = defaultDir.replace(homedir, '~');
+        }
 
         const moonIcon = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786z"/></svg>';
         const sunIcon = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2A.5.5 0 018 0zm0 13a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2A.5.5 0 018 13zm8-5a.5.5 0 01-.5.5h-2a.5.5 0 010-1h2a.5.5 0 01.5.5zM3 8a.5.5 0 01-.5.5h-2a.5.5 0 010-1h2A.5.5 0 013 8zm10.657-5.657a.5.5 0 010 .707l-1.414 1.415a.5.5 0 11-.707-.708l1.414-1.414a.5.5 0 01.707 0zm-9.193 9.193a.5.5 0 010 .707L3.05 13.657a.5.5 0 01-.707-.707l1.414-1.414a.5.5 0 01.707 0zm9.193 2.121a.5.5 0 01-.707 0l-1.414-1.414a.5.5 0 01.707-.707l1.414 1.414a.5.5 0 010 .707zM4.464 2.343a.5.5 0 01-.707 0L2.343 3.757a.5.5 0 11.707.707l1.414-1.414a.5.5 0 010-.707z"/></svg>';
@@ -562,7 +578,7 @@ export class PlotsPanel {
             text-align: center;
             opacity: 0.3;
         }
-        .empty-state svg { width: 64px; height: 64px; margin-bottom: 16px; display: inline-block; }
+        .empty-state svg { width: 5em; height: 5em; margin-bottom: 16px; display: inline-block; }
         .empty-state p { font-size: var(--vscode-font-size, 13px); line-height: 1.6; }
         .empty-state code {
             background: var(--vscode-textCodeBlock-background);
@@ -705,6 +721,7 @@ export class PlotsPanel {
             isNightMode: ${this._isNightMode},
             minimized: ${this._isMinimized},
             customPlotDir: ${JSON.stringify(this._customPlotDir || '')},
+            defaultDir: ${JSON.stringify(defaultDir)},
             lastDirAction: ${JSON.stringify(this._lastDirAction || null)}
         };
 
@@ -784,9 +801,10 @@ export class PlotsPanel {
 
             const dirInput = document.getElementById('dir-input');
             dirInput.value = state.customPlotDir || '';
+            dirInput.placeholder = state.defaultDir || 'Custom plot directory...';
 
             document.getElementById('btn-set-view-dir').className = state.lastDirAction === 'view' ? 'active' : '';
-            document.getElementById('btn-set-out-view-dir').className = state.lastDirAction === 'outview' ? 'active' : '';
+            document.getElementById('btn-set-out-view-dir').className = (state.lastDirAction === 'outview' || !state.lastDirAction) ? 'active' : '';
         }
 
         (function() {

@@ -33,6 +33,7 @@ export class ProblemsPanel {
             { viewColumn: column, preserveFocus: true },
             {
                 enableScripts: true,
+                enableFindWidget: true,
                 localResourceRoots: [extensionUri],
                 retainContextWhenHidden: true,
             }
@@ -204,7 +205,7 @@ export class ProblemsPanel {
         .chevron {
             margin-right: 4px;
             transition: transform 0.1s;
-            font-size: 16px;
+            font-size: 1.3em;
         }
         .file-group.expanded .chevron {
             transform: rotate(90deg);
@@ -220,7 +221,7 @@ export class ProblemsPanel {
             color: var(--vscode-badge-foreground);
             padding: 2px 6px;
             border-radius: 11px;
-            font-size: 11px;
+            font-size: 0.9em;
             font-weight: 600;
             line-height: 1;
             min-width: 18px;
@@ -231,35 +232,17 @@ export class ProblemsPanel {
         .diag-row:hover td { background: var(--vscode-list-hoverBackground); }
         td { padding: 4px 6px; vertical-align: top; border-bottom: 1px solid var(--vscode-editorGroup-border); }
         .icon-col { width: 24px; text-align: center; vertical-align: middle; }
-        .icon-col i { font-size: 16px; }
+        .icon-col i { font-size: 1.3em; }
         .loc-col { width: 50px; opacity: 0.6; font-family: var(--vscode-editor-font-family, monospace); vertical-align: middle; }
         .msg-col { word-break: break-word; white-space: normal; vertical-align: middle; }
         
         /* Empty State Styling */
         .empty-state {
-            display: flex; align-items: center; justify-content: center;
-            height: 100%; text-align: center;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 100%; text-align: center; opacity: 0.3;
         }
-        .success-icon-wrapper {
-            width: 64px; height: 64px;
-            background: #28a74522; /* Soft emerald tint */
-            border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            margin: 0 auto 20px;
-        }
-        .success-icon {
-            width: 32px; height: 16px;
-            border-left: 3px solid #28a745;
-            border-bottom: 3px solid #28a745;
-            transform: rotate(-45deg);
-            margin-top: -6px;
-        }
-        .empty-state p { 
-            font-size: 14px; 
-            font-weight: 500;
-            opacity: 0.6;
-            letter-spacing: 0.2px;
-        }
+        .empty-state svg { width: 5em; height: 5em; margin-bottom: 16px; display: inline-block; }
+        .empty-state p { font-size: var(--vscode-font-size, 13px); line-height: 1.6; }
     </style>
 </head>
 <body>
@@ -271,12 +254,8 @@ export class ProblemsPanel {
             totalCount > 0
                 ? fileGroups.join('')
                 : `<div class="empty-state">
-                       <div>
-                           <div class="success-icon-wrapper">
-                               <div class="success-icon"></div>
-                           </div>
-                           <p>No problems detected.</p>
-                       </div>
+                       <svg viewBox="0 0 16 16"><path fill="currentColor" d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/></svg>
+                       <p>No problems detected!</p>
                    </div>`
         }
     </div>

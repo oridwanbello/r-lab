@@ -8,6 +8,16 @@ All notable changes to the R Layout extension will be documented in this file.
 
 - **Smart Execution Button Behavior**: The "Source File to R Console" button now dynamically changes to "Run Selection in R Console" when text is highlighted in the editor.
 - **Context Menu Integration**: Added a high-priority "Run Selection in R Console" command to the editor context menu.
+- **R Markdown & Quarto Support**: Native code execution routing (Run Smart / Run Selection) now seamlessly supports `.Rmd` and `.qmd` files, with built-in protection against accidentally sourcing markdown files.
+
+### Changed
+
+- **UI Standardization & Scaling**: Migrated all Webview panels from static pixel sizes to responsive scaling. Standardized empty-state SVGs to a consistent 5em size with 30% opacity.
+
+### Fixed
+
+- **Robust Shell Path Resolution**: Rewrote the internal argument parser to correctly split commands and arguments. Terminal paths with flags (e.g., `radian --no-history`) and tilde paths (`~/`) now work flawlessly out of the box.
+- **Windows Support**: Fixed an issue where the extension was not working on Windows
 
 ## [0.3.1] - 2026-05-22
 
@@ -44,7 +54,6 @@ All notable changes to the R Layout extension will be documented in this file.
 - **Settings Preservation**: The layout toggle now meticulously saves and restores global VS Code settings (`closeEmptyGroups`, `terminal.integrated.defaultLocation`) to avoid destructive overwrites.
 - **Cleanup Logic**: The `.r-layout` directory is now cleaned up unconditionally on shutdown.
 - **UI Polish**: Updated plot gallery with theme-responsive backgrounds and refined rounding.
-
 
 ## [0.2.0] - 2026-04-15
 

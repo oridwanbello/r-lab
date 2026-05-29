@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { execFile } from 'child_process';
+import { getRscriptPath } from '../utils/rPathResolver';
 
 interface VariableInfo {
     name: string;
@@ -42,6 +43,7 @@ export class WorkspacePanel {
             { viewColumn: column, preserveFocus: true },
             {
                 enableScripts: true,
+                enableFindWidget: true,
                 localResourceRoots: [extensionUri],
                 retainContextWhenHidden: true,
             }
@@ -170,6 +172,7 @@ export class WorkspacePanel {
         // Priority 3: Fall back to Rscript (only sees .RData)
         const rScript = `
 tryCatch({
+    if (!requireNamespace("jsonlite", quietly = TRUE)) stop("waiting_for_live_session")
     if (file.exists(".RData")) load(".RData", envir = .GlobalEnv)
     vars <- ls(envir = .GlobalEnv)
     info <- if (length(vars) == 0) list() else lapply(vars, function(nm) {
@@ -191,13 +194,16 @@ tryCatch({
     cat(paste0('{"error":"', gsub('"', '\\\\\\\\\\\\\\\\"', conditionMessage(e)), '"}'))
 })`;
 
-        const rscriptPath = await this._findRscript();
+        const rscriptPath = getRscriptPath();
 
         try {
             const raw = await this._runRscript(rscriptPath, rScript);
             const parsed = JSON.parse(raw);
 
-            if (parsed.error) {
+            if (parsed.error === 'waiting_for_live_session') {
+                // Silently wait for Priority 1/2 (the live terminal watcher) to start up
+                this._errorMessage = '';
+            } else if (parsed.error) {
                 this._errorMessage = parsed.error;
             } else {
                 this._variables = parsed.variables || [];
@@ -206,8 +212,10 @@ tryCatch({
             }
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
-            if (msg.includes('jsonlite')) {
-                this._errorMessage = 'R package "jsonlite" is required.\nRun: install.packages("jsonlite")';
+            if (msg.includes('waiting_for_live_session')) {
+                // Ignore gracefully
+            } else if (msg.includes('jsonlite')) {
+                this._errorMessage = 'R package "jsonlite" is required for static loading.\nRun: install.packages("jsonlite")';
             } else if (msg.includes('ENOENT') || msg.includes('not found')) {
                 this._errorMessage =
                     'Could not find Rscript on PATH.\n' +
@@ -248,7 +256,7 @@ tryCatch({
             if (fs.existsSync(varsFile)) {
                 const varsRaw = fs.readFileSync(varsFile, 'utf8').trim();
                 if (varsRaw) {
-                    const lines = varsRaw.split('\n');
+                    const lines = varsRaw.replace(/\r/g, '').split('\n');
                     for (const line of lines) {
                         const parts = line.split('\t');
                         if (parts.length >= 5) {
@@ -268,7 +276,7 @@ tryCatch({
             if (fs.existsSync(loadedFile)) {
                 const loadedRaw = fs.readFileSync(loadedFile, 'utf8').trim();
                 if (loadedRaw) {
-                    loadedNamespaces.push(...loadedRaw.split('\n'));
+                    loadedNamespaces.push(...loadedRaw.replace(/\r/g, '').split('\n'));
                 }
             }
 
@@ -276,7 +284,7 @@ tryCatch({
             if (fs.existsSync(attachedFile)) {
                 const attachedRaw = fs.readFileSync(attachedFile, 'utf8').trim();
                 if (attachedRaw) {
-                    attachedNamespaces.push(...attachedRaw.split('\n'));
+                    attachedNamespaces.push(...attachedRaw.replace(/\r/g, '').split('\n'));
                 }
             }
 
@@ -402,54 +410,7 @@ tryCatch({
         });
     }
 
-    /**
-     * Find the Rscript binary path.
-     *
-     * Rscript is a standalone binary that ships with R, independent of
-     * whether the user's console is standard R, radian, or ark.
-     * Attempts "Rscript" on PATH first, then checks common R installation paths.
-     */
-    private async _findRscript(): Promise<string> {
-        // First, try the R console path setting - if it's plain "R", derive "Rscript"
-        const config = vscode.workspace.getConfiguration('r-layout');
-        const rPath = config.get<string>('rConsolePath', 'R');
 
-        // Only derive from setting if it looks like it ends with /R or is just "R"
-        if (rPath === 'R' || rPath.endsWith('/R')) {
-            return rPath.replace(/R$/, 'Rscript');
-        }
-
-        // For radian/ark/other wrappers, try to find Rscript independently
-        const { execFile: execFileCb } = require('child_process');
-
-        return new Promise<string>((resolve) => {
-            // Try "which Rscript" to find it on PATH
-            execFileCb('which', ['Rscript'], { timeout: 3000 },
-                (error: Error | null, stdout: string) => {
-                    if (!error && stdout && stdout.trim()) {
-                        resolve(stdout.trim());
-                    } else {
-                        // Fallback: try common paths
-                        const commonPaths = [
-                            '/usr/local/bin/Rscript',
-                            '/usr/bin/Rscript',
-                            '/opt/homebrew/bin/Rscript',
-                            '/opt/R/arm64/bin/Rscript',
-                            '/Library/Frameworks/R.framework/Resources/bin/Rscript',
-                        ];
-                        for (const p of commonPaths) {
-                            if (fs.existsSync(p)) {
-                                resolve(p);
-                                return;
-                            }
-                        }
-                        // Last resort - just try "Rscript" and let it fail with a clear error
-                        resolve('Rscript');
-                    }
-                }
-            );
-        });
-    }
 
     private _lastRenderHash?: string;
 
@@ -530,7 +491,7 @@ tryCatch({
             padding: 3px 6px;
             border-radius: 6px;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 1.3em;
             line-height: 1;
             opacity: 0.7;
         }
@@ -571,6 +532,9 @@ tryCatch({
             padding: 4px 8px;
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             vertical-align: middle;
+        }
+        thead th:first-child, .var-row td:first-child {
+            padding-left: 16px;
         }
         .var-row:hover td { background: var(--vscode-list-hoverBackground); }
         .name-col { width: 1%; white-space: nowrap; padding-right: 16px !important; }
@@ -639,10 +603,10 @@ tryCatch({
 
         .empty-state {
             display: flex; flex-direction: column; align-items: center;
-            justify-content: center; height: 100%; text-align: center; opacity: 0.5;
+            justify-content: center; height: 100%; text-align: center; opacity: 0.3;
             padding: 20px;
         }
-        .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+        .empty-state svg { width: 5em; height: 5em; margin-bottom: 16px; display: inline-block; }
         .empty-state p { font-size: var(--vscode-font-size, 13px); line-height: 1.6; }
     </style>
 </head>
@@ -724,7 +688,7 @@ tryCatch({
                     cGlobal.textContent = msg.variables && msg.variables.length > 0 ? '(' + msg.variables.length + ')' : '';
 
                     if (!msg.variables || msg.variables.length === 0) {
-                        globalEl.innerHTML = '<div class="empty-state"><div class="icon">📦</div><p>No variables in the global environment.<br/>Run R code to populate variables, then click <strong>Refresh</strong>.</p></div>';
+                        globalEl.innerHTML = '<div class="empty-state"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 2.5h-1A2.5 2.5 0 0 0 3 5v1.5A1.5 1.5 0 0 1 1.5 8 1.5 1.5 0 0 1 3 9.5V11A2.5 2.5 0 0 0 5.5 13.5h1 M9.5 2.5h1A2.5 2.5 0 0 1 13 5v1.5A1.5 1.5 0 0 0 14.5 8 1.5 1.5 0 0 0 13 9.5V11a2.5 2.5 0 0 1-2.5 2.5h-1"/></svg><p>No variables in the global environment.<br/>Run R code to populate variables.</p></div>';
                     } else {
                         const EYE = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>';
                         let rows = msg.variables.map(v => {

@@ -34,7 +34,7 @@
         "r-layout.rConsolePath": {
           "type": "string",
           "default": "R",
-          "description": "Path or command for the R Console terminal. Examples: 'R', 'radian', or a full path to the Ark kernel."
+          "description": "Path or command for the R Console terminal. Examples: 'R' or 'radian'."
         }
       }
     },
@@ -69,6 +69,14 @@
           "light": "resources/run_source_light.svg",
           "dark": "resources/run_source_dark.svg"
         }
+      },
+      {
+        "command": "r-layout.runSmart",
+        "title": "Run Source / Selection",
+        "icon": {
+          "light": "resources/run_source_light.svg",
+          "dark": "resources/run_source_dark.svg"
+        }
       }
     ],
     "keybindings": [
@@ -88,14 +96,14 @@
         "when": "r-layout.layoutActive"
       },
       {
-        "command": "r-layout.sourceFile",
+        "command": "r-layout.runSmart",
         "key": "cmd+shift+s",
-        "when": "r-layout.layoutActive && editorLangId == 'r'"
+        "when": "r-layout.layoutActive && editorLangId =~ /^(r|rmd|quarto)$/"
       },
       {
-        "command": "r-layout.sourceFile",
+        "command": "r-layout.runSmart",
         "key": "ctrl+shift+s",
-        "when": "r-layout.layoutActive && editorLangId == 'r'"
+        "when": "r-layout.layoutActive && editorLangId =~ /^(r|rmd|quarto)$/"
       }
     ],
     "menus": {
@@ -111,20 +119,15 @@
           "group": "navigation@1"
         },
         {
-          "command": "r-layout.sourceFile",
-          "when": "r-layout.layoutActive && resourceLangId == 'r' && activeEditorGroupIndex == 1 && !editorHasSelection",
-          "group": "navigation@-100"
-        },
-        {
-          "command": "r-layout.runSelection",
-          "when": "r-layout.layoutActive && resourceLangId == 'r' && activeEditorGroupIndex == 1 && editorHasSelection",
+          "command": "r-layout.runSmart",
+          "when": "r-layout.layoutActive && resourceLangId =~ /^(r|rmd|quarto)$/ && activeEditorGroupIndex == 1",
           "group": "navigation@-100"
         }
       ],
       "editor/context": [
         {
           "command": "r-layout.runSelection",
-          "when": "r-layout.layoutActive && resourceLangId == 'r' && editorHasSelection",
+          "when": "r-layout.layoutActive && resourceLangId =~ /^(r|rmd|quarto)$/ && editorHasSelection",
           "group": "navigation@-100"
         }
       ]
