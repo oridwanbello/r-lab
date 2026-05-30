@@ -11,6 +11,7 @@ All notable changes to the R Layout extension will be documented in this file.
 
 ### Fixed
 
+- **Windows R Path Resolution**: Fixed a critical bug where unquoted Windows paths with spaces were truncated by the regex arguments parser, which caused the R Console to fail to spawn and the Data/Help viewers to throw "Rscript ENOENT" errors.
 - **R Environment Leakage Prevention**: Wrapped internal snapshot and plot device scripts in `local({...})` to completely prevent internal `.vars` and `null_dev` objects from bleeding into the user's R Global Environment.
 - **Packages Column Layout**: Ensured the checkbox column has a sticky positioning with fixed width, and prevented package titles from text-wrapping for smoother horizontal scrolling.
 - **Hover Bleed-Through**: Fixed a CSS bug where hovering over a sticky column allowed text underneath to bleed through by layering background gradients.

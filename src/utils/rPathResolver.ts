@@ -91,9 +91,18 @@ export async function initializeRPathResolver(): Promise<void> {
 }
 
 function _setPaths(resolvedRPath: string) {
-    const parts = resolvedRPath.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
-    let exePath = (parts.length > 0 && parts[0]) ? parts[0].replace(/^"|"$/g, '') : resolvedRPath;
-    const args = parts.length > 1 ? parts.slice(1).map(p => (p as string).replace(/^"|"$/g, '')) : [];
+    let exePath = resolvedRPath;
+    let args: string[] = [];
+
+    // If the entire string is an existing file, it has no args. 
+    // This correctly handles unquoted Windows paths with spaces.
+    if (fs.existsSync(resolvedRPath)) {
+        exePath = resolvedRPath;
+    } else {
+        const parts = resolvedRPath.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+        exePath = (parts.length > 0 && parts[0]) ? parts[0].replace(/^"|"$/g, '') : resolvedRPath;
+        args = parts.length > 1 ? parts.slice(1).map(p => (p as string).replace(/^"|"$/g, '')) : [];
+    }
 
     if (exePath.startsWith('~/') || exePath.startsWith('~\\')) {
         exePath = path.join(os.homedir(), exePath.slice(2));
