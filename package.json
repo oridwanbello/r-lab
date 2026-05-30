@@ -9,6 +9,9 @@
   "engines": {
     "vscode": "^1.107.0"
   },
+  "extensionDependencies": [
+    "REditorSupport.r"
+  ],
   "categories": [
     "Other",
     "Data Science"

@@ -103,10 +103,22 @@ function _setPaths(resolvedRPath: string) {
     cachedRArgs = args;
     
     // Derive Rscript path using exePath
-    if (/[/\\\\]R(\.exe)?$/i.test(exePath)) {
-        cachedRscriptPath = exePath.replace(/([/\\\\])R(\.exe)?$/i, '$1Rscript$2');
-    } else if (/[/\\\\]Rterm\.exe$/i.test(exePath)) {
-        cachedRscriptPath = exePath.replace(/([/\\\\])Rterm\.exe$/i, '$1Rscript.exe');
+    const isWin = os.platform() === 'win32';
+    const rscriptName = isWin ? 'Rscript.exe' : 'Rscript';
+
+    if (path.isAbsolute(exePath)) {
+        const dir = path.dirname(exePath);
+        const rscriptCandidate = path.join(dir, rscriptName);
+        if (fs.existsSync(rscriptCandidate)) {
+            cachedRscriptPath = rscriptCandidate;
+            return;
+        }
+    }
+
+    if (/[/\\]R(\.exe)?$/i.test(exePath)) {
+        cachedRscriptPath = exePath.replace(/([/\\])R(\.exe)?$/i, '$1Rscript$2');
+    } else if (/[/\\]Rterm(\.exe)?$/i.test(exePath)) {
+        cachedRscriptPath = exePath.replace(/([/\\])Rterm(\.exe)?$/i, '$1Rscript$2');
     } else if (/^R(\.exe)?$/i.test(exePath)) {
         cachedRscriptPath = exePath.replace(/^R(\.exe)?$/i, 'Rscript$1');
     } else {
@@ -122,27 +134,54 @@ async function getWindowsRegistryRPath(): Promise<string | undefined> {
     ];
 
     for (const key of keys) {
-        try {
-            const { stdout } = await execAsync(`reg query "${key}" /v InstallPath`);
-            const match = stdout.match(/InstallPath\s+REG_SZ\s+(.*)/i);
-            if (match && match[1]) {
-                const installPath = match[1].trim();
-                
-                // Prefer x64 if it exists
+        // try both default and 64-bit registry views
+        const cmds = [`reg query "${key}" /v InstallPath`, `reg query "${key}" /v InstallPath /reg:64`];
+        for (const cmd of cmds) {
+            try {
+                const { stdout } = await execAsync(cmd);
+                const match = stdout.match(/InstallPath\s+REG_SZ\s+([^\r\n]+)/i);
+                if (match && match[1]) {
+                    const installPath = match[1].trim();
+                    
+                    // Prefer x64 if it exists
+                    const x64Path = path.join(installPath, 'bin', 'x64', 'R.exe');
+                    if (fs.existsSync(x64Path)) {
+                        return x64Path;
+                    }
+                    
+                    const binPath = path.join(installPath, 'bin', 'R.exe');
+                    if (fs.existsSync(binPath)) {
+                        return binPath;
+                    }
+                }
+            } catch (e) {
+                // Key not found or error reading, try the next one
+                continue;
+            }
+        }
+    }
+
+    // Try to find it in the default installation path if registry fails
+    try {
+        const defaultPath = 'C:\\Program Files\\R';
+        if (fs.existsSync(defaultPath)) {
+            const dirs = fs.readdirSync(defaultPath);
+            // Sort to get the highest version, assuming directories like R-4.2.1, R-4.3.0
+            const rDirs = dirs.filter(d => d.startsWith('R-')).sort((a, b) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' }));
+            if (rDirs.length > 0) {
+                const installPath = path.join(defaultPath, rDirs[0]);
                 const x64Path = path.join(installPath, 'bin', 'x64', 'R.exe');
                 if (fs.existsSync(x64Path)) {
                     return x64Path;
                 }
-                
                 const binPath = path.join(installPath, 'bin', 'R.exe');
                 if (fs.existsSync(binPath)) {
                     return binPath;
                 }
             }
-        } catch (e) {
-            // Key not found or error reading, try the next one
-            continue;
         }
+    } catch (e) {
+        // ignore
     }
     
     return undefined;

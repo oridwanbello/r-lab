@@ -61,6 +61,10 @@ A modern diagnostic inspector that anchors the top-right pane:
 
 ## Getting Started
 
+### Prerequisites
+- **vscode-R**: You must have the [vscode-R](https://marketplace.visualstudio.com/items?itemName=REditorSupport.r) extension installed. R Layout relies on it for code execution and providing live workspace data. (It will be installed automatically if you install R Layout from the marketplace).
+
+### Installation
 1. Install the extension from the VS Code Marketplace.
 2. Open a workspace.
 3. Click the "R Layout" button in the Status Bar, or run "Toggle R Layout" from the Command Palette.
