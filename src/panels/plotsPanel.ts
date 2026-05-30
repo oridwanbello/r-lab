@@ -648,24 +648,25 @@ export class PlotsPanel {
         }
         .dir-dropdown .action-row {
             display: flex;
-            justify-content: flex-end;
+            justify-content: flex-start;
             gap: 6px;
         }
         .dir-dropdown .action-row button {
-            background: color-mix(in srgb, var(--vscode-button-background) 25%, transparent);
-            color: var(--vscode-button-background);
-            border: 1px solid var(--vscode-button-background);
+            background: var(--vscode-toolbar-hoverBackground);
+            color: var(--vscode-foreground);
+            border: none;
             padding: 4px 8px;
             border-radius: 6px;
             cursor: pointer;
             font-size: 0.85em;
-            opacity: 1;
+            opacity: 0.9;
             white-space: nowrap;
         }
         .dir-dropdown .action-row button:hover,
         .dir-dropdown .action-row button.active {
             background: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
+            opacity: 1;
         }
         .btn-custom-dir.active {
             color: var(--vscode-textLink-foreground) !important;

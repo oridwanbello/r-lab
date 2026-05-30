@@ -13,6 +13,13 @@ interface VariableInfo {
     isDataFrame: boolean;
 }
 
+interface PackageInfo {
+    name: string;
+    title: string;
+    version: string;
+    status: 'attached' | 'loaded' | 'none';
+}
+
 export class WorkspacePanel {
     public static currentPanel: WorkspacePanel | undefined;
     public static readonly viewType = 'r-layout.workspacePanel';
@@ -21,6 +28,7 @@ export class WorkspacePanel {
     private _variables: VariableInfo[] = [];
     private _loadedNamespaces: string[] = [];
     private _attachedNamespaces: string[] = [];
+    private _packages: PackageInfo[] = [];
     private _isLoading = false;
     private _errorMessage = '';
     private _autoRefreshInterval?: ReturnType<typeof setInterval>;
@@ -58,8 +66,6 @@ export class WorkspacePanel {
         this._panel = panel;
 
         // Register ALL handlers BEFORE setting HTML
-        // If _render() runs first, the webview JS executes and sends 'ready'
-        // before onDidReceiveMessage is registered, and the message is dropped.
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
         this._panel.onDidChangeViewState(
@@ -69,11 +75,13 @@ export class WorkspacePanel {
         );
 
         this._panel.webview.onDidReceiveMessage(
-            async (msg: { type: string; varName?: string }) => {
+            async (msg: { type: string; varName?: string; pkgName?: string }) => {
                 switch (msg.type) {
                     case 'ready':
-                        // Webview JS loaded - safe to postMessage now.
                         await this._refreshWorkspace();
+                        if (this._packages.length === 0) {
+                            this._fetchInstalledPackages();
+                        }
                         break;
                     case 'refresh':
                         await this._refreshWorkspace();
@@ -83,8 +91,14 @@ export class WorkspacePanel {
                             this._onRequestDataView(msg.varName);
                         }
                         break;
-                    case 'toggleAutoRefresh':
-                        this._toggleAutoRefresh();
+                    case 'attachPackage':
+                        if (msg.pkgName) { this._sendToRConsole(`library(${msg.pkgName})`); }
+                        break;
+                    case 'detachPackage':
+                        if (msg.pkgName) { this._sendToRConsole(`detach("package:${msg.pkgName}", unload = TRUE)`); }
+                        break;
+                    case 'refreshPackages':
+                        await this._fetchInstalledPackages();
                         break;
                 }
             },
@@ -92,15 +106,17 @@ export class WorkspacePanel {
             this._disposables
         );
 
-        // Auto-refresh every 3 s
+        // Auto-refresh every 3 s (always on, no toggle)
         this._autoRefreshInterval = setInterval(() => {
             this._refreshWorkspace();
         }, 3000);
 
-        // Set HTML last - this starts the webview JS which will send 'ready'.
+        // Set HTML last
         this._render();
-    }
 
+        // Start background fetch of packages immediately (non-blocking)
+        this._fetchInstalledPackages();
+    }
 
     public onRequestDataView(callback: (varName: string) => void): void {
         this._onRequestDataView = callback;
@@ -110,30 +126,34 @@ export class WorkspacePanel {
         this._panel.reveal(undefined, true);
     }
 
-    /** Hide or show all webview content (toolbar, tabs, data).
-     *  Used when the top-right pane is maximized so only the
-     *  VS Code tab bar remains visible for the bottom-right group.
-     */
     public setMinimized(minimized: boolean): void {
         this._panel.webview.postMessage({ command: 'setMinimized', minimized });
     }
 
-    /** Force an immediate workspace refresh - called on layout re-activation. */
     public forceRefresh(): void {
         this._refreshWorkspace();
     }
 
-    private _toggleAutoRefresh(): void {
-        if (this._autoRefreshInterval) {
-            clearInterval(this._autoRefreshInterval);
-            this._autoRefreshInterval = undefined;
-        } else {
-            this._autoRefreshInterval = setInterval(() => {
-                this._refreshWorkspace();
-            }, 3000);
-        }
-        this._render();
+    /** Send a command to the R Console terminal */
+    private _sendToRConsole(command: string): void {
+        try {
+            const { getRConsoleTerminal } = require('../layout/layoutManager');
+            const terminal = getRConsoleTerminal();
+            if (terminal) {
+                terminal.sendText(command, true);
+            }
+        } catch {}
     }
+
+    // ----- Internal R variable filter -----
+    private static readonly INTERNAL_VAR_PATTERN = /^\.rlayout_|^\.r_layout|^null_dev$|^\.First$|^\.Last$/;
+
+    /** Filter out internal R Layout variables so they never appear in the Environment tab */
+    private _filterInternalVars(variables: VariableInfo[]): VariableInfo[] {
+        return variables.filter(v => !WorkspacePanel.INTERNAL_VAR_PATTERN.test(v.name));
+    }
+
+    // ----- Refresh logic (3-tier priority) -----
 
     private async _refreshWorkspace(): Promise<void> {
         if (this._variables.length === 0 && this._loadedNamespaces.length === 0) {
@@ -147,23 +167,22 @@ export class WorkspacePanel {
         const vscodeRData = this._pollVscodeR();
 
         if (vscodeRData && vscodeRData.variables.length > 0) {
-            this._variables = vscodeRData.variables;
+            this._variables = this._filterInternalVars(vscodeRData.variables);
             this._loadedNamespaces = vscodeRData.loadedNamespaces;
             this._attachedNamespaces = vscodeRData.attachedNamespaces;
+            this._updatePackageStatuses();
             this._isLoading = false;
             this._render();
             return;
         }
 
         // Priority 2: Read the auto-updated watcher file
-        // The R task callback (injected at activation) writes
-        // .r_layout/.workspace_data.json after every R command.
-        // Read directly from disk - no terminal interaction needed.
         const watcherResult = this._readWatcherFile();
         if (watcherResult) {
-            this._variables = watcherResult.variables || [];
+            this._variables = this._filterInternalVars(watcherResult.variables || []);
             this._loadedNamespaces = watcherResult.loadedNamespaces || [];
             this._attachedNamespaces = watcherResult.attachedNamespaces || [];
+            this._updatePackageStatuses();
             this._isLoading = false;
             this._render();
             return;
@@ -179,6 +198,11 @@ tryCatch({
         obj <- get(nm, envir = .GlobalEnv)
         cls <- paste(class(obj), collapse = ", ")
         dims <- if (!is.null(dim(obj))) paste(dim(obj), collapse = " x ") else as.character(length(obj))
+        sz <- format(object.size(obj), units = "auto")
+        sz <- sub(" bytes|Bytes", " B", sz)
+        sz <- sub("Kb|KB", "kB", sz)
+        sz <- sub("Mb|MB", "MB", sz)
+        sz <- sub("Gb|GB", "GB", sz)
         preview <- tryCatch({
             if (is.data.frame(obj) || is.matrix(obj)) paste0(nrow(obj), " obs. of ", ncol(obj), " variables")
             else if (is.list(obj)) paste0("List of ", length(obj))
@@ -187,7 +211,7 @@ tryCatch({
             else if (is.numeric(obj) && length(obj) <= 6) paste(head(obj, 6), collapse = " ")
             else paste(head(obj, 3), collapse = " ")
         }, error = function(e) "?")
-        list(name = nm, type = cls, size = dims, preview = preview, isDataFrame = is.data.frame(obj))
+        list(name = nm, type = cls, size = paste0(dims, " (", sz, ")"), preview = preview, isDataFrame = is.data.frame(obj))
     })
     cat(jsonlite::toJSON(list(variables = info, loadedNamespaces = loadedNamespaces(), attachedNamespaces = search()), auto_unbox = TRUE))
 }, error = function(e) {
@@ -198,17 +222,22 @@ tryCatch({
 
         try {
             const raw = await this._runRscript(rscriptPath, rScript);
-            const parsed = JSON.parse(raw);
+            // Extract JSON from potential R warnings
+            const jsonStart = raw.indexOf('{');
+            const jsonEnd = raw.lastIndexOf('}');
+            if (jsonStart === -1 || jsonEnd === -1) { throw new Error('Invalid JSON response'); }
+            const cleanJson = raw.substring(jsonStart, jsonEnd + 1);
+            const parsed = JSON.parse(cleanJson);
 
             if (parsed.error === 'waiting_for_live_session') {
-                // Silently wait for Priority 1/2 (the live terminal watcher) to start up
                 this._errorMessage = '';
             } else if (parsed.error) {
                 this._errorMessage = parsed.error;
             } else {
-                this._variables = parsed.variables || [];
+                this._variables = this._filterInternalVars(parsed.variables || []);
                 this._loadedNamespaces = parsed.loadedNamespaces || [];
                 this._attachedNamespaces = parsed.attachedNamespaces || [];
+                this._updatePackageStatuses();
             }
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
@@ -230,10 +259,64 @@ tryCatch({
         this._render();
     }
 
-    /**
-     * Read the workspace data file written by the R task callback.
-     * This is a pure file read - no terminal interaction.
-     */
+    /** Update package statuses from loaded/attached namespace lists */
+    private _updatePackageStatuses(): void {
+        if (this._packages.length === 0) { return; }
+
+        const attachedSet = new Set<string>();
+        for (const ns of this._attachedNamespaces) {
+            const m = ns.match(/^package:(.+)$/);
+            if (m) { attachedSet.add(m[1]); }
+        }
+
+        const loadedSet = new Set(this._loadedNamespaces);
+
+        for (const pkg of this._packages) {
+            if (attachedSet.has(pkg.name)) {
+                pkg.status = 'attached';
+            } else if (loadedSet.has(pkg.name)) {
+                pkg.status = 'loaded';
+            } else {
+                pkg.status = 'none';
+            }
+        }
+    }
+
+    /** Fetch the full installed packages list via Rscript (heavy, manual only) */
+    public async _fetchInstalledPackages(): Promise<void> {
+        const rscriptPath = getRscriptPath();
+        const script = `
+tryCatch({
+    pkgs <- installed.packages(fields = "Title")[, c("Package", "Version", "Title")]
+    lines <- apply(pkgs, 1, function(r) paste(r["Package"], r["Version"], gsub("\\t|\\n|\\r", " ", ifelse(is.na(r["Title"]), "", r["Title"])), sep = "\\t"))
+    cat(paste(lines, collapse = "\\n"))
+}, error = function(e) cat(""))`;
+
+        try {
+            const raw = await this._runRscript(rscriptPath, script);
+            const lines = raw.trim().split('\n').filter(l => l.trim());
+            const pkgs: PackageInfo[] = [];
+            for (const line of lines) {
+                const parts = line.split('\t');
+                if (parts.length >= 2) {
+                    pkgs.push({
+                        name: parts[0].trim(),
+                        version: parts[1].trim(),
+                        title: (parts[2] || '').trim(),
+                        status: 'none'
+                    });
+                }
+            }
+            this._packages = pkgs;
+            this._updatePackageStatuses();
+            this._render();
+        } catch {
+            // Silently ignore - packages list stays empty until next manual refresh
+        }
+    }
+
+    // ----- File readers -----
+
     private _readWatcherFile(): {
         variables: VariableInfo[];
         loadedNamespaces: string[];
@@ -246,7 +329,6 @@ tryCatch({
         const loadedFile = path.join(outDir, '.workspace_loaded.tsv');
         const attachedFile = path.join(outDir, '.workspace_attached.tsv');
 
-        // Need at least one of these to exist to consider it a successful read
         if (!fs.existsSync(varsFile) && !fs.existsSync(loadedFile) && !fs.existsSync(attachedFile)) {
             return null;
         }
@@ -315,7 +397,6 @@ tryCatch({
                     sessionDir = path.join(vsRDir, activeData.pid.toString());
                 }
             } else {
-                // No active.json - find the most recently modified session directory
                 const dirs = fs.readdirSync(vsRDir, { withFileTypes: true })
                     .filter(d => d.isDirectory())
                     .map(d => ({
@@ -331,7 +412,6 @@ tryCatch({
 
             if (!sessionDir || !fs.existsSync(sessionDir)) return null;
 
-            // Read global environment
             const variables: VariableInfo[] = [];
             const globalEnvPath = path.join(sessionDir, 'globalenv.json');
             if (fs.existsSync(globalEnvPath)) {
@@ -350,7 +430,6 @@ tryCatch({
                 }
             }
 
-            // Read loaded namespaces
             let loadedNamespaces: string[] = [];
             const loadedPath = path.join(sessionDir, 'loaded_namespaces.json');
             if (fs.existsSync(loadedPath)) {
@@ -363,7 +442,6 @@ tryCatch({
                 } catch {}
             }
 
-            // Read attached namespaces (search path)
             let attachedNamespaces: string[] = [];
             const searchPath = path.join(sessionDir, 'search.json');
             if (fs.existsSync(searchPath)) {
@@ -376,7 +454,6 @@ tryCatch({
                 } catch {}
             }
 
-            // Only return data if we actually found something
             if (variables.length > 0 || loadedNamespaces.length > 0 || attachedNamespaces.length > 0) {
                 return { variables, loadedNamespaces, attachedNamespaces };
             }
@@ -392,7 +469,7 @@ tryCatch({
                 rscriptPath,
                 ['-e', script],
                 {
-                    timeout: 10000,
+                    timeout: 30000,
                     maxBuffer: 1024 * 1024,
                     cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir(),
                 },
@@ -410,7 +487,7 @@ tryCatch({
         });
     }
 
-
+    // ----- Rendering -----
 
     private _lastRenderHash?: string;
 
@@ -420,33 +497,60 @@ tryCatch({
             this._htmlSet = true;
         }
 
+        // Sort variables alphabetically to prevent jitter from R's random ordering
+        const sortedVars = [...this._variables].sort((a, b) => a.name.localeCompare(b.name));
+
+        // Filter attached objects: exclude internal R environments
+        const attachedObjects = this._attachedNamespaces.filter(ns => {
+            return !ns.match(/^\.GlobalEnv$/) &&
+                   !ns.match(/^package:/) &&
+                   !ns.match(/^Autoloads$/) &&
+                   !ns.match(/^tools:/) &&
+                   !ns.match(/^org:/) &&
+                   !ns.match(/^CheckExEnv$/);
+        });
+
         const stateToHash = JSON.stringify({
-            variables: this._variables,
+            variables: sortedVars,
+            packages: this._packages,
             loadedNamespaces: this._loadedNamespaces,
             attachedNamespaces: this._attachedNamespaces,
+            attachedObjects,
             isLoading: this._isLoading,
             errorMessage: this._errorMessage,
-            autoOn: !!this._autoRefreshInterval
         });
 
         if (this._lastRenderHash === stateToHash) {
-            return; // No changes, do not rebuild DOM (preserves text selection)
+            return;
         }
         this._lastRenderHash = stateToHash;
 
         this._panel.webview.postMessage({
             command: 'update',
-            variables: this._variables,
-            loadedNamespaces: this._loadedNamespaces,
-            attachedNamespaces: this._attachedNamespaces,
+            variables: sortedVars,
+            packages: this._packages,
+            attachedObjects,
             isLoading: this._isLoading,
             errorMessage: this._errorMessage,
-            autoOn: !!this._autoRefreshInterval
         });
     }
 
     private _getHtml(): string {
         const nonce = getNonce();
+
+        // Checkbox SVGs as specified
+        const ICON_UNCHECKED = '<svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>';
+        const ICON_ATTACHED = '<svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="2" fill="currentColor"/><path fill="none" stroke="var(--vscode-editor-background)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M5.5 8.5l2 2 3.5-4"/></svg>';
+        const ICON_LOADED = '<svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="5" y="5" width="6" height="6" rx="1" fill="currentColor"/></svg>';
+
+        // Refresh icon (same as Data Viewer)
+        const REFRESH_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M13.29 8.69a5.33 5.33 0 1 1 -6.62 -5.86c2.6-.67 5.29.67 6.28 3.16" /><path d="M13.33 2.67v3.33h-3.33" /></svg>';
+
+        // Eye icon (pristine Feather Icons)
+        const EYE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+
+        // Paperclip icon (pristine Feather Icons) for attached objects
+        const PAPERCLIP_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-paperclip"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -462,62 +566,37 @@ tryCatch({
         ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
         body {
             font-family: var(--vscode-font-family);
-            font-weight: 400; font-size: var(--vscode-font-size, 13px); letter-spacing: 0.3px; color: var(--vscode-editor-foreground); opacity: 1;           background: var(--vscode-editor-background);
+            font-weight: 400; font-size: var(--vscode-font-size, 13px); letter-spacing: 0.3px;
+            color: var(--vscode-editor-foreground);
+            background: var(--vscode-editor-background);
             display: flex;
             flex-direction: column;
             height: 100vh;
             overflow: hidden;
         }
         body.minimized > * { display: none !important; }
-        .toolbar {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            padding: 0 12px;
-            height: 32px;
-            background: var(--vscode-editor-background); /* Matches active tab */
-            border-bottom: 1px solid var(--vscode-editorGroup-border);
-            flex-shrink: 0;
-        }
-        .pane-title {
-            font-weight: 600;
-            letter-spacing: 0.5px; opacity: 0.7;
-        }
-        .toolbar-actions { display: flex; align-items: center; gap: 6px; }
-        .toolbar button {
-            background: none;
-            color: var(--vscode-foreground);
-            border: none;
-            padding: 3px 6px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 1.3em;
-            line-height: 1;
-            opacity: 0.7;
-        }
-        .toolbar button:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground); }
-        .toolbar button.active { opacity: 1; color: var(--vscode-textLink-foreground); }
-        .toolbar button svg { width: 14px; height: 14px; display: block; }
-        .toolbar button[disabled] {
-            opacity: 0.3;
-            cursor: default;
-            pointer-events: auto; /* Allow hover for tooltips */
-        }
-        .toolbar button[disabled]:hover {
-            background: none;
-        }
 
-        .tabs { display: flex; border-bottom: 1px solid var(--vscode-editorGroup-border); background: var(--vscode-editor-background); }
-        .tab { padding: 8px 12px; cursor: pointer; opacity: 0.6; font-weight: 600; letter-spacing: 0.5px; border-bottom: 2px solid transparent; }
+        /* ── Tab Bar ── */
+        .tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--vscode-editorGroup-border); background: var(--vscode-editor-background); flex-shrink: 0; }
+        .tab { padding: 8px 12px; cursor: pointer; opacity: 0.6; font-weight: 600; letter-spacing: 0.5px; border-bottom: 2px solid transparent; white-space: nowrap; }
         .tab:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
         .tab.active { opacity: 1; border-bottom: 2px solid var(--vscode-textLink-foreground); color: var(--vscode-textLink-foreground); }
 
-        .content { flex: 1; overflow: auto; display: none; }
-        .content.active { display: block; }
+        /* ── Content Panels ── */
+        .content { flex: 1; overflow: hidden; display: none; flex-direction: column; }
+        .content.active { display: flex; }
 
+        /* ── Table Scroll Wrapper ── */
+        .table-scroll-wrapper {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+        }
+
+        /* ── Tables ── */
         table { width: 100%; border-collapse: collapse; }
         thead th {
-            position: sticky; top: 0; z-index: 1;
+            position: sticky; top: 0; z-index: 2;
             padding: 6px 8px;
             text-align: left;
             font-weight: 600;
@@ -532,11 +611,28 @@ tryCatch({
             padding: 4px 8px;
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             vertical-align: middle;
+            background: var(--vscode-editor-background);
         }
         thead th:first-child, .var-row td:first-child {
             padding-left: 16px;
         }
-        .var-row:hover td { background: var(--vscode-list-hoverBackground); }
+        .var-row:hover td {
+            background: color-mix(in srgb, var(--vscode-list-hoverBackground) 100%, var(--vscode-editor-background));
+        }
+
+        /* ── Frozen first column ── */
+        thead th.frozen-col, .var-row td.frozen-col {
+            position: sticky;
+            left: 0;
+            z-index: 1;
+            background: var(--vscode-editor-background);
+        }
+        thead th.frozen-col { z-index: 3; }
+        .var-row:hover td.frozen-col {
+            background: linear-gradient(var(--vscode-list-hoverBackground), var(--vscode-list-hoverBackground)), var(--vscode-editor-background);
+        }
+
+        /* ── Column styles ── */
         .name-col { width: 1%; white-space: nowrap; padding-right: 16px !important; }
         .var-name {
             font-family: var(--vscode-editor-font-family, monospace);
@@ -549,22 +645,19 @@ tryCatch({
             font-family: var(--vscode-editor-font-family, monospace);
             opacity: 0.7;
         }
-        .size-col { width: 1%; white-space: nowrap; padding-right: 16px !important; opacity: 0.6; }
+        .size-col {
+            width: 1%; white-space: nowrap; padding-right: 16px !important;
+            font-family: var(--vscode-editor-font-family, monospace);
+            opacity: 0.6;
+        }
         .preview-col {
             width: auto;
             font-family: var(--vscode-editor-font-family, monospace);
             opacity: 0.8;
             vertical-align: middle;
         }
-        .simple-list { list-style: none; padding: 0; margin: 0; }
-        .simple-list li {
-            padding: 4px 12px;
-            border-bottom: 1px solid var(--vscode-editorGroup-border);
-            font-family: var(--vscode-editor-font-family, monospace);
-            display: flex;
-            align-items: center;
-            min-height: 25px; /* Ensures height parity with table rows */
-        }
+
+        /* ── View Button (Eye) ── */
         .view-btn {
             display: inline-flex;
             align-items: center;
@@ -581,10 +674,27 @@ tryCatch({
         }
         .view-btn:hover { opacity: 1; }
         .view-btn svg { display: block; }
+
+        /* ── Status Messages ── */
         .status-msg { padding: 20px; text-align: center; opacity: 0.6; }
         .status-msg.error { color: var(--vscode-errorForeground); opacity: 0.9; white-space: pre-wrap; }
 
-        /* Custom Instant Tooltip */
+        /* ── Empty State ── */
+        .empty-state {
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; height: 100%; text-align: center; opacity: 0.3;
+            padding: 20px;
+        }
+        .empty-state svg { width: 5em; height: 5em; margin-bottom: 16px; display: inline-block; }
+        .empty-state p { font-size: var(--vscode-font-size, 13px); line-height: 1.6; }
+        .empty-state code {
+            background: var(--vscode-textCodeBlock-background);
+            padding: 2px 5px;
+            border-radius: 6px;
+            font-size: 0.9em;
+        }
+
+        /* ── Custom Instant Tooltip ── */
         .tooltip {
             position: fixed;
             background: var(--vscode-editorHoverWidget-background, #252526);
@@ -601,38 +711,220 @@ tryCatch({
             white-space: nowrap;
         }
 
-        .empty-state {
-            display: flex; flex-direction: column; align-items: center;
-            justify-content: center; height: 100%; text-align: center; opacity: 0.3;
-            padding: 20px;
+        /* ══════════ PACKAGES TAB ══════════ */
+
+        .pkg-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-bottom: 1px solid var(--vscode-editorGroup-border);
+            background: var(--vscode-editor-background);
+            flex-shrink: 0;
+            position: sticky;
+            top: 0;
+            z-index: 5;
         }
-        .empty-state svg { width: 5em; height: 5em; margin-bottom: 16px; display: inline-block; }
-        .empty-state p { font-size: var(--vscode-font-size, 13px); line-height: 1.6; }
+        .pkg-search {
+            flex: 1;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border, transparent);
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: var(--vscode-font-size, 13px);
+            font-family: var(--vscode-font-family);
+            outline: none;
+        }
+        .pkg-search::placeholder {
+            color: var(--vscode-input-placeholderForeground);
+            opacity: 1;
+        }
+        .pkg-search:focus {
+            border-color: var(--vscode-focusBorder);
+        }
+
+        .pkg-filter-btn {
+            background: var(--vscode-toolbar-hoverBackground);
+            color: var(--vscode-foreground);
+            border: none;
+            padding: 4px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: calc(var(--vscode-font-size, 13px) - 1px);
+            font-family: var(--vscode-font-family);
+            white-space: nowrap;
+            opacity: 0.9;
+        }
+        .pkg-filter-btn:hover {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+        }
+        .pkg-filter-btn.active {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            opacity: 1;
+        }
+
+        .pkg-refresh-btn {
+            background: none;
+            color: var(--vscode-foreground);
+            border: none;
+            padding: 3px 6px;
+            border-radius: 6px;
+            cursor: pointer;
+            opacity: 0.7;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .pkg-refresh-btn:hover {
+            opacity: 1;
+            background: var(--vscode-toolbar-hoverBackground);
+        }
+        .pkg-refresh-btn svg { width: 14px; height: 14px; display: block; }
+
+        /* ── Package Table ── */
+        .pkg-table-wrapper {
+            flex: 1;
+            overflow: auto;
+        }
+        .pkg-row td {
+            padding: 4px 8px;
+            border-bottom: 1px solid var(--vscode-editorGroup-border);
+            vertical-align: middle;
+            font-family: var(--vscode-editor-font-family, monospace);
+            background: var(--vscode-editor-background);
+        }
+        .pkg-row:hover td {
+            background: color-mix(in srgb, var(--vscode-list-hoverBackground) 100%, var(--vscode-editor-background));
+        }
+
+        .pkg-row td.frozen-col {
+            position: sticky;
+            left: 0;
+            z-index: 1;
+            background: var(--vscode-editor-background);
+        }
+        .pkg-row:hover td.frozen-col {
+            background: linear-gradient(var(--vscode-list-hoverBackground), var(--vscode-list-hoverBackground)), var(--vscode-editor-background);
+        }
+        .pkg-row:hover td.pkg-name-col.frozen-col {
+            background: linear-gradient(var(--vscode-list-hoverBackground), var(--vscode-list-hoverBackground)), var(--vscode-editor-background);
+        }
+
+        .pkg-checkbox {
+            width: 1%;
+            white-space: nowrap;
+            padding-left: 12px !important;
+            cursor: pointer;
+        }
+        .pkg-checkbox svg { width: 16px; height: 16px; display: block; }
+        .pkg-name-col {
+            width: 1%;
+            white-space: nowrap;
+            padding-right: 16px !important;
+            font-weight: 600;
+        }
+        .pkg-row td.pkg-name-col.frozen-col {
+            position: sticky;
+            left: 36px;
+            z-index: 1;
+            background: var(--vscode-editor-background);
+        }
+        .pkg-title-col {
+            width: auto;
+            opacity: 0.7;
+            white-space: nowrap;
+        }
+        .pkg-version-col {
+            width: 1%;
+            white-space: nowrap;
+            opacity: 0.6;
+        }
+
+        .pkg-header th {
+            position: sticky; top: 0; z-index: 2;
+            padding: 6px 8px;
+            text-align: left;
+            font-weight: 600;
+            font-style: italic;
+            letter-spacing: 0.3px;
+            background: var(--vscode-editor-background);
+            border-bottom: 1px solid var(--vscode-editorGroup-border);
+        }
+        .pkg-header th.frozen-col {
+            position: sticky;
+            left: 0;
+            z-index: 3;
+        }
+        .pkg-header th.pkg-name-col.frozen-col {
+            left: 36px;
+        }
+
+        /* ── Attached Objects List ── */
+        .attached-list { list-style: none; padding: 0; margin: 0; }
+        .attached-list li {
+            padding: 4px 16px;
+            border-bottom: 1px solid var(--vscode-editorGroup-border);
+            font-family: var(--vscode-editor-font-family, monospace);
+            display: flex;
+            align-items: center;
+            min-height: 25px;
+        }
+        .attached-list li:hover {
+            background: var(--vscode-list-hoverBackground);
+        }
+        .attached-list li svg.icon-paperclip {
+            width: 14px;
+            height: 14px;
+            margin-right: 8px;
+            opacity: 0.6;
+            flex-shrink: 0;
+        }
+        .attached-list .attached-name {
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
-    <div class="toolbar">
-        <div class="toolbar-actions">
-            <button id="btn-auto" data-tooltip="Auto-Refresh Off">
-                <svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.7 8.5L4.5 13.5V3.5l8.2 5z"/></svg>
-            </button>
-        </div>
-    </div>
     <div id="tooltip" class="tooltip"></div>
     <div class="tabs">
-        <div class="tab active" data-target="tab-global">Global Environment <span id="count-global"></span></div>
-        <div class="tab" data-target="tab-loaded">Loaded Namespaces <span id="count-loaded"></span></div>
-        <div class="tab" data-target="tab-attached">Attached Namespaces <span id="count-attached"></span></div>
+        <div class="tab active" data-target="tab-env">Global Environment <span id="count-env"></span></div>
+        <div class="tab" data-target="tab-packages">Packages <span id="count-packages"></span></div>
+        <div class="tab" data-target="tab-attached">Attached Objects <span id="count-attached"></span></div>
     </div>
 
-    <div id="tab-global" class="content active"></div>
-    <div id="tab-loaded" class="content"></div>
+    <div id="tab-env" class="content active">
+        <div class="table-scroll-wrapper" id="env-scroll"></div>
+    </div>
+
+    <div id="tab-packages" class="content">
+        <div class="pkg-toolbar">
+            <input type="text" class="pkg-search" id="pkg-search" placeholder="Search packages..." />
+            <button class="pkg-filter-btn active" data-filter="all">All</button>
+            <button class="pkg-filter-btn" data-filter="attached">Attached</button>
+            <button class="pkg-filter-btn" data-filter="loaded">Loaded</button>
+            <button class="pkg-refresh-btn" id="btn-pkg-refresh" data-tooltip="Refresh Installed Packages">${REFRESH_ICON}</button>
+        </div>
+        <div class="pkg-table-wrapper" id="pkg-scroll"></div>
+    </div>
+
     <div id="tab-attached" class="content"></div>
 
     <script nonce="${nonce}">
         (function() {
             const vscode = acquireVsCodeApi();
+            const ICON_UNCHECKED = '${ICON_UNCHECKED.replace(/'/g, "\\'")}';
+            const ICON_ATTACHED = '${ICON_ATTACHED.replace(/'/g, "\\'")}';
+            const ICON_LOADED = '${ICON_LOADED.replace(/'/g, "\\'")}';
+            const EYE_ICON = '${EYE_ICON.replace(/'/g, "\\'")}';
+            const PAPERCLIP_ICON = '${PAPERCLIP_ICON.replace(/'/g, "\\'")}';
 
+            let currentFilter = 'all';
+            let currentSearch = '';
+
+            // ── Tab Switching ──
             document.querySelectorAll('.tab').forEach(tab => {
                 tab.addEventListener('click', () => {
                     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -647,6 +939,56 @@ tryCatch({
                 return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
             }
 
+            // ── Update Handler ──
+            window.addEventListener('message', event => {
+                const msg = event.data;
+                if (msg.command === 'update') {
+                    renderEnvironment(msg);
+                    renderPackages(msg);
+                    renderAttached(msg);
+                }
+                if (msg.command === 'setMinimized') {
+                    document.body.classList.toggle('minimized', msg.minimized);
+                }
+            });
+
+            // ── Environment Rendering ──
+            function renderEnvironment(msg) {
+                const el = document.getElementById('env-scroll');
+                const cEnv = document.getElementById('count-env');
+                cEnv.textContent = msg.variables && msg.variables.length > 0 ? '(' + msg.variables.length + ')' : '';
+
+                if (msg.isLoading && !msg.errorMessage && (!msg.variables || msg.variables.length === 0)) {
+                    el.innerHTML = '<div class="status-msg">⏳ Refreshing…</div>';
+                    return;
+                }
+
+                if (msg.errorMessage) {
+                    el.innerHTML = '<div class="status-msg error">⚠ ' + escapeHtml(msg.errorMessage) + '</div>';
+                    return;
+                }
+
+                if (!msg.variables || msg.variables.length === 0) {
+                    el.innerHTML = '<div class="empty-state"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 2.5h-1A2.5 2.5 0 0 0 3 5v1.5A1.5 1.5 0 0 1 1.5 8 1.5 1.5 0 0 1 3 9.5V11A2.5 2.5 0 0 0 5.5 13.5h1 M9.5 2.5h1A2.5 2.5 0 0 1 13 5v1.5A1.5 1.5 0 0 0 14.5 8 1.5 1.5 0 0 0 13 9.5V11a2.5 2.5 0 0 1-2.5 2.5h-1"/></svg><p>No variables in the global environment.<br/>Run R code to populate variables.</p></div>';
+                    return;
+                }
+
+                let rows = msg.variables.map(v => {
+                    const btn = v.isDataFrame
+                        ? '<button class="view-btn" data-var="' + escapeHtml(v.name) + '" data-tooltip="View in Data Viewer">' + EYE_ICON + '</button>'
+                        : '';
+                    return '<tr class="var-row">'
+                        + '<td class="name-col frozen-col"><span class="var-name">' + escapeHtml(v.name) + '</span>' + btn + '</td>'
+                        + '<td class="type-col">' + escapeHtml(v.type) + '</td>'
+                        + '<td class="size-col">' + escapeHtml(v.size) + '</td>'
+                        + '<td class="preview-col">' + escapeHtml(v.preview) + '</td>'
+                        + '</tr>';
+                }).join('');
+                el.innerHTML = '<table><thead><tr><th class="frozen-col">Name</th><th>Type</th><th>Size</th><th>Value</th></tr></thead><tbody>' + rows + '</tbody></table>';
+
+                attachViewListeners();
+            }
+
             function attachViewListeners() {
                 document.querySelectorAll('.view-btn').forEach(btn => {
                     btn.addEventListener('click', (e) => {
@@ -657,81 +999,129 @@ tryCatch({
                 });
             }
 
+            // ── Packages Rendering ──
+            function renderPackages(msg) {
+                const el = document.getElementById('pkg-scroll');
+                const cPkg = document.getElementById('count-packages');
+
+                if (!msg.packages || msg.packages.length === 0) {
+                    cPkg.textContent = '';
+                    el.innerHTML = '<div class="empty-state"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M2 6h12M6 6v7"/></svg><p>No package data loaded.<br/>Click the refresh button to scan installed packages.</p></div>';
+                    return;
+                }
+
+                // Apply filter
+                let filtered = msg.packages;
+                if (currentFilter === 'attached') {
+                    filtered = filtered.filter(p => p.status === 'attached');
+                } else if (currentFilter === 'loaded') {
+                    filtered = filtered.filter(p => p.status === 'loaded' || p.status === 'attached');
+                }
+
+                // Apply search
+                if (currentSearch) {
+                    const q = currentSearch.toLowerCase();
+                    filtered = filtered.filter(p =>
+                        p.name.toLowerCase().includes(q) ||
+                        (p.title && p.title.toLowerCase().includes(q))
+                    );
+                }
+
+                // Sort: attached first, then loaded, then none — alphabetical within each
+                filtered.sort((a, b) => {
+                    const order = { attached: 0, loaded: 1, none: 2 };
+                    const diff = order[a.status] - order[b.status];
+                    if (diff !== 0) return diff;
+                    return a.name.localeCompare(b.name);
+                });
+
+                cPkg.textContent = '(' + msg.packages.length + ')';
+
+                const rows = filtered.map(p => {
+                    let icon, tooltip, action;
+                    if (p.status === 'attached') {
+                        icon = ICON_ATTACHED;
+                        tooltip = 'Detach package';
+                        action = 'detach';
+                    } else if (p.status === 'loaded') {
+                        icon = ICON_LOADED;
+                        tooltip = 'Attach package';
+                        action = 'attach';
+                    } else {
+                        icon = ICON_UNCHECKED;
+                        tooltip = 'Attach package';
+                        action = 'attach';
+                    }
+                    return '<tr class="pkg-row">'
+                        + '<td class="pkg-checkbox frozen-col" data-pkg="' + escapeHtml(p.name) + '" data-action="' + action + '" data-tooltip="' + tooltip + '">' + icon + '</td>'
+                        + '<td class="pkg-name-col frozen-col">' + escapeHtml(p.name) + '</td>'
+                        + '<td class="pkg-version-col">' + escapeHtml(p.version) + '</td>'
+                        + '<td class="pkg-title-col">' + escapeHtml(p.title) + '</td>'
+                        + '</tr>';
+                }).join('');
+
+                el.innerHTML = '<table><thead class="pkg-header"><tr><th class="frozen-col" style="width:1%"></th><th class="pkg-name-col frozen-col" style="padding-left:8px">Package</th><th>Version</th><th>Title</th></tr></thead><tbody>' + rows + '</tbody></table>';
+
+                // Attach click handlers on checkboxes
+                el.querySelectorAll('.pkg-checkbox').forEach(td => {
+                    td.addEventListener('click', () => {
+                        const pkg = td.getAttribute('data-pkg');
+                        const action = td.getAttribute('data-action');
+                        if (action === 'attach') {
+                            vscode.postMessage({ type: 'attachPackage', pkgName: pkg });
+                        } else {
+                            vscode.postMessage({ type: 'detachPackage', pkgName: pkg });
+                        }
+                    });
+                });
+            }
+
+            // ── Attached Objects Rendering ──
+            function renderAttached(msg) {
+                const el = document.getElementById('tab-attached');
+                const cAttached = document.getElementById('count-attached');
+                const items = msg.attachedObjects || [];
+                cAttached.textContent = items.length > 0 ? '(' + items.length + ')' : '';
+
+                if (items.length === 0) {
+                    el.innerHTML = '<div class="empty-state">' + PAPERCLIP_ICON + '<p>No attached objects.<br/>Use <code>attach(data)</code> to add objects<br/>to the search path.</p></div>';
+                    return;
+                }
+
+                el.innerHTML = '<ul class="attached-list">' + items.map(n => '<li>' + PAPERCLIP_ICON + '<span class="attached-name">' + escapeHtml(n) + '</span></li>').join('') + '</ul>';
+            }
+
+            // ── Package Search & Filter ──
+            document.getElementById('pkg-search')?.addEventListener('input', (e) => {
+                currentSearch = e.target.value;
+                // Re-render packages with current state by requesting a refresh message
+                // We need to store last msg and re-render locally
+                if (window._lastMsg) renderPackages(window._lastMsg);
+            });
+
+            document.querySelectorAll('.pkg-filter-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.pkg-filter-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentFilter = btn.getAttribute('data-filter');
+                    if (window._lastMsg) renderPackages(window._lastMsg);
+                });
+            });
+
+            document.getElementById('btn-pkg-refresh')?.addEventListener('click', () => {
+                vscode.postMessage({ type: 'refreshPackages' });
+            });
+
+            // Store last message for local re-render (search/filter)
+            window._lastMsg = null;
+            const origListener = window.addEventListener;
             window.addEventListener('message', event => {
-                const msg = event.data;
-                if (msg.command === 'update') {
-                    const autoBtn = document.getElementById('btn-auto');
-                    if (msg.autoOn) {
-                        autoBtn.classList.add('active');
-                        autoBtn.innerHTML = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M3 3h4v10H3V3zm6 0h4v10H9V3z"/></svg>';
-                        autoBtn.setAttribute('data-tooltip', 'Auto-Refresh On (3s)');
-                        autoBtn.title = '';
-                    } else {
-                        autoBtn.classList.remove('active');
-                        autoBtn.innerHTML = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.7 8.5L4.5 13.5V3.5l8.2 5z"/></svg>';
-                        autoBtn.setAttribute('data-tooltip', 'Auto-Refresh Off');
-                        autoBtn.title = '';
-                    }
-
-                    if (msg.isLoading && !msg.errorMessage && msg.variables.length === 0) {
-                        document.getElementById('tab-global').innerHTML = '<div class="status-msg">⏳ Refreshing…</div>';
-                        return;
-                    }
-
-                    if (msg.errorMessage) {
-                        document.getElementById('tab-global').innerHTML = '<div class="status-msg error">⚠ ' + escapeHtml(msg.errorMessage) + '</div>';
-                        return;
-                    }
-
-                    const globalEl = document.getElementById('tab-global');
-                    const cGlobal = document.getElementById('count-global');
-                    cGlobal.textContent = msg.variables && msg.variables.length > 0 ? '(' + msg.variables.length + ')' : '';
-
-                    if (!msg.variables || msg.variables.length === 0) {
-                        globalEl.innerHTML = '<div class="empty-state"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 2.5h-1A2.5 2.5 0 0 0 3 5v1.5A1.5 1.5 0 0 1 1.5 8 1.5 1.5 0 0 1 3 9.5V11A2.5 2.5 0 0 0 5.5 13.5h1 M9.5 2.5h1A2.5 2.5 0 0 1 13 5v1.5A1.5 1.5 0 0 0 14.5 8 1.5 1.5 0 0 0 13 9.5V11a2.5 2.5 0 0 1-2.5 2.5h-1"/></svg><p>No variables in the global environment.<br/>Run R code to populate variables.</p></div>';
-                    } else {
-                        const EYE = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>';
-                        let rows = msg.variables.map(v => {
-                            const btn = v.isDataFrame
-                                ? '<button class="view-btn" data-var="' + escapeHtml(v.name) + '" data-tooltip="View in Data Viewer">' + EYE + '</button>'
-                                : '';
-                            return '<tr class="var-row">'
-                                + '<td class="name-col"><span class="var-name">' + escapeHtml(v.name) + '</span>' + btn + '</td>'
-                                + '<td class="type-col">' + escapeHtml(v.type) + '</td>'
-                                + '<td class="size-col">' + escapeHtml(v.size) + '</td>'
-                                + '<td class="preview-col">' + escapeHtml(v.preview) + '</td>'
-                                + '</tr>';
-                        }).join('');
-                        globalEl.innerHTML = \`<table><thead><tr><th>Name</th><th>Type</th><th>Size</th><th>Value</th></tr></thead><tbody>\${rows}</tbody></table>\`;
-                    }
-
-                    const cLoaded = document.getElementById('count-loaded');
-                    cLoaded.textContent = msg.loadedNamespaces && msg.loadedNamespaces.length > 0 ? '(' + msg.loadedNamespaces.length + ')' : '';
-                    if (msg.loadedNamespaces) {
-                        document.getElementById('tab-loaded').innerHTML = \`<ul class="simple-list">\${msg.loadedNamespaces.map(n => \`<li>\${escapeHtml(n)}</li>\`).join('')}</ul>\`;
-                    }
-
-                    const cAttached = document.getElementById('count-attached');
-                    cAttached.textContent = msg.attachedNamespaces && msg.attachedNamespaces.length > 0 ? '(' + msg.attachedNamespaces.length + ')' : '';
-                    if (msg.attachedNamespaces) {
-                        document.getElementById('tab-attached').innerHTML = \`<ul class="simple-list">\${msg.attachedNamespaces.map(n => \`<li>\${escapeHtml(n)}</li>\`).join('')}</ul>\`;
-                    }
-
-                    attachViewListeners();
+                if (event.data.command === 'update') {
+                    window._lastMsg = event.data;
                 }
             });
 
-            document.getElementById('btn-refresh')?.addEventListener('click', () => {
-                vscode.postMessage({ type: 'refresh' });
-            });
-            document.getElementById('btn-auto')?.addEventListener('click', () => {
-                const btn = document.getElementById('btn-auto');
-                const isOff = btn.getAttribute('data-tooltip') === 'Auto-Refresh Off';
-                btn.setAttribute('data-tooltip', isOff ? 'Auto-Refresh On' : 'Auto-Refresh Off');
-                vscode.postMessage({ type: 'toggleAutoRefresh' });
-            });
-
-            // Instant Tooltip Controller
+            // ── Instant Tooltip Controller ──
             const tooltip = document.getElementById('tooltip');
             function setupTooltips() {
                 document.querySelectorAll('[data-tooltip]').forEach(el => {
@@ -745,7 +1135,6 @@ tryCatch({
                         const rect = el.getBoundingClientRect();
                         tooltip.style.top = (rect.bottom + 5) + 'px';
 
-                        // Boundary detection
                         const padding = 10;
                         let left = rect.left + (rect.width/2) - (tooltip.offsetWidth/2);
                         if (left < padding) left = padding;
@@ -764,14 +1153,6 @@ tryCatch({
             observer.observe(document.body, { childList: true, subtree: true });
 
             vscode.postMessage({ type: 'ready' });
-
-            // Minimize/restore handler for top-pane maximize
-            window.addEventListener('message', function _minHandler(event) {
-                const msg = event.data;
-                if (msg.command === 'setMinimized') {
-                    document.body.classList.toggle('minimized', msg.minimized);
-                }
-            });
         })();
     </script>
 </body>

@@ -957,7 +957,10 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     // Deferred refresh: give the Workspace webview ~500ms to fully render after
     // all layout commands complete, then push the latest R environment state.
     // Doing this earlier races the webview paint and the message is dropped.
-    setTimeout(() => { WorkspacePanel.currentPanel?.forceRefresh(); }, 500);
+    setTimeout(() => {
+        WorkspacePanel.currentPanel?.forceRefresh();
+    }, 500);
+    // Fetching installed packages is now handled natively in workspacePanel.ts without timers.
     });
 }
 
@@ -1425,10 +1428,17 @@ function _buildWatcherRprofile(): string | undefined {
   tryCatch({
     dir.create("${absPlotsDir}", showWarnings = FALSE, recursive = TRUE)
     .vars <- ls(envir = .GlobalEnv)
+    .vars <- .vars[!grepl("^\\\\.rlayout_|^\\\\.r_layout|^null_dev$|^\\\\.First$|^\\\\.Last$|^\\\\.r_layout_view_data$", .vars)]
     .info <- if (length(.vars) == 0) character(0) else vapply(.vars, function(nm) {
       obj <- get(nm, envir = .GlobalEnv)
       cls <- paste(class(obj), collapse = ", ")
       dims <- if (!is.null(dim(obj))) paste(dim(obj), collapse = " x ") else as.character(length(obj))
+      sz <- format(object.size(obj), units = "auto")
+      sz <- sub(" bytes|Bytes", " B", sz)
+      sz <- sub("Kb|KB", "kB", sz)
+      sz <- sub("Mb|MB", "MB", sz)
+      sz <- sub("Gb|GB", "GB", sz)
+      dims <- paste0(dims, " (", sz, ")")
       prev <- tryCatch({
         if (is.data.frame(obj) || is.matrix(obj)) paste0(nrow(obj), " obs. of ", ncol(obj), " variables")
         else if (is.list(obj)) paste0("List of ", length(obj))

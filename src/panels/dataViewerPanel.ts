@@ -430,6 +430,18 @@ export class DataViewerPanel {
             padding-right: 8px !important;
             font-style: italic;
             color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 65%);
+            left: 0;
+            z-index: 3;
+        }
+        td.row-num {
+            position: sticky;
+            left: 0;
+            z-index: 1;
+            background: var(--vscode-editor-background);
+            text-align: right;
+            padding-right: 8px !important;
+            font-style: italic;
+            color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 65%);
         }
         td {
             max-width: 400px;
@@ -437,6 +449,7 @@ export class DataViewerPanel {
             text-overflow: ellipsis;
         }
         tbody tr:hover td { background: var(--vscode-list-hoverBackground); }
+        tbody tr:hover td.row-num { background: linear-gradient(var(--vscode-list-hoverBackground), var(--vscode-list-hoverBackground)), var(--vscode-editor-background); }
         .na { opacity: 0.35; font-style: italic; }
         .content { flex: 1; overflow: auto; display: flex; flex-direction: column; }
         .status-msg { padding: 20px; text-align: center; opacity: 0.6; }

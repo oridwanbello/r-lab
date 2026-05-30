@@ -465,8 +465,6 @@ export class HelpPanel {
             margin-bottom: 1em;
             color: var(--vscode-editor-foreground);
             font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             padding-bottom: 8px;
             position: relative;
@@ -510,6 +508,24 @@ export class HelpPanel {
         /* Home Page Spacing */
         .empty-state h2 {
             margin-top: 1.5em;
+            text-align: left;
+            margin-bottom: 1em;
+            color: var(--vscode-editor-foreground);
+            font-weight: 700;
+            border-bottom: 1px solid var(--vscode-editorGroup-border);
+            padding-bottom: 8px;
+            position: relative;
+            font-size: var(--vscode-font-size, 13px);
+        }
+        .empty-state h2::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            width: 40px;
+            height: 3px;
+            background: var(--vscode-textLink-foreground);
+            border-radius: 6px;
         }
         .empty-state > div:first-child h2 {
             margin-top: 0.5em;

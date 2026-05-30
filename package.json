@@ -3,12 +3,15 @@
   "displayName": "R Layout",
   "preview": true,
   "description": "RStudio-inspired multi-pane layout orchestrator for VS Code",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "publisher": "oridwanbello",
   "icon": "resources/r_logo.png",
   "engines": {
     "vscode": "^1.107.0"
   },
+  "extensionDependencies": [
+    "REditorSupport.r"
+  ],
   "categories": [
     "Other",
     "Data Science"
