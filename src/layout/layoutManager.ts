@@ -957,7 +957,21 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     // Deferred refresh: give the Workspace webview ~500ms to fully render after
     // all layout commands complete, then push the latest R environment state.
     // Doing this earlier races the webview paint and the message is dropped.
-    setTimeout(() => { WorkspacePanel.currentPanel?.forceRefresh(); }, 500);
+    setTimeout(() => {
+        WorkspacePanel.currentPanel?.forceRefresh();
+    }, 500);
+    // Fetch installed packages with a longer delay — installed.packages() is slow
+    // and needs Rscript to be fully available.
+    setTimeout(() => {
+        WorkspacePanel.currentPanel?._fetchInstalledPackages();
+    }, 2000);
+    // Safety-net retry in case the first attempt failed silently
+    setTimeout(() => {
+        const panel = WorkspacePanel.currentPanel;
+        if (panel && (panel as any)._packages?.length === 0) {
+            panel._fetchInstalledPackages();
+        }
+    }, 8000);
     });
 }
 
@@ -1425,10 +1439,18 @@ function _buildWatcherRprofile(): string | undefined {
   tryCatch({
     dir.create("${absPlotsDir}", showWarnings = FALSE, recursive = TRUE)
     .vars <- ls(envir = .GlobalEnv)
+    .vars <- .vars[!grepl("^\\\\.rlayout_|^\\\\.r_layout|^null_dev$|^\\\\.First$|^\\\\.Last$|^\\\\.r_layout_view_data$", .vars)]
     .info <- if (length(.vars) == 0) character(0) else vapply(.vars, function(nm) {
       obj <- get(nm, envir = .GlobalEnv)
       cls <- paste(class(obj), collapse = ", ")
       dims <- if (!is.null(dim(obj))) paste(dim(obj), collapse = " x ") else as.character(length(obj))
+      sz <- format(object.size(obj), units = "auto")
+      sz <- sub(" bytes", " b", sz)
+      sz <- sub("Bytes", "b", sz)
+      sz <- sub("Kb", "Kb", sz)
+      sz <- sub("Mb", "Mb", sz)
+      sz <- sub("Gb", "Gb", sz)
+      dims <- paste0(dims, " (", sz, ")")
       prev <- tryCatch({
         if (is.data.frame(obj) || is.matrix(obj)) paste0(nrow(obj), " obs. of ", ncol(obj), " variables")
         else if (is.list(obj)) paste0("List of ", length(obj))
