@@ -79,6 +79,9 @@ export class WorkspacePanel {
                 switch (msg.type) {
                     case 'ready':
                         await this._refreshWorkspace();
+                        if (this._packages.length === 0) {
+                            this._fetchInstalledPackages();
+                        }
                         break;
                     case 'refresh':
                         await this._refreshWorkspace();
@@ -110,6 +113,9 @@ export class WorkspacePanel {
 
         // Set HTML last
         this._render();
+
+        // Start background fetch of packages immediately (non-blocking)
+        this._fetchInstalledPackages();
     }
 
     public onRequestDataView(callback: (varName: string) => void): void {
@@ -278,7 +284,7 @@ tryCatch({
         const rscriptPath = getRscriptPath();
         const script = `
 tryCatch({
-    pkgs <- installed.packages()[, c("Package", "Version", "Title")]
+    pkgs <- installed.packages(fields = "Title")[, c("Package", "Version", "Title")]
     lines <- apply(pkgs, 1, function(r) paste(r["Package"], r["Version"], gsub("\\t|\\n|\\r", " ", ifelse(is.na(r["Title"]), "", r["Title"])), sep = "\\t"))
     cat(paste(lines, collapse = "\\n"))
 }, error = function(e) cat(""))`;
@@ -565,7 +571,7 @@ tryCatch({
         body.minimized > * { display: none !important; }
 
         /* ── Tab Bar ── */
-        .tabs { display: flex; border-bottom: 1px solid var(--vscode-editorGroup-border); background: var(--vscode-editor-background); flex-shrink: 0; }
+        .tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--vscode-editorGroup-border); background: var(--vscode-editor-background); flex-shrink: 0; }
         .tab { padding: 8px 12px; cursor: pointer; opacity: 0.6; font-weight: 600; letter-spacing: 0.5px; border-bottom: 2px solid transparent; white-space: nowrap; }
         .tab:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
         .tab.active { opacity: 1; border-bottom: 2px solid var(--vscode-textLink-foreground); color: var(--vscode-textLink-foreground); }
@@ -617,7 +623,7 @@ tryCatch({
         }
         thead th.frozen-col { z-index: 3; }
         .var-row:hover td.frozen-col {
-            background: color-mix(in srgb, var(--vscode-list-hoverBackground) 100%, var(--vscode-editor-background));
+            background: linear-gradient(var(--vscode-list-hoverBackground), var(--vscode-list-hoverBackground)), var(--vscode-editor-background);
         }
 
         /* ── Column styles ── */
@@ -670,7 +676,7 @@ tryCatch({
         /* ── Empty State ── */
         .empty-state {
             display: flex; flex-direction: column; align-items: center;
-            justify-content: center; flex: 1; text-align: center; opacity: 0.3;
+            justify-content: center; height: 100%; text-align: center; opacity: 0.3;
             padding: 20px;
         }
         .empty-state svg { width: 5em; height: 5em; margin-bottom: 16px; display: inline-block; }
@@ -795,7 +801,10 @@ tryCatch({
             background: var(--vscode-editor-background);
         }
         .pkg-row:hover td.frozen-col {
-            background: color-mix(in srgb, var(--vscode-list-hoverBackground) 100%, var(--vscode-editor-background));
+            background: linear-gradient(var(--vscode-list-hoverBackground), var(--vscode-list-hoverBackground)), var(--vscode-editor-background);
+        }
+        .pkg-row:hover td.pkg-name-col.frozen-col {
+            background: linear-gradient(var(--vscode-list-hoverBackground), var(--vscode-list-hoverBackground)), var(--vscode-editor-background);
         }
 
         .pkg-checkbox {
@@ -811,13 +820,16 @@ tryCatch({
             padding-right: 16px !important;
             font-weight: 600;
         }
+        .pkg-row td.pkg-name-col.frozen-col {
+            position: sticky;
+            left: 36px;
+            z-index: 1;
+            background: var(--vscode-editor-background);
+        }
         .pkg-title-col {
             width: auto;
             opacity: 0.7;
             white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 300px;
         }
         .pkg-version-col {
             width: 1%;
@@ -834,12 +846,14 @@ tryCatch({
             letter-spacing: 0.3px;
             background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
-            font-family: var(--vscode-editor-font-family, monospace);
         }
         .pkg-header th.frozen-col {
             position: sticky;
             left: 0;
             z-index: 3;
+        }
+        .pkg-header th.pkg-name-col.frozen-col {
+            left: 36px;
         }
 
         /* ── Attached Objects List ── */
@@ -860,7 +874,7 @@ tryCatch({
 <body>
     <div id="tooltip" class="tooltip"></div>
     <div class="tabs">
-        <div class="tab active" data-target="tab-env">Environment <span id="count-env"></span></div>
+        <div class="tab active" data-target="tab-env">Global Environment <span id="count-env"></span></div>
         <div class="tab" data-target="tab-packages">Packages <span id="count-packages"></span></div>
         <div class="tab" data-target="tab-attached">Attached Objects <span id="count-attached"></span></div>
     </div>
@@ -880,9 +894,7 @@ tryCatch({
         <div class="pkg-table-wrapper" id="pkg-scroll"></div>
     </div>
 
-    <div id="tab-attached" class="content">
-        <div id="attached-content" style="flex:1;display:flex;flex-direction:column;"></div>
-    </div>
+    <div id="tab-attached" class="content"></div>
 
     <script nonce="${nonce}">
         (function() {
@@ -1025,13 +1037,13 @@ tryCatch({
                     }
                     return '<tr class="pkg-row">'
                         + '<td class="pkg-checkbox frozen-col" data-pkg="' + escapeHtml(p.name) + '" data-action="' + action + '" data-tooltip="' + tooltip + '">' + icon + '</td>'
-                        + '<td class="pkg-name-col">' + escapeHtml(p.name) + '</td>'
-                        + '<td class="pkg-title-col">' + escapeHtml(p.title) + '</td>'
+                        + '<td class="pkg-name-col frozen-col">' + escapeHtml(p.name) + '</td>'
                         + '<td class="pkg-version-col">' + escapeHtml(p.version) + '</td>'
+                        + '<td class="pkg-title-col">' + escapeHtml(p.title) + '</td>'
                         + '</tr>';
                 }).join('');
 
-                el.innerHTML = '<table><thead class="pkg-header"><tr><th class="frozen-col" style="width:1%"></th><th class="frozen-col" style="padding-left:8px">Package</th><th>Title</th><th>Version</th></tr></thead><tbody>' + rows + '</tbody></table>';
+                el.innerHTML = '<table><thead class="pkg-header"><tr><th class="frozen-col" style="width:1%"></th><th class="pkg-name-col frozen-col" style="padding-left:8px">Package</th><th>Version</th><th>Title</th></tr></thead><tbody>' + rows + '</tbody></table>';
 
                 // Attach click handlers on checkboxes
                 el.querySelectorAll('.pkg-checkbox').forEach(td => {
@@ -1049,7 +1061,7 @@ tryCatch({
 
             // ── Attached Objects Rendering ──
             function renderAttached(msg) {
-                const el = document.getElementById('attached-content');
+                const el = document.getElementById('tab-attached');
                 const cAttached = document.getElementById('count-attached');
                 const items = msg.attachedObjects || [];
                 cAttached.textContent = items.length > 0 ? '(' + items.length + ')' : '';

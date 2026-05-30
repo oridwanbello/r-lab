@@ -960,18 +960,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     setTimeout(() => {
         WorkspacePanel.currentPanel?.forceRefresh();
     }, 500);
-    // Fetch installed packages with a longer delay — installed.packages() is slow
-    // and needs Rscript to be fully available.
-    setTimeout(() => {
-        WorkspacePanel.currentPanel?._fetchInstalledPackages();
-    }, 2000);
-    // Safety-net retry in case the first attempt failed silently
-    setTimeout(() => {
-        const panel = WorkspacePanel.currentPanel;
-        if (panel && (panel as any)._packages?.length === 0) {
-            panel._fetchInstalledPackages();
-        }
-    }, 8000);
+    // Fetching installed packages is now handled natively in workspacePanel.ts without timers.
     });
 }
 
