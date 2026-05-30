@@ -549,6 +549,9 @@ tryCatch({
         // Eye icon (pristine Feather Icons)
         const EYE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
 
+        // Paperclip icon (pristine Feather Icons) for attached objects
+        const PAPERCLIP_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-paperclip"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
+
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -872,6 +875,16 @@ tryCatch({
         .attached-list li:hover {
             background: var(--vscode-list-hoverBackground);
         }
+        .attached-list li svg.icon-paperclip {
+            width: 14px;
+            height: 14px;
+            margin-right: 8px;
+            opacity: 0.6;
+            flex-shrink: 0;
+        }
+        .attached-list .attached-name {
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
@@ -906,6 +919,7 @@ tryCatch({
             const ICON_ATTACHED = '${ICON_ATTACHED.replace(/'/g, "\\'")}';
             const ICON_LOADED = '${ICON_LOADED.replace(/'/g, "\\'")}';
             const EYE_ICON = '${EYE_ICON.replace(/'/g, "\\'")}';
+            const PAPERCLIP_ICON = '${PAPERCLIP_ICON.replace(/'/g, "\\'")}';
 
             let currentFilter = 'all';
             let currentSearch = '';
@@ -1070,11 +1084,11 @@ tryCatch({
                 cAttached.textContent = items.length > 0 ? '(' + items.length + ')' : '';
 
                 if (items.length === 0) {
-                    el.innerHTML = '<div class="empty-state"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v14M1 8h14"/><circle cx="8" cy="8" r="6"/></svg><p>No attached objects.<br/>Use <code>attach(data)</code> to add objects<br/>to the search path.</p></div>';
+                    el.innerHTML = '<div class="empty-state">' + PAPERCLIP_ICON + '<p>No attached objects.<br/>Use <code>attach(data)</code> to add objects<br/>to the search path.</p></div>';
                     return;
                 }
 
-                el.innerHTML = '<ul class="attached-list">' + items.map(n => '<li>' + escapeHtml(n) + '</li>').join('') + '</ul>';
+                el.innerHTML = '<ul class="attached-list">' + items.map(n => '<li>' + PAPERCLIP_ICON + '<span class="attached-name">' + escapeHtml(n) + '</span></li>').join('') + '</ul>';
             }
 
             // ── Package Search & Filter ──
