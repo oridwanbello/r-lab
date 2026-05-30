@@ -804,20 +804,19 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         }
 
     } else {
-        const platform = os.platform() === 'win32' ? 'windows' : (os.platform() === 'darwin' ? 'osx' : 'linux');
-        const userEnv = vscode.workspace.getConfiguration('terminal.integrated.env').get<Record<string, string>>(platform) || {};
-        const shellEnvArgs: Record<string, string> = { ...process.env as any, ...userEnv };
-
-        // Create directly in ViewColumn.Two, no bottom-pane origin
+        // Create in bottom panel first to avoid VS Code's empty PTY bug for standard shells,
+        // then move it to the editor group just like we do for existing terminals.
         shellTerminal = vscode.window.createTerminal({
             name: 'Terminal',
-            location: { viewColumn: vscode.ViewColumn.Two },
-            env: shellEnvArgs,
-            strictEnv: true,
-            cwd: getEffectiveWorkspaceRoot(),
         });
-        await delay(100); // Give terminal time to attach
-        shellTerminal.show(false);
+        shellTerminal.show(true); // Show in bottom panel
+        await delay(150); // Wait for PTY to attach
+        
+        // Move to Group 2
+        await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+        await delay(50);
+        await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
+        await delay(100);
     }
 
     // ProblemsPanel: dispose the anchor instance and recreate so it becomes the
