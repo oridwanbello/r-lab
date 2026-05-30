@@ -199,7 +199,10 @@ tryCatch({
         cls <- paste(class(obj), collapse = ", ")
         dims <- if (!is.null(dim(obj))) paste(dim(obj), collapse = " x ") else as.character(length(obj))
         sz <- format(object.size(obj), units = "auto")
-        sz <- sub(" bytes", " b", sub("Bytes", "b", sz))
+        sz <- sub(" bytes|Bytes", " B", sz)
+        sz <- sub("Kb|KB", "kB", sz)
+        sz <- sub("Mb|MB", "MB", sz)
+        sz <- sub("Gb|GB", "GB", sz)
         preview <- tryCatch({
             if (is.data.frame(obj) || is.matrix(obj)) paste0(nrow(obj), " obs. of ", ncol(obj), " variables")
             else if (is.list(obj)) paste0("List of ", length(obj))
