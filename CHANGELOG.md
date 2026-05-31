@@ -4,9 +4,14 @@ All notable changes to the R Layout extension will be documented in this file.
 
 ## [0.3.6] - 2026-05-30
 
+### Fixed
+
+- **Windows Blank Terminal**: Fixed an intermittent race condition where the Shell Terminal and R Console would occasionally fail to spawn (showing a blank tab) on Windows by reverting to a more robust, two-step ConPTY initialization process.
+
 ### Changed
 
 - **Problems Panel**: Improved aesthetics by adding spacing to the left edge to prevent content crowding, and removed the horizontal row borders for a cleaner, less cluttered layout.
+- **Problems Panel**: Fixed an issue where the icon colors did not match the user's active VS Code theme due to Content Security Policy restrictions.
 
 ## [0.3.5] - 2026-05-30
 
