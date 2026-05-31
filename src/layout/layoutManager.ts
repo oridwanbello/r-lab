@@ -804,16 +804,10 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         }
 
     } else {
-        const platform = os.platform() === 'win32' ? 'windows' : (os.platform() === 'darwin' ? 'osx' : 'linux');
-        const userEnv = vscode.workspace.getConfiguration('terminal.integrated.env').get<Record<string, string>>(platform) || {};
-        const shellEnvArgs: Record<string, string> = { ...process.env as any, ...userEnv };
-
         // Create directly in ViewColumn.Two, no bottom-pane origin
         shellTerminal = vscode.window.createTerminal({
             name: 'Terminal',
             location: { viewColumn: vscode.ViewColumn.Two },
-            env: shellEnvArgs,
-            strictEnv: true,
             cwd: getEffectiveWorkspaceRoot(),
         });
         await delay(100); // Give terminal time to attach
