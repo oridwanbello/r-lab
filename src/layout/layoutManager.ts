@@ -760,8 +760,6 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
             }
 
         } else {
-            // New session: create directly in ViewColumn.Two. R Console does not suffer
-            // from the empty PTY bug, so this is safe and guarantees correct placement.
             const shellPath = getRPath();
             const cwdPath = getEffectiveWorkspaceRoot();
             console.log(`[R Layout] Creating NEW R Console: shellPath=${shellPath}, cwd=${cwdPath}, env keys=${Object.keys(rProfileEnv).join(',')}`);
@@ -769,14 +767,23 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                 name: 'R Console',
                 shellPath,
                 shellArgs: getRArgs(),
-                location: { viewColumn: vscode.ViewColumn.Two },
+                // DO NOT use location: { viewColumn: vscode.ViewColumn.Two } 
+                // Creating directly into the editor group causes intermittent blank ConPTY terminals on Windows.
                 env: strictEnvArgs,
                 strictEnv: true, // Prevents Python extension from applying its EnvironmentVariableCollection and crashing PTY
                 cwd: cwdPath, // Prevents PTY hang in no-workspace mode
                 iconPath: vscode.Uri.joinPath(context.extensionUri, 'resources', 'r_logo.svg'),
             });
-            await delay(100); // Give terminal time to attach
-            rConsoleTerminal.show(false);
+            
+            // Show in the panel first to force PTY initialization
+            rConsoleTerminal.show(true); 
+            await delay(500); // Give ConPTY time to fully spawn before moving
+
+            // Move to editor area (Group 2)
+            await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+            await delay(50);
+            await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
+            await delay(100);
         }
     }
 
@@ -810,7 +817,8 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
         const terminalOptions: vscode.TerminalOptions = {
             name: 'Terminal',
-            location: { viewColumn: vscode.ViewColumn.Two },
+            // Do NOT use location: { viewColumn: ... } here. Creating a generic shell directly 
+            // into an editor group causes intermittent blank ConPTY terminals on Windows.
             cwd: getEffectiveWorkspaceRoot(),
         };
 
@@ -821,10 +829,16 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
             terminalOptions.strictEnv = true;
         }
 
-        // Create directly in ViewColumn.Two, no bottom-pane origin
+        // Create in the panel first
         shellTerminal = vscode.window.createTerminal(terminalOptions);
-        await delay(100); // Give terminal time to attach
-        shellTerminal.show(false);
+        shellTerminal.show(true); // Must show in panel to force PTY initialization
+        await delay(500); // Give ConPTY time to fully spawn before moving
+
+        // Move to editor area (Group 2)
+        await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+        await delay(50);
+        await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
+        await delay(100);
     }
 
     // ProblemsPanel: dispose the anchor instance and recreate so it becomes the

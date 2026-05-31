@@ -2,6 +2,12 @@
 
 All notable changes to the R Layout extension will be documented in this file.
 
+## [0.3.6] - 2026-05-30
+
+### Changed
+
+- **Problems Panel**: Improved aesthetics by adding spacing to the left edge to prevent content crowding, and removed the horizontal row borders for a cleaner, less cluttered layout.
+
 ## [0.3.5] - 2026-05-30
 
 ### Fixed
