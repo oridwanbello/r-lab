@@ -158,8 +158,8 @@ export class ProblemsPanel {
         * { margin: 0; padding: 0; box-sizing: border-box; }
         ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
         body {
-            font-family: var(--vscode-font-family);
-            font-size: var(--vscode-font-size, 13px);
+            font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
+            font-size: var(--vscode-editor-font-size, var(--vscode-font-size, 13px));
             color: var(--vscode-editor-foreground);
             background: var(--vscode-editor-background);
             display: flex;
@@ -171,7 +171,7 @@ export class ProblemsPanel {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 12px;
+            padding: 0 12px 0 16px;
             height: 32px;
             background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
@@ -185,7 +185,7 @@ export class ProblemsPanel {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 4px 12px 4px 6px;
+            padding: 4px 12px 4px 16px;
             color: var(--vscode-textLink-foreground);
             background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
@@ -195,7 +195,7 @@ export class ProblemsPanel {
             cursor: pointer;
         }
         .file-header:hover {
-            background: var(--vscode-list-hoverBackground);
+            background: linear-gradient(var(--vscode-list-hoverBackground), var(--vscode-list-hoverBackground)), var(--vscode-editor-background);
         }
         .file-header-left {
             display: flex;
@@ -230,11 +230,15 @@ export class ProblemsPanel {
         table { width: 100%; border-collapse: collapse; }
         .diag-row { cursor: pointer; }
         .diag-row:hover td { background: var(--vscode-list-hoverBackground); }
-        td { padding: 4px 6px; vertical-align: top; border-bottom: 1px solid var(--vscode-editorGroup-border); }
-        .icon-col { width: 24px; text-align: center; vertical-align: middle; }
+        td { padding: 4px 6px; vertical-align: top; }
+        .icon-col { width: 36px; text-align: center; vertical-align: middle; padding-left: 16px !important; }
         .icon-col i { font-size: 1.3em; }
         .loc-col { width: 50px; opacity: 0.6; font-family: var(--vscode-editor-font-family, monospace); vertical-align: middle; }
         .msg-col { word-break: break-word; white-space: normal; vertical-align: middle; }
+        
+        .icon-error { color: var(--vscode-problemsErrorIcon-foreground, var(--vscode-editorError-foreground, #f14c4c)); }
+        .icon-warning { color: var(--vscode-problemsWarningIcon-foreground, var(--vscode-editorWarning-foreground, #cca700)); }
+        .icon-info { color: var(--vscode-problemsInfoIcon-foreground, var(--vscode-editorInfo-foreground, #3794ff)); }
         
         /* Empty State Styling */
         .empty-state {
@@ -300,11 +304,11 @@ export class ProblemsPanel {
 
 function severityIcon(severity: vscode.DiagnosticSeverity): string {
     switch (severity) {
-        case vscode.DiagnosticSeverity.Error: return '<i class="codicon codicon-error" style="color: var(--vscode-problemsErrorIcon-foreground, #f14c4c)"></i>';
-        case vscode.DiagnosticSeverity.Warning: return '<i class="codicon codicon-warning" style="color: var(--vscode-problemsWarningIcon-foreground, #cca700)"></i>';
-        case vscode.DiagnosticSeverity.Information: return '<i class="codicon codicon-info" style="color: var(--vscode-problemsInfoIcon-foreground, #3794ff)"></i>';
-        case vscode.DiagnosticSeverity.Hint: return '<i class="codicon codicon-lightbulb" style="color: var(--vscode-problemsInfoIcon-foreground, #3794ff)"></i>';
-        default: return '<i class="codicon codicon-record" style="color: var(--vscode-editor-foreground)"></i>';
+        case vscode.DiagnosticSeverity.Error: return '<i class="codicon codicon-error icon-error"></i>';
+        case vscode.DiagnosticSeverity.Warning: return '<i class="codicon codicon-warning icon-warning"></i>';
+        case vscode.DiagnosticSeverity.Information: return '<i class="codicon codicon-info icon-info"></i>';
+        case vscode.DiagnosticSeverity.Hint: return '<i class="codicon codicon-lightbulb icon-info"></i>';
+        default: return '<i class="codicon codicon-record"></i>';
     }
 }
 
