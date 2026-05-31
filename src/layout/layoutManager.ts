@@ -804,12 +804,25 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         }
 
     } else {
-        // Create directly in ViewColumn.Two, no bottom-pane origin
-        shellTerminal = vscode.window.createTerminal({
+        const platform = os.platform() === 'win32' ? 'windows' : (os.platform() === 'darwin' ? 'osx' : 'linux');
+        const userEnv = vscode.workspace.getConfiguration('terminal.integrated.env').get<Record<string, string>>(platform) || {};
+        const shellEnvArgs: Record<string, string> = { ...process.env as any, ...userEnv };
+
+        const terminalOptions: vscode.TerminalOptions = {
             name: 'Terminal',
             location: { viewColumn: vscode.ViewColumn.Two },
             cwd: getEffectiveWorkspaceRoot(),
-        });
+        };
+
+        // strictEnv crashes the default shell on Windows, but is required on Mac/Linux 
+        // to prevent PTY crashes (warning icon) during layout deactivation.
+        if (os.platform() !== 'win32') {
+            terminalOptions.env = shellEnvArgs;
+            terminalOptions.strictEnv = true;
+        }
+
+        // Create directly in ViewColumn.Two, no bottom-pane origin
+        shellTerminal = vscode.window.createTerminal(terminalOptions);
         await delay(100); // Give terminal time to attach
         shellTerminal.show(false);
     }

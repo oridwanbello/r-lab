@@ -2,6 +2,12 @@
 
 All notable changes to the R Layout extension will be documented in this file.
 
+## [0.3.5] - 2026-05-30
+
+### Fixed
+
+- **Mac/Linux Terminal Crash**: Fixed a bug where toggling the layout off without an active workspace would cause the integrated terminal to crash (displaying a warning icon) on macOS and Linux by conditionally re-enabling strict environment isolation for Unix platforms.
+
 ## [0.3.4] - 2026-05-30
 
 ### Fixed
