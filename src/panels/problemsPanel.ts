@@ -177,7 +177,7 @@ export class ProblemsPanel {
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             flex-shrink: 0;
         }
-        .pane-title { font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; opacity: 0.7; }
+        .pane-title { font-weight: 600; text-transform: uppercase; opacity: 0.7; }
         .summary { opacity: 0.7; }
         .content { flex: 1; overflow: auto; }
         .file-group { margin-bottom: 2px; }

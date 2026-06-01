@@ -983,6 +983,32 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     } catch {}
 
     activationInProgress = false;
+
+    // Force xterm.js to recalculate terminal viewport dimensions (including top padding)
+    // by re-applying the editor layout. When terminals are moved from the bottom panel
+    // to the editor during restoration, subsequent Group 2 mutations (ProblemsPanel
+    // dispose/recreate, HelpPanel creation) cause xterm.js to lose its container padding.
+    // Re-applying the layout forces a container resize event that triggers a full reflow.
+    const reapplyLayout = async () => {
+        try {
+            await vscode.commands.executeCommand('vscode.setEditorLayout', {
+                orientation: 0,
+                groups: [
+                    { size: 0.60 },
+                    {
+                        size: 0.40,
+                        groups: [
+                            { size: 0.5 },
+                            { size: 0.5 },
+                        ],
+                    },
+                ],
+            });
+        } catch {}
+    };
+    setTimeout(reapplyLayout, 50);
+    setTimeout(reapplyLayout, 400);
+
     // Deferred refresh: give the Workspace webview ~500ms to fully render after
     // all layout commands complete, then push the latest R environment state.
     // Doing this earlier races the webview paint and the message is dropped.

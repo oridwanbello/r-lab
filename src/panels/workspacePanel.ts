@@ -572,7 +572,7 @@ tryCatch({
         ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
         body {
             font-family: var(--vscode-font-family);
-            font-weight: 400; font-size: var(--vscode-font-size, 13px); letter-spacing: 0.3px;
+            font-weight: 400; font-size: var(--vscode-font-size, 13px);
             color: var(--vscode-editor-foreground);
             background: var(--vscode-editor-background);
             display: flex;
@@ -584,7 +584,7 @@ tryCatch({
 
         /* ── Tab Bar ── */
         .tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--vscode-editorGroup-border); background: var(--vscode-editor-background); flex-shrink: 0; }
-        .tab { padding: 8px 12px; cursor: pointer; opacity: 0.6; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; }
+        .tab { padding: 8px 12px; cursor: pointer; opacity: 0.6; font-weight: 600; white-space: nowrap; }
         .tab:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
         .tab.active { opacity: 1; color: var(--vscode-textLink-foreground); }
 
@@ -608,7 +608,6 @@ tryCatch({
             font-weight: 600;
             font-style: italic;
             text-transform: none;
-            letter-spacing: 0.3px;
             background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             vertical-align: middle;
@@ -855,7 +854,6 @@ tryCatch({
             text-align: left;
             font-weight: 600;
             font-style: italic;
-            letter-spacing: 0.3px;
             background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
         }
