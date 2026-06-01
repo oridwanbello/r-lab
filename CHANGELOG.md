@@ -2,6 +2,12 @@
 
 All notable changes to the R Layout extension will be documented in this file.
 
+## [0.3.7] - 2026-05-31
+
+### Added
+
+- **Matrix Support**: Added proper support for viewing 2D and 3D matrices in the Workspace Explorer and Data Viewer. Matrices now show the eye icon and format correctly when viewed.
+
 ## [0.3.6] - 2026-05-30
 
 ### Fixed

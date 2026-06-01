@@ -211,7 +211,7 @@ tryCatch({
             else if (is.numeric(obj) && length(obj) <= 6) paste(head(obj, 6), collapse = " ")
             else paste(head(obj, 3), collapse = " ")
         }, error = function(e) "?")
-        list(name = nm, type = cls, size = paste0(dims, " (", sz, ")"), preview = preview, isDataFrame = is.data.frame(obj))
+        list(name = nm, type = cls, size = paste0(dims, " (", sz, ")"), preview = preview, isDataFrame = is.data.frame(obj) || is.matrix(obj) || (is.array(obj) && length(dim(obj)) == 3))
     })
     cat(jsonlite::toJSON(list(variables = info, loadedNamespaces = loadedNamespaces(), attachedNamespaces = search()), auto_unbox = TRUE))
 }, error = function(e) {
@@ -425,7 +425,7 @@ tryCatch({
                         type: item.class ? (Array.isArray(item.class) ? item.class.join(', ') : item.class) : 'unknown',
                         size: item.dim ? item.dim.join(' x ') : (item.length ? String(item.length) : '1'),
                         preview: item.str || '',
-                        isDataFrame: item.class && item.class.includes('data.frame')
+                        isDataFrame: item.class && (item.class.includes('data.frame') || item.class.includes('matrix') || (item.class.includes('array') && item.dim && item.dim.length === 3))
                     });
                 }
             }
@@ -578,9 +578,9 @@ tryCatch({
 
         /* ── Tab Bar ── */
         .tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--vscode-editorGroup-border); background: var(--vscode-editor-background); flex-shrink: 0; }
-        .tab { padding: 8px 12px; cursor: pointer; opacity: 0.6; font-weight: 600; letter-spacing: 0.5px; border-bottom: 2px solid transparent; white-space: nowrap; }
+        .tab { padding: 8px 12px; cursor: pointer; opacity: 0.6; font-weight: 600; letter-spacing: 0.5px; white-space: nowrap; }
         .tab:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
-        .tab.active { opacity: 1; border-bottom: 2px solid var(--vscode-textLink-foreground); color: var(--vscode-textLink-foreground); }
+        .tab.active { opacity: 1; color: var(--vscode-textLink-foreground); }
 
         /* ── Content Panels ── */
         .content { flex: 1; overflow: hidden; display: none; flex-direction: column; }

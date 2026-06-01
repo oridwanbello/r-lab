@@ -1461,15 +1461,40 @@ function _buildWatcherRprofile(): string | undefined {
       sz <- sub("Gb|GB", "GB", sz)
       dims <- paste0(dims, " (", sz, ")")
       prev <- tryCatch({
-        if (is.data.frame(obj) || is.matrix(obj)) paste0(nrow(obj), " obs. of ", ncol(obj), " variables")
-        else if (is.list(obj)) paste0("List of ", length(obj))
-        else if (is.function(obj)) "function"
-        else if (is.character(obj) && length(obj) == 1) paste0('"', substr(obj, 1, 60), '"')
-        else if (length(obj) <= 6) paste(head(obj, 6), collapse = " ")
-        else paste0(length(obj), " elements")
+        if (is.data.frame(obj)) {
+          paste0(nrow(obj), " obs. of ", ncol(obj), " variables")
+        } else if (is.array(obj)) {
+          type_lbl <- typeof(obj)
+          if (type_lbl == "double") type_lbl <- "num" else if (type_lbl == "integer") type_lbl <- "int" else if (type_lbl == "character") type_lbl <- "chr" else if (type_lbl == "logical") type_lbl <- "logi"
+          dim_ranges <- paste0("1:", dim(obj), collapse = ", ")
+          flat_vals <- as.vector(head(as.vector(obj), 5))
+          if (typeof(obj) == "character") flat_vals <- paste0('"', flat_vals, '"')
+          vals_str <- paste(flat_vals, collapse = " ")
+          if (length(obj) > 5) vals_str <- paste0(vals_str, " ...")
+          paste0(type_lbl, " [", dim_ranges, "] ", vals_str)
+        } else if (is.list(obj)) {
+          paste0("List of ", length(obj))
+        } else if (is.function(obj)) {
+          "function"
+        } else if (is.vector(obj)) {
+          if (length(obj) == 1) {
+            if (is.character(obj)) paste0('"', obj, '"') else as.character(obj)
+          } else {
+            type_lbl <- typeof(obj)
+            if (type_lbl == "double") type_lbl <- "num" else if (type_lbl == "integer") type_lbl <- "int" else if (type_lbl == "character") type_lbl <- "chr" else if (type_lbl == "logical") type_lbl <- "logi"
+            dim_range <- paste0("1:", length(obj))
+            flat_vals <- as.vector(head(obj, 5))
+            if (typeof(obj) == "character") flat_vals <- paste0('"', flat_vals, '"')
+            vals_str <- paste(flat_vals, collapse = " ")
+            if (length(obj) > 5) vals_str <- paste0(vals_str, " ...")
+            paste0(type_lbl, " [", dim_range, "] ", vals_str)
+          }
+        } else {
+          substr(paste(as.character(obj), collapse = " "), 1, 60)
+        }
       }, error = function(e) "?")
       prev <- gsub("\\\\t|\\\\n|\\\\r", " ", prev)
-      is_df <- if (is.data.frame(obj)) "true" else "false"
+      is_df <- if (is.data.frame(obj) || is.matrix(obj) || (is.array(obj) && length(dim(obj)) == 3)) "true" else "false"
       paste(nm, cls, dims, prev, is_df, sep = "\\t")
     }, character(1))
     writeLines(.info, "${absVarsTsv}")
@@ -1500,6 +1525,7 @@ local({
 .rlayout_csv  <- "${absDvCsv}"
 .rlayout_meta <- "${absDvMeta}"
 .rlayout_active_df_to_export <- NULL
+.rlayout_active_df_slice <- 1
 .rlayout_last_plot_hash <- NULL
 .rlayout_current_plot_id <- 0
 
@@ -1556,13 +1582,75 @@ if (exists(".First", envir = .GlobalEnv)) {
   .rlayout_active_df_to_export <<- varName
   tryCatch({
     obj <- get(varName, envir = .GlobalEnv)
-    if (!is.data.frame(obj)) obj <- as.data.frame(obj)
-    writeLines(c(as.character(nrow(obj)), as.character(ncol(obj))), .rlayout_meta)
-    write.csv(head(obj, 1000), .rlayout_csv, row.names = FALSE, na = "NA")
+    
+    if (is.null(colnames(obj)) && !is.null(ncol(obj))) {
+      if (is.data.frame(obj)) {
+        colnames(obj) <- paste0("#", 1:ncol(obj))
+      } else {
+        colnames(obj) <- paste0("[,", 1:ncol(obj), "]")
+      }
+    }
+    if (is.null(rownames(obj)) && !is.null(nrow(obj))) {
+      if (is.data.frame(obj)) {
+        rownames(obj) <- paste0("#", 1:nrow(obj))
+      } else {
+        rownames(obj) <- paste0("[", 1:nrow(obj), ",]")
+      }
+    }
+    is3D <- is.array(obj) && length(dim(obj)) == 3
+    if (is3D) {
+      nslices <- dim(obj)[3]
+      unlink(file.path(dirname(.rlayout_csv), "dv_slice_*.csv"))
+      
+      slice_labels <- dimnames(obj)[[3]]
+      if (is.null(slice_labels)) {
+        slice_labels <- paste0("Slice ", 1:nslices)
+      }
+      
+
+      
+      for (i in 1:nslices) {
+        slice_obj <- obj[, , i]
+        if (!is.data.frame(slice_obj)) {
+          slice_obj <- as.data.frame(slice_obj, check.names = FALSE)
+        }
+        write.csv(head(slice_obj, 1000), file.path(dirname(.rlayout_csv), sprintf("dv_slice_%d.csv", i)), row.names = TRUE, na = "NA")
+      }
+      
+      writeLines(c(
+        as.character(nrow(obj)),
+        as.character(ncol(obj)),
+        "3D",
+        as.character(nslices),
+        slice_labels
+      ), .rlayout_meta)
+      
+    } else {
+      if (!is.data.frame(obj)) {
+
+        obj <- as.data.frame(obj, check.names = FALSE)
+      }
+      write.csv(head(obj, 1000), .rlayout_csv, row.names = TRUE, na = "NA")
+      writeLines(c(as.character(nrow(obj)), as.character(ncol(obj)), "2D"), .rlayout_meta)
+    }
   }, error = function(e) {
     writeLines(paste0("ERROR:", conditionMessage(e)), .rlayout_meta)
   })
   invisible(NULL)
+}
+
+# Override base View() so that user commands and the fallback trigger open our Data Viewer cleanly
+View <- function(x, title) {
+  var_name <- deparse(substitute(x))
+  if (length(var_name) > 1) var_name <- paste(var_name, collapse = "")
+  
+  if (exists(var_name, envir = .GlobalEnv)) {
+    .r_layout_view_data(var_name)
+  } else {
+    # If the user typed an expression like View(mtcars[1:5,]), store it temporarily
+    assign(".rlayout_temp_view", x, envir = .GlobalEnv)
+    .r_layout_view_data(".rlayout_temp_view")
+  }
 }
 
 # 6. Install the task callback. It fires after every top-level R command.
@@ -1572,10 +1660,21 @@ invisible(local({
       # 1. Update Data Viewer quietly if active
       if (!is.null(.rlayout_active_df_to_export) && exists(.rlayout_active_df_to_export, envir = .GlobalEnv)) {
         try({
-          obj <- get(.rlayout_active_df_to_export, envir = .GlobalEnv)
-          if (!is.data.frame(obj)) obj <- as.data.frame(obj)
-          writeLines(c(as.character(nrow(obj)), as.character(ncol(obj))), .rlayout_meta)
-          write.csv(head(obj, 1000), .rlayout_csv, row.names = FALSE, na = "NA")
+          .r_layout_view_data(.rlayout_active_df_to_export)
+        }, silent = TRUE)
+      }
+
+      # 2. Check for manual view requests from the extension
+      .view_req_path <- file.path("${outDir}", ".view_request")
+      if (file.exists(.view_req_path)) {
+        try({
+          .var_req <- readLines(.view_req_path, warn = FALSE)
+          if (length(.var_req) > 0 && nchar(.var_req[1]) > 0) {
+             if (exists(.var_req[1], envir = .GlobalEnv)) {
+               .r_layout_view_data(.var_req[1])
+             }
+          }
+          unlink(.view_req_path)
         }, silent = TRUE)
       }
 
@@ -1604,6 +1703,40 @@ invisible(local({
       ${snapshotCode}
       TRUE
     }, name = ".r_layout.watcher")
+  }
+}))
+
+# 7. Setup Background View Request Watcher (if 'later' package is installed)
+invisible(local({
+  .has_later_file <- file.path("${outDir}", ".has_later")
+  if (requireNamespace("later", quietly = TRUE)) {
+    file.create(.has_later_file)
+    .rlayout_loop <- function() {
+      if (!"later" %in% loadedNamespaces()) {
+        if (file.exists(.has_later_file)) unlink(.has_later_file)
+        return(invisible())
+      }
+      .view_req_path <- file.path("${outDir}", ".view_request")
+      if (file.exists(.view_req_path)) {
+        try({
+          .var_req <- readLines(.view_req_path, warn = FALSE)
+          if (length(.var_req) > 0 && nchar(.var_req[1]) > 0) {
+             if (exists(.var_req[1], envir = .GlobalEnv)) {
+               .r_layout_view_data(.var_req[1])
+             }
+          }
+          unlink(.view_req_path)
+        }, silent = TRUE)
+      }
+      if ("later" %in% loadedNamespaces()) {
+        try(later::later(.rlayout_loop, 0.2), silent = TRUE)
+      } else {
+        if (file.exists(.has_later_file)) unlink(.has_later_file)
+      }
+    }
+    .rlayout_loop()
+  } else {
+    if (file.exists(.has_later_file)) unlink(.has_later_file)
   }
 }))
 `;

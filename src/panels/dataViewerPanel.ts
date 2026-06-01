@@ -19,7 +19,7 @@ export class DataViewerPanel {
     private readonly _panel: vscode.WebviewPanel;
     private _varName = '';
     private _columns: string[] = [];
-    private _rows: Record<string, unknown>[] = [];
+    private _rows: string[][] = [];
     private _totalRows = 0;
     private _totalCols = 0;
     private _isLoading = false;
@@ -27,6 +27,12 @@ export class DataViewerPanel {
     private _isMinimized = false;
     private _lastRenderHash = '';
     private _disposables: vscode.Disposable[] = [];
+
+    // 3D Matrix Navigation State
+    private _is3D = false;
+    private _totalSlices = 1;
+    private _currentSlice = 1;
+    private _sliceLabels: string[] = [];
 
     // Factory
 
@@ -76,12 +82,17 @@ export class DataViewerPanel {
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
         this._panel.webview.onDidReceiveMessage(
-            async (msg: { type: string; varName?: string }) => {
+            async (msg: { type: string; varName?: string; slice?: number }) => {
                 switch (msg.type) {
                     case 'refresh':
                         if (this._varName) {
                             // Manual refresh just re-reads the disk (silent).
                             await this.loadVariable(this._varName, true);
+                        }
+                        break;
+                    case 'setSlice':
+                        if (this._varName && msg.slice !== undefined) {
+                            await this.loadVariable(this._varName, false, msg.slice);
                         }
                         break;
                 }
@@ -113,10 +124,32 @@ export class DataViewerPanel {
      *  We send a single short command (.r_layout_view_data) to the R terminal,
      *  which avoids polluting the user's history with massive chunks of code.
      */
-    public async loadVariable(varName: string, isAutoRefresh: boolean = false): Promise<void> {
+    public async loadVariable(varName: string, isAutoRefresh: boolean = false, sliceIndex?: number): Promise<void> {
         this._varName = varName;
         // The user specifically requested the tab title never change from "Data Viewer"
         this._panel.title = 'Data Viewer';
+
+        const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
+        const outDir = nodePath.join(wf, '.r_layout');
+        const tmpMeta = nodePath.join(outDir, 'dv-meta.txt');
+
+        // If sliceIndex is provided and we are already viewing a 3D matrix,
+        // load the requested slice CSV fully offline without talking to R terminal!
+        if (sliceIndex !== undefined && this._is3D) {
+            this._currentSlice = sliceIndex;
+            const sliceCsvPath = nodePath.join(outDir, `dv_slice_${this._currentSlice}.csv`);
+            if (nodeFs.existsSync(sliceCsvPath)) {
+                try {
+                    const csvRaw = nodeFs.readFileSync(sliceCsvPath, 'utf8');
+                    this._loadCsvData(csvRaw);
+                    this._errorMessage = '';
+                } catch (err: unknown) {
+                    this._errorMessage = err instanceof Error ? err.message : String(err);
+                }
+                this._render();
+                return;
+            }
+        }
 
         if (!isAutoRefresh) {
             this._isLoading = true;
@@ -124,19 +157,9 @@ export class DataViewerPanel {
             this._render();
         }
 
-        const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
-
-        const outDir = nodePath.join(wf, '.r_layout');
-        if (!nodeFs.existsSync(outDir)) {
-            nodeFs.mkdirSync(outDir, { recursive: true });
-        }
-
-        const tmpCsv  = nodePath.join(outDir, 'dv.csv');
-        const tmpMeta = nodePath.join(outDir, 'dv-meta.txt');
-
         if (!isAutoRefresh) {
             // Delete stale output files so we can detect when the new ones appear.
-            try { nodeFs.unlinkSync(tmpCsv);  } catch {}
+            try { nodeFs.unlinkSync(nodePath.join(outDir, 'dv.csv')); } catch {}
             try { nodeFs.unlinkSync(tmpMeta); } catch {}
 
             const rTerminal = require('../layout/layoutManager').getRConsoleTerminal();
@@ -147,9 +170,14 @@ export class DataViewerPanel {
                 return;
             }
 
-            // Send the clean command directly. The invisible path-setting is no longer needed
-            // because the paths are pre-set securely in the Rprofile hook.
-            rTerminal.sendText(`.r_layout_view_data("${varName}")`, true);
+            // Write the request to a file, then send an invisible command to trigger the R callback
+            const reqFile = nodePath.join(outDir, '.view_request');
+            try { nodeFs.writeFileSync(reqFile, varName, 'utf8'); } catch {}
+            
+            const hasLaterFile = nodePath.join(outDir, '.has_later');
+            if (!nodeFs.existsSync(hasLaterFile)) {
+                rTerminal.sendText(`View(${varName})`, true);
+            }
         }
 
         // Poll for the meta file (up to 10 s if manual, 0s if auto).
@@ -170,15 +198,31 @@ export class DataViewerPanel {
             const metaLines = metaRaw.replace(/\r/g, '').trim().split('\n');
             this._totalRows = parseInt(metaLines[0], 10) || 0;
             this._totalCols = parseInt(metaLines[1], 10) || 0;
-            const csvRaw = nodeFs.readFileSync(tmpCsv, 'utf8');
-            const lines = csvRaw.replace(/\r/g, '').trim().split('\n');
-            this._columns = this._parseCsvRow(lines[0]);
-            this._rows = lines.slice(1).map((line: string) => {
-                const vals = this._parseCsvRow(line);
-                const obj: Record<string, unknown> = {};
-                this._columns.forEach((col, i) => { obj[col] = vals[i] ?? null; });
-                return obj;
-            });
+            
+            if (metaLines[2] === '3D') {
+                this._is3D = true;
+                this._totalSlices = parseInt(metaLines[3], 10) || 1;
+                this._sliceLabels = metaLines.slice(4).map(s => s.trim());
+                if (!isAutoRefresh) {
+                    this._currentSlice = 1;
+                }
+                
+                const sliceCsvPath = nodePath.join(outDir, `dv_slice_${this._currentSlice}.csv`);
+                if (nodeFs.existsSync(sliceCsvPath)) {
+                    const csvRaw = nodeFs.readFileSync(sliceCsvPath, 'utf8');
+                    this._loadCsvData(csvRaw);
+                } else {
+                    throw new Error(`Slice file ${sliceCsvPath} not found.`);
+                }
+            } else {
+                this._is3D = false;
+                this._totalSlices = 1;
+                this._currentSlice = 1;
+                this._sliceLabels = [];
+                const tmpCsv = nodePath.join(outDir, 'dv.csv');
+                const csvRaw = nodeFs.readFileSync(tmpCsv, 'utf8');
+                this._loadCsvData(csvRaw);
+            }
             this._errorMessage = '';
         } catch (err: unknown) {
             this._errorMessage = err instanceof Error ? err.message : String(err);
@@ -186,10 +230,19 @@ export class DataViewerPanel {
             this._rows = [];
             this._totalRows = 0;
             this._totalCols = 0;
+            this._is3D = false;
         }
 
         this._isLoading = false;
         this._render();
+    }
+
+    private _loadCsvData(csvRaw: string): void {
+        const lines = csvRaw.replace(/\r/g, '').trim().split('\n');
+        this._columns = this._parseCsvRow(lines[0]);
+        this._rows = lines.slice(1).map((line: string) => {
+            return this._parseCsvRow(line);
+        });
     }
 
     /** Poll for a file to appear, return its contents or null on timeout. */
@@ -266,7 +319,11 @@ export class DataViewerPanel {
             cols: this._columns,
             rows: this._rows,
             totCols: this._totalCols,
-            totRows: this._totalRows
+            totRows: this._totalRows,
+            is3D: this._is3D,
+            totalSlices: this._totalSlices,
+            currentSlice: this._currentSlice,
+            sliceLabels: this._sliceLabels
         });
 
         if (this._lastRenderHash === stateToHash) {
@@ -279,6 +336,9 @@ export class DataViewerPanel {
 
     private _getHtml(): string {
         const nonce = getNonce();
+        const activeLabel = this._is3D ? (this._sliceLabels[this._currentSlice - 1] || '').trim() : '';
+        const cleanLabel = activeLabel.toLowerCase().replace(/\s+/g, '');
+        const isRedundant = cleanLabel === 'page' + this._currentSlice || cleanLabel === 'slice' + this._currentSlice || cleanLabel === '';
 
         let mainContent: string;
         if (this._isLoading) {
@@ -297,7 +357,10 @@ export class DataViewerPanel {
             mainContent = `<div class="status-msg">No data available for "${escapeHtml(this._varName)}".</div>`;
         } else {
             const headerCells = this._columns
-                .map((col, i) => `<th data-col="${i}" class="sortable"><span class="col-name">${escapeHtml(col)}</span><span class="sort-icon">⏶⏷</span></th>`)
+                .map((col, i) => {
+                    if (i === 0) return `<th data-col="0" class="sortable row-num"><span class="col-name"></span><span class="sort-icon">⏶⏷</span></th>`;
+                    return `<th data-col="${i}" class="sortable"><span class="col-name">${escapeHtml(col)}</span><span class="sort-icon">⏶⏷</span></th>`;
+                })
                 .join('');
 
             // Build row data as JSON for client-side sorting
@@ -311,7 +374,7 @@ export class DataViewerPanel {
                 ${truncated}
                 <div class="table-wrapper">
                     <table>
-                        <thead><tr><th class="row-num">#</th>${headerCells}</tr></thead>
+                        <thead><tr>${headerCells}</tr></thead>
                         <tbody id="table-body"></tbody>
                     </table>
                 </div>`;
@@ -341,6 +404,7 @@ export class DataViewerPanel {
         }
         body.minimized > * { display: none !important; }
         .toolbar {
+            position: relative;
             display: flex;
             align-items: center;
             justify-content: space-between; /* Meta left, Actions right */
@@ -359,6 +423,20 @@ export class DataViewerPanel {
             color: var(--vscode-textLink-foreground);
             font-family: var(--vscode-editor-font-family, monospace);
         }
+        .toolbar-slice-nav {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: var(--vscode-font-size, 13px);
+            font-family: var(--vscode-font-family);
+            margin-right: 15px;
+        }
+        .slice-indicator {
+            font-weight: 500;
+            color: var(--vscode-foreground);
+            font-size: 11px;
+            opacity: 0.85;
+        }
         .toolbar-actions { display: flex; align-items: center; gap: 6px; }
         .toolbar button {
             background: none;
@@ -368,7 +446,7 @@ export class DataViewerPanel {
             font-size: var(--vscode-font-size, 13px); opacity: 0.7;
             display: flex; align-items: center; justify-content: center;
         }
-        .toolbar button:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground); }
+        .toolbar button:hover:not([disabled]) { opacity: 1; background: var(--vscode-toolbar-hoverBackground); }
         .toolbar button.active { opacity: 1; color: var(--vscode-textLink-foreground); }
         .toolbar button[disabled] {
             opacity: 0.25;
@@ -404,7 +482,9 @@ export class DataViewerPanel {
             position: sticky; top: 0; z-index: 1;
             background: var(--vscode-editor-background);
             font-family: var(--vscode-font-family);
-            font-weight: 600; font-style: italic; letter-spacing: 0.3px; color: var(--vscode-editor-foreground); opacity: 1;
+            font-weight: 600; font-style: italic; letter-spacing: 0.3px; 
+            color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 65%); 
+            opacity: 1;
             cursor: pointer; user-select: none;
             border-bottom: 2px solid var(--vscode-editorGroup-border);
         }
@@ -441,6 +521,7 @@ export class DataViewerPanel {
             text-align: right;
             padding-right: 8px !important;
             font-style: italic;
+            font-family: var(--vscode-font-family);
             color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 65%);
         }
         td {
@@ -482,10 +563,25 @@ export class DataViewerPanel {
 </head>
 <body${this._isMinimized ? ' class="minimized"' : ''}>
     <div class="toolbar">
-        <span>
-            ${this._varName ? `<span class="meta">${escapeHtml(this._varName)} (${this._totalRows.toLocaleString()} × ${this._totalCols})</span>` : ''}
-        </span>
+        <div>
+            ${this._varName ? `<span class="meta">${escapeHtml(this._varName)} (${this._totalRows.toLocaleString()} × ${this._totalCols}${this._is3D ? ` × ${this._totalSlices}` : ''})</span>` : ''}
+        </div>
         <div class="toolbar-actions">
+            ${this._is3D ? `
+            <div class="toolbar-slice-nav">
+                <button id="btn-prev" ${this._currentSlice <= 1 ? 'disabled' : ''} data-tooltip="Previous Slice">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="11 1 4 8 11 15" />
+                    </svg>
+                </button>
+                <span class="slice-indicator">Slice ${this._currentSlice} of ${this._totalSlices}${!isRedundant ? ` (${escapeHtml(activeLabel)})` : ''}</span>
+                <button id="btn-next" ${this._currentSlice >= this._totalSlices ? 'disabled' : ''} data-tooltip="Next Slice">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="5 1 12 8 5 15" />
+                    </svg>
+                </button>
+            </div>
+            ` : ''}
             <button id="btn-refresh" ${!this._varName ? 'disabled' : ''} data-tooltip="Refresh Data">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M13.29 8.69a5.33 5.33 0 1 1 -6.62 -5.86c2.6-.67 5.29.67 6.28 3.16" />
@@ -505,6 +601,14 @@ export class DataViewerPanel {
                 vscode.postMessage({ type: 'refresh' });
             });
 
+            // Slice Navigation Buttons
+            document.getElementById('btn-prev')?.addEventListener('click', () => {
+                vscode.postMessage({ type: 'setSlice', slice: ${this._currentSlice - 1} });
+            });
+            document.getElementById('btn-next')?.addEventListener('click', () => {
+                vscode.postMessage({ type: 'setSlice', slice: ${this._currentSlice + 1} });
+            });
+
             // Sorting Logic (only if table exists)
             const tbody = document.getElementById('table-body');
             if (tbody) {
@@ -516,18 +620,18 @@ export class DataViewerPanel {
                 let sortAsc = oldState.sortAsc !== undefined ? oldState.sortAsc : true;
 
                 function renderRows(data) {
-                    tbody.innerHTML = data.map((row, i) => {
-                        const cells = columns.map(col => {
-                            const val = row[col];
+                    tbody.innerHTML = data.map((row) => {
+                        const cells = row.map((val, j) => {
                             let displayVal = val;
                             if (val === null || val === undefined || val === 'NA') {
                                 displayVal = '<span class="na">NA</span>';
                             } else {
                                 displayVal = String(val).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
                             }
-                            return '<td>' + displayVal + '</td>';
+                            const cssClass = j === 0 ? ' class="row-num"' : '';
+                            return '<td' + cssClass + '>' + displayVal + '</td>';
                         }).join('');
-                        return '<tr><td class="row-num">' + (i + 1) + '</td>' + cells + '</tr>';
+                        return '<tr>' + cells + '</tr>';
                     }).join('');
                 }
 
@@ -547,9 +651,8 @@ export class DataViewerPanel {
                         return;
                     }
 
-                    const key = columns[sortCol];
                     const sorted = [...rows].sort((a, b) => {
-                        const va = a[key], vb = b[key];
+                        const va = a[sortCol], vb = b[sortCol];
                         if (va === null || va === undefined || va === 'NA') return 1;
                         if (vb === null || vb === undefined || vb === 'NA') return -1;
 
