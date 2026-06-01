@@ -502,13 +502,15 @@ export class DataViewerPanel {
         td.row-num {
             width: 40px; text-align: right;
             padding-right: 8px !important;
-            font-style: italic;
+            font-family: var(--vscode-font-family);
+            font-weight: 600; font-style: italic; letter-spacing: 0.3px;
             color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 65%);
         }
         th.row-num {
             width: 40px; text-align: right;
             padding-right: 8px !important;
-            font-style: italic;
+            font-family: var(--vscode-font-family);
+            font-weight: 600; font-style: italic; letter-spacing: 0.3px;
             color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 65%);
             left: 0;
             z-index: 3;

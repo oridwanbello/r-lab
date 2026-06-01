@@ -763,27 +763,31 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
             const shellPath = getRPath();
             const cwdPath = getEffectiveWorkspaceRoot();
             console.log(`[R Layout] Creating NEW R Console: shellPath=${shellPath}, cwd=${cwdPath}, env keys=${Object.keys(rProfileEnv).join(',')}`);
+            const isWindows = os.platform() === 'win32';
             rConsoleTerminal = vscode.window.createTerminal({
                 name: 'R Console',
                 shellPath,
                 shellArgs: getRArgs(),
-                // DO NOT use location: { viewColumn: vscode.ViewColumn.Two } 
+                // DO NOT use location: { viewColumn: vscode.ViewColumn.Two } on Windows
                 // Creating directly into the editor group causes intermittent blank ConPTY terminals on Windows.
+                location: isWindows ? undefined : { viewColumn: vscode.ViewColumn.Two },
                 env: strictEnvArgs,
                 strictEnv: true, // Prevents Python extension from applying its EnvironmentVariableCollection and crashing PTY
                 cwd: cwdPath, // Prevents PTY hang in no-workspace mode
                 iconPath: vscode.Uri.joinPath(context.extensionUri, 'resources', 'r_logo.svg'),
             });
             
-            // Show in the panel first to force PTY initialization
-            rConsoleTerminal.show(true); 
-            await delay(500); // Give ConPTY time to fully spawn before moving
+            if (isWindows) {
+                // Show in the panel first to force PTY initialization
+                rConsoleTerminal.show(true); 
+                await delay(500); // Give ConPTY time to fully spawn before moving
 
-            // Move to editor area (Group 2)
-            await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
-            await delay(50);
-            await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
-            await delay(100);
+                // Move to editor area (Group 2)
+                await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+                await delay(50);
+                await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
+                await delay(100);
+            }
         }
     }
 
@@ -817,8 +821,9 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
         const terminalOptions: vscode.TerminalOptions = {
             name: 'Terminal',
-            // Do NOT use location: { viewColumn: ... } here. Creating a generic shell directly 
+            // Do NOT use location: { viewColumn: ... } here on Windows. Creating a generic shell directly 
             // into an editor group causes intermittent blank ConPTY terminals on Windows.
+            location: os.platform() === 'win32' ? undefined : { viewColumn: vscode.ViewColumn.Two },
             cwd: getEffectiveWorkspaceRoot(),
         };
 
@@ -829,16 +834,19 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
             terminalOptions.strictEnv = true;
         }
 
-        // Create in the panel first
+        // Create in the panel first (for Windows)
         shellTerminal = vscode.window.createTerminal(terminalOptions);
-        shellTerminal.show(true); // Must show in panel to force PTY initialization
-        await delay(500); // Give ConPTY time to fully spawn before moving
+        
+        if (os.platform() === 'win32') {
+            shellTerminal.show(true); // Must show in panel to force PTY initialization
+            await delay(500); // Give ConPTY time to fully spawn before moving
 
-        // Move to editor area (Group 2)
-        await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
-        await delay(50);
-        await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
-        await delay(100);
+            // Move to editor area (Group 2)
+            await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+            await delay(50);
+            await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
+            await delay(100);
+        }
     }
 
     // ProblemsPanel: dispose the anchor instance and recreate so it becomes the
@@ -1449,7 +1457,7 @@ function _buildWatcherRprofile(): string | undefined {
   tryCatch({
     dir.create("${absPlotsDir}", showWarnings = FALSE, recursive = TRUE)
     .vars <- ls(envir = .GlobalEnv)
-    .vars <- .vars[!grepl("^\\\\.rlayout_|^\\\\.r_layout|^null_dev$|^\\\\.First$|^\\\\.Last$|^\\\\.r_layout_view_data$", .vars)]
+    .vars <- .vars[!grepl("^\\\\.rlayout_|^\\\\.r_layout|^null_dev$|^\\\\.First$|^\\\\.Last$|^\\\\.r_layout_view_data$|^View$", .vars)]
     .info <- if (length(.vars) == 0) character(0) else vapply(.vars, function(nm) {
       obj <- get(nm, envir = .GlobalEnv)
       cls <- paste(class(obj), collapse = ", ")

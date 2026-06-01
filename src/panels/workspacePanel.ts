@@ -95,7 +95,13 @@ export class WorkspacePanel {
                         if (msg.pkgName) { this._sendToRConsole(`library(${msg.pkgName})`); }
                         break;
                     case 'detachPackage':
-                        if (msg.pkgName) { this._sendToRConsole(`detach("package:${msg.pkgName}", unload = TRUE)`); }
+                        if (msg.pkgName) {
+                            if (msg.pkgName === 'later') {
+                                this._sendToRConsole(`detach("package:${msg.pkgName}")`);
+                            } else {
+                                this._sendToRConsole(`detach("package:${msg.pkgName}", unload = TRUE)`);
+                            }
+                        }
                         break;
                     case 'refreshPackages':
                         await this._fetchInstalledPackages();
@@ -146,7 +152,7 @@ export class WorkspacePanel {
     }
 
     // ----- Internal R variable filter -----
-    private static readonly INTERNAL_VAR_PATTERN = /^\.rlayout_|^\.r_layout|^null_dev$|^\.First$|^\.Last$/;
+    private static readonly INTERNAL_VAR_PATTERN = /^\.rlayout_|^\.r_layout|^null_dev$|^\.First$|^\.Last$|^View$/;
 
     /** Filter out internal R Layout variables so they never appear in the Environment tab */
     private _filterInternalVars(variables: VariableInfo[]): VariableInfo[] {
@@ -578,7 +584,7 @@ tryCatch({
 
         /* ── Tab Bar ── */
         .tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--vscode-editorGroup-border); background: var(--vscode-editor-background); flex-shrink: 0; }
-        .tab { padding: 8px 12px; cursor: pointer; opacity: 0.6; font-weight: 600; letter-spacing: 0.5px; white-space: nowrap; }
+        .tab { padding: 8px 12px; cursor: pointer; opacity: 0.6; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; }
         .tab:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
         .tab.active { opacity: 1; color: var(--vscode-textLink-foreground); }
 

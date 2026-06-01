@@ -423,7 +423,7 @@ export class HelpPanel {
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             flex-shrink: 0;
         }
-        .pane-title { font-weight: 600; letter-spacing: 0.5px; opacity: 0.7; }
+        .pane-title { font-weight: 600; letter-spacing: 0.3px; opacity: 0.7; }
         .search-bar {
             display: flex; gap: 6px; padding: 8px 12px;
             background: var(--vscode-editor-background);
