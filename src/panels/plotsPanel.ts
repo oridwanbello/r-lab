@@ -561,8 +561,13 @@ export class PlotsPanel {
             display: flex;
             align-items: center;
             justify-content: center;
-            overflow: auto;
+            overflow: hidden; /* Changed from auto to hide overflow during zoom */
             padding: 8px;
+            cursor: grab;
+            user-select: none;
+        }
+        .plot-area:active {
+            cursor: grabbing;
         }
         .plot-area img {
             max-width: 100%;
@@ -573,6 +578,8 @@ export class PlotsPanel {
             border-radius: 6px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
             transition: background-color 0.2s ease;
+            will-change: transform;
+            pointer-events: none; /* Let drag events fall through to the area */
         }
         .empty-state {
             text-align: center;
@@ -680,6 +687,28 @@ export class PlotsPanel {
             <button id="btn-prev" disabled data-tooltip="Previous Plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M11.354 1.646L12.061 2.354 6.414 8l5.647 5.646-.707.708L5 8l6.354-6.354z"/></svg></button>
             <span class="counter">-</span>
             <button id="btn-next" disabled data-tooltip="Next Plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M4.646 1.646L3.939 2.354 9.586 8l-5.647 5.646.707.708L11 8 4.646 1.646z"/></svg></button>
+            <button id="btn-zoom-in" disabled data-tooltip="Zoom In">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2">
+                    <circle cx="7" cy="7" r="4.5" />
+                    <line x1="10.2" y1="10.2" x2="14.2" y2="14.2" stroke-width="1.5" stroke-linecap="round"/>
+                    <line x1="4.5" y1="7" x2="9.5" y2="7" />
+                    <line x1="7" y1="4.5" x2="7" y2="9.5" />
+                </svg>
+            </button>
+            <button id="btn-zoom-out" disabled data-tooltip="Zoom Out">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2">
+                    <circle cx="7" cy="7" r="4.5" />
+                    <line x1="10.2" y1="10.2" x2="14.2" y2="14.2" stroke-width="1.5" stroke-linecap="round"/>
+                    <line x1="4.5" y1="7" x2="9.5" y2="7" />
+                </svg>
+            </button>
+            <button id="btn-reset-zoom" disabled data-tooltip="Reset Zoom">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2">
+                    <path d="M5 2H2v3 M11 2h3v3 M2 11v3h3 M14 11v3h-3" />
+                    <circle cx="8" cy="8" r="2.5" />
+                    <circle cx="8" cy="8" r="0.5" fill="currentColor" stroke="none" />
+                </svg>
+            </button>
             <button id="btn-copy" disabled data-tooltip="Copy Plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M10,13.33H3.33V4.67c0-0.37-0.3-0.67-0.67-0.67h0C2.3,4,2,4.3,2,4.67v8.67c0,0.73,0.6,1.33,1.33,1.33h6.67c0.37,0,0.67-0.3,0.67-0.67v0C10.67,13.63,10.37,13.33,10,13.33z M13.33,10.67V2.67c0-0.73-0.6-1.33-1.33-1.33H6c-0.73,0-1.33,0.6-1.33,1.33v8c0,0.73,0.6,1.33,1.33,1.33h6c0.73,0,1.33-0.6,1.33-1.33z M12,10.67H6V2.67h6V10.67z"/></svg></button>
             <button id="btn-save" disabled data-tooltip="Save Plot As..."><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12,10v2H4v-2H2.67v2c0,0.73,0.6,1.33,1.33,1.33h8c0.73,0,1.33-0.6,1.33-1.33v-2H12z M11.33,7.33l-0.94-0.94L8.67,8.11V2.67h-1.33v5.45L5.61,6.39L4.67,7.33l3.33,3.33 L11.33,7.33z"/></svg></button>
             <button id="btn-night-mode" disabled data-tooltip="Switch to Night Mode">${moonIcon}</button>
@@ -727,6 +756,26 @@ export class PlotsPanel {
         };
 
         let currentPlots = [];
+        let currentImageSrc = '';
+
+        // Pan and Zoom State
+        let scale = 1;
+        let translateX = 0;
+        let translateY = 0;
+
+        function updateTransform() {
+            const img = document.getElementById('main-image');
+            if (img) {
+                img.style.transform = \`translate(\${translateX}px, \${translateY}px) scale(\${scale})\`;
+            }
+        }
+
+        function resetZoom() {
+            scale = 1;
+            translateX = 0;
+            translateY = 0;
+            updateTransform();
+        }
 
         function renderState(state) {
             document.body.classList.toggle('minimized', !!state.minimized);
@@ -736,13 +785,20 @@ export class PlotsPanel {
             const plotBg = state.isNightMode ? '#C8C8C8' : 'white';
 
             if (hasPlots) {
-                mainImg.src = state.plots[state.currentIndex];
+                const newSrc = state.plots[state.currentIndex];
+                if (currentImageSrc !== newSrc) {
+                    currentImageSrc = newSrc;
+                    mainImg.src = newSrc;
+                    resetZoom();
+                }
                 mainImg.style.background = plotBg;
                 mainImg.style.display = 'block';
                 emptyState.style.display = 'none';
             } else {
+                currentImageSrc = '';
                 mainImg.style.display = 'none';
                 emptyState.style.display = 'block';
+                resetZoom();
             }
 
             const sidebar = document.getElementById('thumbnail-sidebar');
@@ -786,6 +842,9 @@ export class PlotsPanel {
                 else btn.removeAttribute('disabled');
             };
 
+            toggleDisabled('btn-zoom-in', !hasPlots);
+            toggleDisabled('btn-zoom-out', !hasPlots);
+            toggleDisabled('btn-reset-zoom', !hasPlots);
             toggleDisabled('btn-copy', !hasPlots);
             toggleDisabled('btn-save', !hasPlots);
             toggleDisabled('btn-night-mode', !hasPlots);
@@ -873,6 +932,93 @@ export class PlotsPanel {
                     setTimeout(() => btn.innerHTML = oldHtml, 1000);
                 } catch (err) {
                     console.error('Clipboard failed', err);
+                }
+            });
+
+            // Zoom and Pan Logic
+            const plotArea = document.querySelector('.plot-area');
+
+            function applyZoom(zoomFactor, mouseX, mouseY) {
+                const img = document.getElementById('main-image');
+                if (!img || img.style.display === 'none') return;
+
+                let newScale = scale * zoomFactor;
+                if (newScale < 0.1) newScale = 0.1;
+                if (newScale > 50) newScale = 50;
+
+                const actualZoomFactor = newScale / scale;
+                const rect = img.getBoundingClientRect();
+                const plotRect = plotArea.getBoundingClientRect();
+
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+
+                const viewportCenterX = plotRect.left + plotRect.width / 2;
+                const viewportCenterY = plotRect.top + plotRect.height / 2;
+
+                const cx = mouseX !== undefined ? mouseX : viewportCenterX;
+                const cy = mouseY !== undefined ? mouseY : viewportCenterY;
+
+                // Adjust translate so the point under the cursor stays in place
+                translateX += (cx - centerX) * (1 - actualZoomFactor);
+                translateY += (cy - centerY) * (1 - actualZoomFactor);
+
+                scale = newScale;
+                updateTransform();
+            }
+
+            plotArea.addEventListener('wheel', (e) => {
+                const img = document.getElementById('main-image');
+                if (!img || img.style.display === 'none') return;
+                e.preventDefault();
+
+                const zoomIntensity = 0.002;
+                const zoomFactor = Math.exp(-e.deltaY * zoomIntensity);
+                applyZoom(zoomFactor, e.clientX, e.clientY);
+            }, { passive: false });
+
+            let isDragging = false;
+            let dragStartX, dragStartY;
+
+            plotArea.addEventListener('mousedown', (e) => {
+                if (e.button !== 0) return; // Only drag with left click
+                const img = document.getElementById('main-image');
+                if (!img || img.style.display === 'none') return;
+                
+                isDragging = true;
+                dragStartX = e.clientX - translateX;
+                dragStartY = e.clientY - translateY;
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                e.preventDefault();
+                translateX = e.clientX - dragStartX;
+                translateY = e.clientY - dragStartY;
+                updateTransform();
+            });
+
+            window.addEventListener('mouseup', () => {
+                if (isDragging) {
+                    isDragging = false;
+                }
+            });
+            
+            plotArea.addEventListener('dblclick', resetZoom);
+
+            document.getElementById('btn-zoom-in')?.addEventListener('click', () => {
+                if (!document.getElementById('btn-zoom-in').hasAttribute('disabled')) {
+                    applyZoom(1.2);
+                }
+            });
+            document.getElementById('btn-zoom-out')?.addEventListener('click', () => {
+                if (!document.getElementById('btn-zoom-out').hasAttribute('disabled')) {
+                    applyZoom(1 / 1.2);
+                }
+            });
+            document.getElementById('btn-reset-zoom')?.addEventListener('click', () => {
+                if (!document.getElementById('btn-reset-zoom').hasAttribute('disabled')) {
+                    resetZoom();
                 }
             });
 
