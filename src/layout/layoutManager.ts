@@ -45,6 +45,7 @@ let statusBarItem: vscode.StatusBarItem;
 let extensionContext: vscode.ExtensionContext;
 let currentAnchorUri: string | undefined;
 let cachedWorkspaceRoots: string[] = [];
+let dvWatcher: vscode.FileSystemWatcher | undefined;
 
 export function getRConsoleTerminal(): vscode.Terminal | undefined {
     return rConsoleTerminal;
@@ -171,7 +172,7 @@ export function registerLayoutCommand(
     // Run Smart: Run selection if there is one, otherwise source file.
     const doRunSmart = async () => {
         const editor = vscode.window.activeTextEditor;
-        if (!editor) return;
+        if (!editor) {return;}
         if (!editor.selection.isEmpty && editor.document.getText(editor.selection).trim()) {
             await doRunSelection();
         } else {
@@ -772,7 +773,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                 // Creating directly into the editor group causes intermittent blank ConPTY terminals on Windows.
                 location: isWindows ? undefined : { viewColumn: vscode.ViewColumn.Two },
                 env: strictEnvArgs,
-                strictEnv: true, // Prevents Python extension from applying its EnvironmentVariableCollection and crashing PTY
+                strictEnv: !isWindows, // Prevents Python extension from applying its EnvironmentVariableCollection and crashing PTY
                 cwd: cwdPath, // Prevents PTY hang in no-workspace mode
                 iconPath: vscode.Uri.joinPath(context.extensionUri, 'resources', 'r_logo.svg'),
             });
@@ -889,6 +890,40 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         dataPanel.loadVariable(varName);
         dataPanel.reveal();
     });
+
+    if (!dvWatcher) {
+        const wf = getEffectiveWorkspaceRoot();
+        const pattern = new vscode.RelativePattern(vscode.Uri.file(path.join(wf, '.r_layout')), 'dv-meta.txt');
+        dvWatcher = vscode.workspace.createFileSystemWatcher(pattern);
+        dvWatcher.onDidChange(async () => {
+            if (!isLayoutActive) return;
+            const metaPath = path.join(wf, '.r_layout', 'dv-meta.txt');
+            try {
+                const raw = fs.readFileSync(metaPath, 'utf8');
+                let varName = '';
+                if (raw.startsWith('ERROR:')) {
+                    // Do nothing in the background watcher on error! 
+                    // Let the error print to the R console instead of forcing the UI open.
+                    return;
+                } else {
+                    const lines = raw.trim().split('\n');
+                    if (lines.length > 2) {
+                        if (lines[2] === '3D') {
+                            varName = lines[lines.length - 1].trim();
+                        } else if (lines[2] === '2D') {
+                            varName = lines[3].trim();
+                        }
+                    }
+                }
+                if (varName) {
+                    const dvp = DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
+                    dvp.loadVariable(varName, true);
+                    dvp.reveal();
+                }
+            } catch {}
+        });
+        context.subscriptions.push(dvWatcher);
+    }
 
 
     // 12. Focus the source editor
@@ -1658,6 +1693,18 @@ if (exists(".First", envir = .GlobalEnv)) {
   tryCatch({
     obj <- get(varName, envir = .GlobalEnv)
     
+    is3D <- is.array(obj) && length(dim(obj)) == 3
+    if (!is3D && !is.data.frame(obj) && !is.matrix(obj)) {
+      if (is.list(obj) && is.null(dim(obj))) {
+        if (is.null(names(obj))) {
+          names(obj) <- paste0("[[", 1:length(obj), "]]")
+        }
+      } else if (is.null(dim(obj)) || length(dim(obj)) == 1) {
+        obj <- as.data.frame(obj, check.names = FALSE)
+        if (ncol(obj) == 1) colnames(obj) <- varName
+      }
+    }
+
     if (is.null(colnames(obj)) && !is.null(ncol(obj))) {
       if (is.data.frame(obj)) {
         colnames(obj) <- paste0("#", 1:ncol(obj))
@@ -1697,7 +1744,8 @@ if (exists(".First", envir = .GlobalEnv)) {
         as.character(ncol(obj)),
         "3D",
         as.character(nslices),
-        slice_labels
+        slice_labels,
+        varName
       ), .rlayout_meta)
       
     } else {
@@ -1706,10 +1754,12 @@ if (exists(".First", envir = .GlobalEnv)) {
         obj <- as.data.frame(obj, check.names = FALSE)
       }
       write.csv(head(obj, 1000), .rlayout_csv, row.names = TRUE, na = "NA")
-      writeLines(c(as.character(nrow(obj)), as.character(ncol(obj)), "2D"), .rlayout_meta)
+      writeLines(c(as.character(nrow(obj)), as.character(ncol(obj)), "2D", varName), .rlayout_meta)
     }
   }, error = function(e) {
+    message("Error in View: ", conditionMessage(e))
     writeLines(paste0("ERROR:", conditionMessage(e)), .rlayout_meta)
+    .rlayout_active_df_to_export <<- NULL
   })
   invisible(NULL)
 }

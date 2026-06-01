@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { getNonce, escapeHtml } from '../utils/webviewUtils';
 
 /**
  * Problems Panel - a WebviewPanel (editor tab) that mirrors
@@ -312,15 +313,4 @@ function severityIcon(severity: vscode.DiagnosticSeverity): string {
     }
 }
 
-function escapeHtml(text: string): string {
-    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
 
-function getNonce(): string {
-    let text = '';
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    for (let i = 0; i < 32; i++) {
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
-    }
-    return text;
-}

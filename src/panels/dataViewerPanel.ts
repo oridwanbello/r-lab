@@ -4,6 +4,7 @@ import * as nodePath from 'path';
 import * as nodeFs from 'fs';
 import { execFile } from 'child_process';
 import { getRscriptPath } from '../utils/rPathResolver';
+import { getNonce, escapeHtml } from '../utils/webviewUtils';
 
 /**
  * Data Viewer Panel - displays R data.frames in a sortable HTML table.
@@ -358,7 +359,7 @@ export class DataViewerPanel {
         } else {
             const headerCells = this._columns
                 .map((col, i) => {
-                    if (i === 0) return `<th data-col="0" class="sortable row-num"><span class="col-name"></span><span class="sort-icon">⏶⏷</span></th>`;
+                    if (i === 0) {return `<th data-col="0" class="sortable row-num"><span class="col-name"></span><span class="sort-icon">⏶⏷</span></th>`;}
                     return `<th data-col="${i}" class="sortable"><span class="col-name">${escapeHtml(col)}</span><span class="sort-icon">⏶⏷</span></th>`;
                 })
                 .join('');
@@ -733,15 +734,4 @@ export class DataViewerPanel {
 
 //  Utility
 
-function escapeHtml(text: string): string {
-    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
 
-function getNonce(): string {
-    let text = '';
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    for (let i = 0; i < 32; i++) {
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
-    }
-    return text;
-}

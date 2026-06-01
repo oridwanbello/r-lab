@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { getNonce } from '../utils/webviewUtils';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -388,10 +389,10 @@ tryCatch({
         attachedNamespaces: string[];
     } | null {
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        if (!wf) return null;
+        if (!wf) {return null;}
 
         const vsRDir = path.join(wf, '.vscode', 'vscode-R');
-        if (!fs.existsSync(vsRDir)) return null;
+        if (!fs.existsSync(vsRDir)) {return null;}
 
         try {
             const activeJsonPath = path.join(vsRDir, 'active.json');
@@ -416,7 +417,7 @@ tryCatch({
                 }
             }
 
-            if (!sessionDir || !fs.existsSync(sessionDir)) return null;
+            if (!sessionDir || !fs.existsSync(sessionDir)) {return null;}
 
             const variables: VariableInfo[] = [];
             const globalEnvPath = path.join(sessionDir, 'globalenv.json');
@@ -1176,11 +1177,3 @@ tryCatch({
     }
 }
 
-function getNonce(): string {
-    let text = '';
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    for (let i = 0; i < 32; i++) {
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
-    }
-    return text;
-}

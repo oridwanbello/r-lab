@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { getNonce, escapeHtml } from '../utils/webviewUtils';
 import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -142,7 +143,7 @@ export class HelpPanel {
         // Use intToUtf8(c(...)) to safely inject arbitrary strings into R script
         // without risking Windows command line quoting nightmares.
         const toRString = (str: string) => {
-            if (!str) return '""';
+            if (!str) {return '""';}
             const codes = Array.from(str).map(c => c.charCodeAt(0)).join(',');
             return `intToUtf8(c(${codes}))`;
         };
@@ -950,15 +951,4 @@ function stripTerminalFormatting(text: string): string {
         .replace(/\x08/g, '');
 }
 
-function escapeHtml(text: string): string {
-    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
 
-function getNonce(): string {
-    let text = '';
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    for (let i = 0; i < 32; i++) {
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
-    }
-    return text;
-}
