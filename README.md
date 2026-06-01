@@ -25,14 +25,15 @@ One click to transform your editor into an asymmetrical 3-pane grid:
 A live variable inspector that synchronizes with your R session to display:
 
 - Active variables, types, and values.
-- Direct interaction with the Data Viewer for dataframes and tibbles.
+- Direct interaction with the Data Viewer for dataframes, tibbles, and 2D/3D matrices.
 
 ### Plot Gallery
 
 A high-fidelity rendering panel for your R plots:
 
 - **Auto-Sync**: Automatically detects and displays new plots generated from the console.
-- **Save-As**: Export any plot to PNG or SVG with white-background enforcement.
+- **Interactive Zoom & Pan**: Easily inspect plots using scroll/pinch-to-zoom (anchored to mouse cursor) and click-and-drag panning, complete with precision toolbar controls.
+- **Advanced Export Menu**: Export plots with vector formats (`PDF`, `SVG`, `EPS`) or raster formats (`PNG`, `JPG`), custom dimensions, intelligent unit conversion (inches/pixels), and background preservation.
 - **History**: Navigate through your session's plot history with dedicated controls.
 
 ### Data Viewer
@@ -62,9 +63,11 @@ A modern diagnostic inspector that anchors the top-right pane:
 ## Getting Started
 
 ### Prerequisites
+
 - **vscode-R**: You must have the [vscode-R](https://marketplace.visualstudio.com/items?itemName=REditorSupport.r) extension installed. R Layout relies on it for code execution and providing live workspace data. (It will be installed automatically if you install R Layout from the marketplace).
 
 ### Installation
+
 1. Install the extension from the VS Code Marketplace.
 2. Open a workspace.
 3. Click the "R Layout" button in the Status Bar, or run "Toggle R Layout" from the Command Palette.
@@ -129,11 +132,11 @@ src/
 
 The following trademarks and logos used in this extension are the property of their respective owners:
 
-- **[R Logo](https://www.r-project.org/logo/)**: Copyright © 2016 The R Foundation. Licensed under [CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
-- **[Tidyverse](https://tidyverse.org/)**: Trademark of Posit Software, PBC.
-- **[Bioconductor](https://bioconductor.org/)**: Trademark of the Bioconductor Project.
-- **[RDocumentation](https://www.rdocumentation.org/)**: Copyright © DataCamp, Inc.
+- [R Logo](https://www.r-project.org/logo/) : Copyright © 2016 The R Foundation. Licensed under [CC-BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+- [Tidyverse](https://tidyverse.org/) : Trademark of Posit Software, PBC.
+- [Bioconductor](https://bioconductor.org/) : Trademark of the Bioconductor Project.
+- [RDocumentation](https://www.rdocumentation.org/) : Copyright © DataCamp, Inc.
 
 ## License
 
-MIT
+[MIT License](LICENSE.txt)

@@ -123,7 +123,7 @@ export class PlotsPanel {
                         this.clear();
                         break;
                     case 'saveAs':
-                        this._handleSaveAs();
+                        this._handleSaveAs((msg as any).format, (msg as any).width, (msg as any).height, (msg as any).unit);
                         break;
                     case 'deleteCurrent':
                         this._handleDeleteCurrent();
@@ -219,7 +219,9 @@ export class PlotsPanel {
         // User-specified directories must not be modified - we only display them.
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
         const rLayoutDir = path.join(wf, '.r_layout');
-        if (!uri.fsPath.startsWith(rLayoutDir)) {
+        const relative = path.relative(rLayoutDir, uri.fsPath);
+        const isInside = relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+        if (!isInside) {
             vscode.window.showWarningMessage(
                 'Deletion is only permitted for plots in the .r_layout directory. ' +
                 'To remove plots from a custom folder, delete them manually.'
@@ -237,21 +239,36 @@ export class PlotsPanel {
         }
     }
 
-    private async _handleSaveAs(): Promise<void> {
+    private async _handleSaveAs(format: string, widthStr: string, heightStr: string, unit: string): Promise<void> {
         if (this._currentIndex < 0) { return; }
         const sourceUri = this._plots[this._currentIndex];
 
+        const filterName = format.toUpperCase();
+        const ext = format;
         const saveUri = await vscode.window.showSaveDialog({
-            defaultUri: vscode.Uri.file(path.basename(sourceUri.fsPath)),
-            filters: { 'Images': ['png'] }
+            defaultUri: vscode.Uri.file(path.basename(sourceUri.fsPath).replace('.png', `.${ext}`)),
+            filters: { [filterName]: [ext] }
         });
 
         if (saveUri) {
             try {
-                fs.copyFileSync(sourceUri.fsPath, saveUri.fsPath);
-                vscode.window.showInformationMessage(`Plot saved to ${saveUri.fsPath}`);
+                // Plot ID is the basename without extension, e.g., 'plot_00002'
+                const plotId = path.basename(sourceUri.fsPath, '.png');
+                const plotDir = path.dirname(sourceUri.fsPath);
+                const reqPath = path.join(plotDir, '..', '.plot_req');
+                const reqContent = [
+                    plotId,
+                    format,
+                    widthStr,
+                    heightStr,
+                    unit,
+                    saveUri.fsPath
+                ].join('\n');
+
+                fs.writeFileSync(reqPath, reqContent, 'utf8');
+                vscode.window.showInformationMessage(`Exporting plot to ${saveUri.fsPath}...`);
             } catch (err: any) {
-                vscode.window.showErrorMessage(`Failed to save plot: ${err.message}`);
+                vscode.window.showErrorMessage(`Failed to export plot: ${err.message}`);
             }
         }
     }
@@ -383,7 +400,7 @@ export class PlotsPanel {
 
     private _postState(): void {
         const plots = this._plots.map(uri => this._panel.webview.asWebviewUri(uri).toString() + `?t=${Date.now()}`);
-        
+
         const effectiveRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
         const homedir = os.homedir();
         let defaultDir = effectiveRoot;
@@ -578,7 +595,6 @@ export class PlotsPanel {
             border-radius: 6px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
             transition: background-color 0.2s ease;
-            will-change: transform;
             pointer-events: none; /* Let drag events fall through to the area */
         }
         .empty-state {
@@ -679,6 +695,72 @@ export class PlotsPanel {
             color: var(--vscode-textLink-foreground) !important;
             opacity: 1 !important;
         }
+        .export-dropdown {
+            position: absolute;
+            top: 32px;
+            right: 48px;
+            background: var(--vscode-editorHoverWidget-background, #252526);
+            border: 1px solid var(--vscode-editorHoverWidget-border, #454545);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            border-radius: 6px;
+            padding: 12px;
+            display: none;
+            z-index: 1000;
+            flex-direction: column;
+            gap: 10px;
+            width: 220px;
+        }
+        .export-dropdown.open {
+            display: flex;
+        }
+        .export-dropdown label {
+            font-size: 0.9em;
+            opacity: 0.9;
+            display: block;
+            margin-bottom: 4px;
+        }
+        .export-dropdown select, .export-dropdown input {
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border, transparent);
+            padding: 4px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            outline: none;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .export-dropdown input {
+            padding-left: 10px;
+        }
+        .export-dropdown select {
+            padding-right: 32px;
+        }
+        .export-dropdown select:focus, .export-dropdown input:focus {
+            border-color: var(--vscode-focusBorder);
+        }
+        .export-dropdown .row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .export-dropdown .row > div {
+            flex: 1;
+        }
+        .export-dropdown .btn-export {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 6px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 4px;
+            text-align: center;
+            font-size: 0.9em;
+        }
+        .export-dropdown .btn-export:hover {
+            background: var(--vscode-button-hoverBackground);
+        }
     </style>
 </head>
 <body${this._isMinimized ? ' class="minimized"' : ''}>
@@ -689,17 +771,17 @@ export class PlotsPanel {
             <button id="btn-next" disabled data-tooltip="Next Plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M4.646 1.646L3.939 2.354 9.586 8l-5.647 5.646.707.708L11 8 4.646 1.646z"/></svg></button>
             <button id="btn-zoom-in" disabled data-tooltip="Zoom In">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2">
-                    <circle cx="7" cy="7" r="4.5" />
-                    <line x1="10.2" y1="10.2" x2="14.2" y2="14.2" stroke-width="1.5" stroke-linecap="round"/>
-                    <line x1="4.5" y1="7" x2="9.5" y2="7" />
-                    <line x1="7" y1="4.5" x2="7" y2="9.5" />
+                    <circle cx="7" cy="7" r="6" />
+                    <line x1="11.2" y1="11.2" x2="14.8" y2="14.8" stroke-width="1.5" stroke-linecap="round"/>
+                    <line x1="4" y1="7" x2="10" y2="7" />
+                    <line x1="7" y1="4" x2="7" y2="10" />
                 </svg>
             </button>
             <button id="btn-zoom-out" disabled data-tooltip="Zoom Out">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2">
-                    <circle cx="7" cy="7" r="4.5" />
-                    <line x1="10.2" y1="10.2" x2="14.2" y2="14.2" stroke-width="1.5" stroke-linecap="round"/>
-                    <line x1="4.5" y1="7" x2="9.5" y2="7" />
+                    <circle cx="7" cy="7" r="6" />
+                    <line x1="11.2" y1="11.2" x2="14.8" y2="14.8" stroke-width="1.5" stroke-linecap="round"/>
+                    <line x1="4" y1="7" x2="10" y2="7" />
                 </svg>
             </button>
             <button id="btn-reset-zoom" disabled data-tooltip="Reset Zoom">
@@ -727,6 +809,38 @@ export class PlotsPanel {
             <button id="btn-set-view-dir" class="">Set View Dir</button>
             <button id="btn-set-out-view-dir" class="">Set View/Out Dir</button>
         </div>
+    </div>
+    <div id="export-dropdown" class="export-dropdown">
+        <div class="row">
+            <div>
+                <label>Format</label>
+                <select id="export-format">
+                    <option value="pdf">PDF</option>
+                    <option value="svg">SVG</option>
+                    <option value="eps">EPS</option>
+                    <option value="png">PNG</option>
+                    <option value="jpg">JPG</option>
+                </select>
+            </div>
+            <div>
+                <label>Units</label>
+                <select id="export-unit">
+                    <option value="in">in</option>
+                    <option value="px">px</option>
+                </select>
+            </div>
+        </div>
+        <div class="row">
+            <div>
+                <label>Width</label>
+                <input type="text" id="export-width" value="8" />
+            </div>
+            <div>
+                <label>Height</label>
+                <input type="text" id="export-height" value="6" />
+            </div>
+        </div>
+        <button id="btn-export-confirm" class="btn-export">Export Plot</button>
     </div>
     <div id="tooltip" class="tooltip"></div>
     <div class="main-container">
@@ -906,9 +1020,75 @@ export class PlotsPanel {
                     vscode.postMessage({ type: 'deleteCurrent' });
                 }
             });
-            document.getElementById('btn-save')?.addEventListener('click', () => {
-                if (!document.getElementById('btn-save').hasAttribute('disabled')) {
-                    vscode.postMessage({ type: 'saveAs' });
+            const btnSave = document.getElementById('btn-save');
+            const exportDropdown = document.getElementById('export-dropdown');
+            const formatSelect = document.getElementById('export-format');
+            const unitSelect = document.getElementById('export-unit');
+            const widthInput = document.getElementById('export-width');
+            const heightInput = document.getElementById('export-height');
+
+            btnSave?.addEventListener('click', (e) => {
+                if (!btnSave.hasAttribute('disabled')) {
+                    e.stopPropagation();
+                    exportDropdown.classList.toggle('open');
+                    document.getElementById('dir-dropdown').classList.remove('open');
+                }
+            });
+
+            let currentUnit = unitSelect.value;
+
+            formatSelect.addEventListener('change', () => {
+                const isRaster = formatSelect.value === 'png' || formatSelect.value === 'jpg';
+                if (isRaster) {
+                    unitSelect.value = 'px';
+                    widthInput.value = '1600';
+                    heightInput.value = '1200';
+                } else {
+                    unitSelect.value = 'in';
+                    widthInput.value = '8';
+                    heightInput.value = '6';
+                }
+                currentUnit = unitSelect.value;
+            });
+
+            unitSelect.addEventListener('change', () => {
+                const w = parseFloat(widthInput.value) || 0;
+                const h = parseFloat(heightInput.value) || 0;
+                if (currentUnit === 'in' && unitSelect.value === 'px') {
+                    widthInput.value = Math.round(w * 300).toString();
+                    heightInput.value = Math.round(h * 300).toString();
+
+                    const isRaster = formatSelect.value === 'png' || formatSelect.value === 'jpg';
+                    if (!isRaster) {
+                        formatSelect.value = 'png';
+                    }
+                } else if (currentUnit === 'px' && unitSelect.value === 'in') {
+                    widthInput.value = Number((w / 300).toFixed(2)).toString();
+                    heightInput.value = Number((h / 300).toFixed(2)).toString();
+
+                    const isRaster = formatSelect.value === 'png' || formatSelect.value === 'jpg';
+                    if (isRaster) {
+                        formatSelect.value = 'pdf';
+                    }
+                }
+                currentUnit = unitSelect.value;
+            });
+
+            document.getElementById('btn-export-confirm')?.addEventListener('click', () => {
+                exportDropdown.classList.remove('open');
+                vscode.postMessage({
+                    type: 'saveAs',
+                    format: formatSelect.value,
+                    unit: unitSelect.value,
+                    width: widthInput.value,
+                    height: heightInput.value
+                });
+            });
+
+            // Close dropdowns on outside click
+            document.addEventListener('click', (e) => {
+                if (!exportDropdown.contains(e.target) && e.target !== btnSave && !btnSave.contains(e.target)) {
+                    exportDropdown.classList.remove('open');
                 }
             });
             document.getElementById('btn-night-mode')?.addEventListener('click', () => {
@@ -984,7 +1164,7 @@ export class PlotsPanel {
                 if (e.button !== 0) return; // Only drag with left click
                 const img = document.getElementById('main-image');
                 if (!img || img.style.display === 'none') return;
-                
+
                 isDragging = true;
                 dragStartX = e.clientX - translateX;
                 dragStartY = e.clientY - translateY;
@@ -1003,7 +1183,7 @@ export class PlotsPanel {
                     isDragging = false;
                 }
             });
-            
+
             plotArea.addEventListener('dblclick', resetZoom);
 
             document.getElementById('btn-zoom-in')?.addEventListener('click', () => {
@@ -1098,6 +1278,24 @@ export class PlotsPanel {
                 el.addEventListener('mouseleave', () => {
                     tooltip.style.display = 'none';
                 });
+            });
+
+            // Keyboard Navigation for Plots
+            window.addEventListener('keydown', (e) => {
+                // Do not trigger if typing in an input field
+                if (e.target && e.target.tagName === 'INPUT') return;
+
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                    const btnPrev = document.getElementById('btn-prev');
+                    if (btnPrev && !btnPrev.hasAttribute('disabled')) {
+                        vscode.postMessage({ type: 'navigatePrev' });
+                    }
+                } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                    const btnNext = document.getElementById('btn-next');
+                    if (btnNext && !btnNext.hasAttribute('disabled')) {
+                        vscode.postMessage({ type: 'navigateNext' });
+                    }
+                }
             });
 
             // Immediate minimize/restore handler

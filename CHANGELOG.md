@@ -2,10 +2,20 @@
 
 All notable changes to the R Layout extension will be documented in this file.
 
-## [0.3.7] - 2026-05-31
+## [0.3.7] - 2026-06-01
 
 ### Added
 
+- **Plot Zoom & Pan**: Introduced interactive zoom and pan support in the Plots panel.
+  - Scroll and pinch-to-zoom anchored to the mouse pointer.
+  - Drag-to-pan functionality to navigate large or zoomed-in plots.
+  - Precision toolbar buttons for Zoom In, Zoom Out, and Reset Zoom that dynamically target the center of the current visible viewport.
+  - Sharp, theme-responsive custom line-art SVG icons for all zoom and reset controls.
+- **Advanced Export Formatting**: Implemented a comprehensive high-quality plot export menu in the Plots panel.
+  - Support for vector graphics formats (`PDF`, `SVG`, `EPS`) and raster formats (`PNG`, `JPG`).
+  - Added a symmetric 2x2 grid UI for selecting Format, Units (inches or pixels), Width, and Height.
+  - Intelligent unit switching: Auto-switches to pixels (`px`) for raster images and inches (`in`) for vector formats.
+  - Automatic R backend parsing to correctly render requested dimensions across all graphics devices.
 - **Matrix Support**: Added proper support for viewing 2D and 3D matrices in the Workspace Explorer and Data Viewer. Matrices now show the eye icon and format correctly when viewed.
 
 ## [0.3.6] - 2026-05-30

@@ -1537,7 +1537,48 @@ function _buildWatcherRprofile(): string | undefined {
     writeLines(unique(c(search(), paste0("package:", .def_pkgs))), "${absAttachedTsv}")
   }, error = function(e) NULL)`;
 
-
+    const plotExportCode = `
+      .plot_req_path <- file.path("${absOutDir}", ".plot_req")
+      if (file.exists(.plot_req_path)) {
+        try({
+          .req <- readLines(.plot_req_path, warn = FALSE)
+          if (length(.req) >= 6) {
+            .pid <- .req[1]
+            .fmt <- .req[2]
+            .w <- as.numeric(.req[3])
+            .h <- as.numeric(.req[4])
+            .unit <- .req[5]
+            .dest <- .req[6]
+            .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
+            .rds_file <- file.path(.out_dir, paste0(.pid, ".rds"))
+            if (file.exists(.rds_file)) {
+              .p_obj <- readRDS(.rds_file)
+              
+              .w_in <- .w
+              .h_in <- .h
+              if (.unit == "cm") { .w_in <- .w / 2.54; .h_in <- .h / 2.54 }
+              if (.unit == "mm") { .w_in <- .w / 25.4; .h_in <- .h / 25.4 }
+              if (.unit == "px") { .w_in <- .w / 300; .h_in <- .h / 300 }
+              
+              if (.fmt == "pdf") {
+                pdf(file = .dest, width = .w_in, height = .h_in)
+              } else if (.fmt == "svg") {
+                svg(filename = .dest, width = .w_in, height = .h_in)
+              } else if (.fmt == "eps") {
+                postscript(file = .dest, width = .w_in, height = .h_in, horizontal = FALSE, onefile = FALSE, paper = "special")
+              } else if (.fmt == "png") {
+                png(filename = .dest, width = .w, height = .h, units = .unit, res = 300, bg = "white")
+              } else if (.fmt == "jpeg" || .fmt == "jpg") {
+                jpeg(filename = .dest, width = .w, height = .h, units = .unit, res = 300, bg = "white")
+              }
+              try(replayPlot(.p_obj), silent = TRUE)
+              dev.off()
+            }
+          }
+          unlink(.plot_req_path)
+        }, silent = TRUE)
+      }
+    `;
 
     const rCode = `
 # R Layout workspace watcher - auto-loaded via R_PROFILE_USER
@@ -1699,7 +1740,7 @@ invisible(local({
       }
 
       # 2. Check for manual view requests from the extension
-      .view_req_path <- file.path("${outDir}", ".view_request")
+      .view_req_path <- file.path("${absOutDir}", ".view_request")
       if (file.exists(.view_req_path)) {
         try({
           .var_req <- readLines(.view_req_path, warn = FALSE)
@@ -1711,6 +1752,8 @@ invisible(local({
           unlink(.view_req_path)
         }, silent = TRUE)
       }
+
+      ${plotExportCode}
 
       # 2. Capture plots quietly
       if (dev.cur() > 1) {
@@ -1725,8 +1768,10 @@ invisible(local({
             .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
             dir.create(.out_dir, showWarnings = FALSE, recursive = TRUE)
             .file <- file.path(.out_dir, sprintf("plot_%05d.png", .rlayout_current_plot_id))
+            .rds_file <- file.path(.out_dir, sprintf("plot_%05d.rds", .rlayout_current_plot_id))
+            try(saveRDS(.p, .rds_file), silent = TRUE)
             # Explicitly set background to white for the generated PNG file
-            png(filename = .file, width = 800, height = 600, res = 100, bg = "white")
+            png(filename = .file, width = 1600, height = 1200, res = 200, bg = "white")
             try(replayPlot(.p), silent = TRUE)
             dev.off()
           }
@@ -1742,7 +1787,7 @@ invisible(local({
 
 # 7. Setup Background View Request Watcher (if 'later' package is installed)
 invisible(local({
-  .has_later_file <- file.path("${outDir}", ".has_later")
+  .has_later_file <- file.path("${absOutDir}", ".has_later")
   if (requireNamespace("later", quietly = TRUE)) {
     file.create(.has_later_file)
     .rlayout_loop <- function() {
@@ -1750,7 +1795,7 @@ invisible(local({
         if (file.exists(.has_later_file)) unlink(.has_later_file)
         return(invisible())
       }
-      .view_req_path <- file.path("${outDir}", ".view_request")
+      .view_req_path <- file.path("${absOutDir}", ".view_request")
       if (file.exists(.view_req_path)) {
         try({
           .var_req <- readLines(.view_req_path, warn = FALSE)
@@ -1762,6 +1807,8 @@ invisible(local({
           unlink(.view_req_path)
         }, silent = TRUE)
       }
+      
+      ${plotExportCode}
       if ("later" %in% loadedNamespaces()) {
         try(later::later(.rlayout_loop, 0.2), silent = TRUE)
       } else {
