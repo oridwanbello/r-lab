@@ -4,5 +4,4 @@ node_modules
 .vscode-test/
 *.vsix
 .r_layout/
-.temp/
 .DS_Store

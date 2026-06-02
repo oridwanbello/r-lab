@@ -895,11 +895,19 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         const wf = getEffectiveWorkspaceRoot();
         const pattern = new vscode.RelativePattern(vscode.Uri.file(path.join(wf, '.r_layout')), 'dv-meta.txt');
         dvWatcher = vscode.workspace.createFileSystemWatcher(pattern);
-        dvWatcher.onDidChange(async () => {
+        const dvHandler = async () => {
             if (!isLayoutActive) return;
             const metaPath = path.join(wf, '.r_layout', 'dv-meta.txt');
             try {
-                const raw = fs.readFileSync(metaPath, 'utf8');
+                let raw = '';
+                // Windows watchers often fire on file creation before content is fully flushed.
+                // Poll briefly until the file has content.
+                for (let i = 0; i < 5; i++) {
+                    raw = fs.readFileSync(metaPath, 'utf8');
+                    if (raw.trim().length > 0) break;
+                    await new Promise(r => setTimeout(r, 100));
+                }
+                
                 let varName = '';
                 if (raw.startsWith('ERROR:')) {
                     // Do nothing in the background watcher on error! 
@@ -921,7 +929,9 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                     dvp.reveal();
                 }
             } catch {}
-        });
+        };
+        dvWatcher.onDidChange(dvHandler);
+        dvWatcher.onDidCreate(dvHandler);
         context.subscriptions.push(dvWatcher);
     }
 
@@ -1691,6 +1701,8 @@ if (exists(".First", envir = .GlobalEnv)) {
 .r_layout_view_data <- function(varName) {
   .rlayout_active_df_to_export <<- varName
   tryCatch({
+    unlink(.rlayout_meta)
+    unlink(.rlayout_csv)
     obj <- get(varName, envir = .GlobalEnv)
     
     is3D <- is.array(obj) && length(dim(obj)) == 3

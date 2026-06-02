@@ -18,6 +18,12 @@ All notable changes to the R Layout extension will be documented in this file.
   - Automatic R backend parsing to correctly render requested dimensions across all graphics devices.
 - **Matrix Support**: Added proper support for viewing 2D and 3D matrices in the Workspace Explorer and Data Viewer. Matrices now show the eye icon and format correctly when viewed.
 
+### Fixed
+
+- **Windows Data Viewer Race Condition**: Fixed a bug where running `View()` on Windows would intermittently show stale data and an incorrect variable name in the UI due to the OS triggering file watcher events before R had completely flushed the CSV to disk.
+- **Plots Panel Image Loading**: Resolved an intermittent issue on Windows where newly generated plots would occasionally show a broken thumbnail icon in the sidebar due to aggressive file system watcher allocation. The extension now strictly polls file size before passing plots to the webview.
+- **Copy Plot Feature**: Fixed a bug where the "Copy Plot" button silently failed. It now executes native OS commands (PowerShell on Windows, AppleScript on macOS) to cleanly push high-resolution plot images straight into the system clipboard.
+
 ## [0.3.6] - 2026-05-30
 
 ### Fixed

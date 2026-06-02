@@ -3,6 +3,7 @@ import { getNonce } from '../utils/webviewUtils';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as child_process from 'child_process';
 import { getRConsoleTerminal } from '../layout/layoutManager';
 
 /**
@@ -139,6 +140,9 @@ export class PlotsPanel {
                     case 'setOutViewDir':
                         this._handleSetCustomDir((msg as any).path, true);
                         break;
+                    case 'copyImage':
+                        this._handleCopyImage();
+                        break;
                     case 'browseCustomDir':
                         this._handleBrowseCustomDir();
                         break;
@@ -274,6 +278,28 @@ export class PlotsPanel {
         }
     }
 
+    private async _handleCopyImage(): Promise<void> {
+        if (this._plots.length === 0 || this._currentIndex < 0 || this._currentIndex >= this._plots.length) return;
+        const currentPlotPath = this._plots[this._currentIndex].fsPath;
+        
+        try {
+            const platform = os.platform();
+            if (platform === 'darwin') {
+                // macOS: copy as TIFF because JPEG/PNG sometimes loses transparency depending on the clipboard consumer
+                child_process.execSync(`osascript -e 'set the clipboard to (read (POSIX file "${currentPlotPath}") as TIFF picture)'`);
+            } else if (platform === 'win32') {
+                // Windows: use PowerShell
+                child_process.execSync(`powershell -command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::SetImage([System.Drawing.Image]::FromFile('${currentPlotPath}'))"`);
+            } else {
+                // Linux: requires xclip
+                child_process.execSync(`xclip -selection clipboard -t image/png -i "${currentPlotPath}"`);
+            }
+            vscode.window.showInformationMessage('Plot copied to clipboard');
+        } catch (e: any) {
+            vscode.window.showErrorMessage(`Failed to copy plot to clipboard: ${e.message || e}`);
+        }
+    }
+
     // File System Watcher
 
     private _startWatcher(): void {
@@ -306,11 +332,22 @@ export class PlotsPanel {
         );
 
         this._watcher = vscode.workspace.createFileSystemWatcher(pattern);
-        this._watcher.onDidCreate((uri) => {
-            // Guard against duplicates: the watcher can fire for pre-existing files
-            // on some platforms (especially in no-workspace mode), which would double
-            // the plots already populated by syncPlots().
+        this._watcher.onDidCreate(async (uri) => {
+            // Guard against duplicates
             if (this._plots.some(p => p.fsPath === uri.fsPath)) { return; }
+
+            // Windows race condition prevention (Rule #15): 
+            // Wait for R to finish flushing the image file to disk before exposing it to the UI.
+            for (let i = 0; i < 10; i++) {
+                try {
+                    const stats = fs.statSync(uri.fsPath);
+                    if (stats.size > 0) break;
+                } catch (e) {
+                    // ignore ENOENT if OS hasn't materialized it yet
+                }
+                await new Promise(r => setTimeout(r, 100));
+            }
+
             this._plots.push(uri);
             this._currentIndex = this._plots.length - 1;
             this._render();
@@ -920,7 +957,7 @@ export class PlotsPanel {
             if (state.plots.length !== currentPlots.length) {
                 const scrollTop = sidebar.scrollTop;
                 sidebar.innerHTML = state.plots.map((url, i) =>
-                    \`<img src="\${url}" class="thumbnail \${i === state.currentIndex ? 'active' : ''}" data-index="\${i}" loading="lazy" style="background: \${plotBg}" />\`
+                    \`<img src="\${url}" class="thumbnail \${i === state.currentIndex ? 'active' : ''}" data-index="\${i}" style="background: \${plotBg}" onerror="if(!this.dataset.retried){this.dataset.retried='true'; setTimeout(()=>this.src='\${url}', 200);}" />\`
                 ).join('');
                 sidebar.scrollTop = scrollTop;
                 currentPlots = state.plots;
@@ -1097,23 +1134,14 @@ export class PlotsPanel {
                     vscode.postMessage({ type: 'toggleNightMode' });
                 }
             });
-            document.getElementById('btn-copy')?.addEventListener('click', async () => {
+            document.getElementById('btn-copy')?.addEventListener('click', () => {
                 if (document.getElementById('btn-copy').hasAttribute('disabled')) return;
-                const img = document.querySelector('.plot-area img');
-                if (!img || img.style.display === 'none') return;
-                try {
-                    const response = await fetch(img.src);
-                    const blob = await response.blob();
-                    await navigator.clipboard.write([
-                        new ClipboardItem({ 'image/png': blob })
-                    ]);
-                    const btn = document.getElementById('btn-copy');
-                    const oldHtml = btn.innerHTML;
-                    btn.innerHTML = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M6.5 12.2L2.1 7.8l.7-.7 3.7 3.7 7.4-7.4.7.7-8.1 8.1z"/></svg>';
-                    setTimeout(() => btn.innerHTML = oldHtml, 1000);
-                } catch (err) {
-                    console.error('Clipboard failed', err);
-                }
+                vscode.postMessage({ type: 'copyImage' });
+                
+                const btn = document.getElementById('btn-copy');
+                const oldHtml = btn.innerHTML;
+                btn.innerHTML = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M6.5 12.2L2.1 7.8l.7-.7 3.7 3.7 7.4-7.4.7.7-8.1 8.1z"/></svg>';
+                setTimeout(() => btn.innerHTML = oldHtml, 1000);
             });
 
             // Zoom and Pan Logic
