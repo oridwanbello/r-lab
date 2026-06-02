@@ -87,8 +87,8 @@ export class DataViewerPanel {
                 switch (msg.type) {
                     case 'refresh':
                         if (this._varName) {
-                            // Manual refresh just re-reads the disk (silent).
-                            await this.loadVariable(this._varName, true);
+                            // Manual refresh triggers a full R re-export.
+                            await this.loadVariable(this._varName, false);
                         }
                         break;
                     case 'setSlice':
@@ -181,8 +181,8 @@ export class DataViewerPanel {
             }
         }
 
-        // Poll for the meta file (up to 10 s if manual, 0s if auto).
-        const metaRaw = await this._waitForFile(tmpMeta, isAutoRefresh ? 0 : 10000);
+        // Poll for the meta file (up to 10s if manual, 2s if auto to handle OS buffering).
+        const metaRaw = await this._waitForFile(tmpMeta, isAutoRefresh ? 2000 : 10000);
         if (metaRaw === null) {
             if (!isAutoRefresh) {
                 this._errorMessage = 'Timed out waiting for R to export data. Check the R Console for errors.';
@@ -203,25 +203,32 @@ export class DataViewerPanel {
             if (metaLines[2] === '3D') {
                 this._is3D = true;
                 this._totalSlices = parseInt(metaLines[3], 10) || 1;
-                this._sliceLabels = metaLines.slice(4).map(s => s.trim());
+                this._sliceLabels = metaLines.slice(4, metaLines.length - 1).map(s => s.trim());
+                this._varName = metaLines[metaLines.length - 1].trim(); // Extract true variable name
                 if (!isAutoRefresh) {
                     this._currentSlice = 1;
                 }
                 
                 const sliceCsvPath = nodePath.join(outDir, `dv_slice_${this._currentSlice}.csv`);
-                if (nodeFs.existsSync(sliceCsvPath)) {
-                    const csvRaw = nodeFs.readFileSync(sliceCsvPath, 'utf8');
-                    this._loadCsvData(csvRaw);
-                } else {
-                    throw new Error(`Slice file ${sliceCsvPath} not found.`);
+                // On Windows, slice CSV may still be locked when meta watcher fires.
+                const csvRaw = await this._waitForCsvReady(sliceCsvPath, 3000);
+                if (csvRaw === null) {
+                    throw new Error(`Slice file ${sliceCsvPath} not found or not ready.`);
                 }
+                this._loadCsvData(csvRaw);
             } else {
                 this._is3D = false;
                 this._totalSlices = 1;
                 this._currentSlice = 1;
                 this._sliceLabels = [];
+                this._varName = metaLines[3].trim(); // Extract true variable name
                 const tmpCsv = nodePath.join(outDir, 'dv.csv');
-                const csvRaw = nodeFs.readFileSync(tmpCsv, 'utf8');
+                // On Windows, the CSV may still be locked/partially-written when
+                // the meta file watcher fires. Poll until the file is readable.
+                const csvRaw = await this._waitForCsvReady(tmpCsv, 3000);
+                if (csvRaw === null) {
+                    throw new Error('Timed out waiting for CSV data file to be written.');
+                }
                 this._loadCsvData(csvRaw);
             }
             this._errorMessage = '';
@@ -246,19 +253,63 @@ export class DataViewerPanel {
         });
     }
 
-    /** Poll for a file to appear, return its contents or null on timeout. */
+    /**
+     * Poll for a CSV file to become readable and have a valid header row.
+     * This handles the Windows FS flush race where the meta (signal) file
+     * is visible before the bulk CSV data is fully written to disk.
+     */
+    private _waitForCsvReady(filePath: string, timeoutMs: number): Promise<string | null> {
+        return new Promise((resolve) => {
+            const start = Date.now();
+            const interval = setInterval(() => {
+                try {
+                    if (nodeFs.existsSync(filePath)) {
+                        const raw = nodeFs.readFileSync(filePath, 'utf8');
+                        // A valid CSV must have at least a header line with a comma
+                        if (raw.trim().length > 0 && raw.includes(',')) {
+                            clearInterval(interval);
+                            resolve(raw);
+                            return;
+                        }
+                    }
+                } catch {
+                    // ignore ENOENT / EBUSY during write
+                }
+                if (Date.now() - start > timeoutMs) {
+                    clearInterval(interval);
+                    // Last-chance read attempt
+                    try {
+                        const raw = nodeFs.readFileSync(filePath, 'utf8');
+                        resolve(raw.trim().length > 0 ? raw : null);
+                    } catch {
+                        resolve(null);
+                    }
+                }
+            }, 100);
+        });
+    }
+
     private _waitForFile(filePath: string, timeoutMs: number): Promise<string | null> {
         return new Promise((resolve) => {
             const start = Date.now();
             const interval = setInterval(() => {
-                if (nodeFs.existsSync(filePath)) {
-                    clearInterval(interval);
-                    resolve(nodeFs.readFileSync(filePath, 'utf8'));
-                } else if (Date.now() - start > timeoutMs) {
+                try {
+                    if (nodeFs.existsSync(filePath)) {
+                        const raw = nodeFs.readFileSync(filePath, 'utf8');
+                        if (raw.trim().length > 0) {
+                            clearInterval(interval);
+                            resolve(raw);
+                            return;
+                        }
+                    }
+                } catch {
+                    // ignore ENOENT during write
+                }
+                if (Date.now() - start > timeoutMs) {
                     clearInterval(interval);
                     resolve(null);
                 }
-            }, 200);
+            }, 100); // 100ms interval for faster auto-refresh response
         });
     }
 
@@ -484,6 +535,7 @@ export class DataViewerPanel {
             background: var(--vscode-editor-background);
             font-family: var(--vscode-font-family);
             font-weight: 600; font-style: italic; 
+            letter-spacing: 0.5px;
             color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 65%); 
             opacity: 1;
             cursor: pointer; user-select: none;
@@ -505,6 +557,7 @@ export class DataViewerPanel {
             padding-right: 8px !important;
             font-family: var(--vscode-font-family);
             font-weight: 600; font-style: italic;
+            letter-spacing: 0.5px;
             color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 65%);
         }
         th.row-num {
@@ -512,6 +565,7 @@ export class DataViewerPanel {
             padding-right: 8px !important;
             font-family: var(--vscode-font-family);
             font-weight: 600; font-style: italic;
+            letter-spacing: 0.5px;
             color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 65%);
             left: 0;
             z-index: 3;
@@ -524,6 +578,7 @@ export class DataViewerPanel {
             text-align: right;
             padding-right: 8px !important;
             font-style: italic;
+            letter-spacing: 0.5px;
             font-family: var(--vscode-font-family);
             color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 65%);
         }

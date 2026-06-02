@@ -902,11 +902,20 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                 let raw = '';
                 // Windows watchers often fire on file creation before content is fully flushed.
                 // Poll briefly until the file has content.
-                for (let i = 0; i < 5; i++) {
-                    raw = fs.readFileSync(metaPath, 'utf8');
-                    if (raw.trim().length > 0) break;
+                for (let i = 0; i < 10; i++) {
+                    try {
+                        raw = fs.readFileSync(metaPath, 'utf8');
+                        if (raw.trim().length > 0) break;
+                    } catch {
+                        // ignore ENOENT during write
+                    }
                     await new Promise(r => setTimeout(r, 100));
                 }
+                
+                if (raw.trim().length === 0) return;
+
+                // Strip Windows \r\n line endings
+                raw = raw.replace(/\r/g, '');
                 
                 let varName = '';
                 if (raw.startsWith('ERROR:')) {
@@ -1794,12 +1803,8 @@ View <- function(x, title) {
 invisible(local({
   if (!any(vapply(getTaskCallbackNames(), function(n) n == ".r_layout.watcher", logical(1)))) {
     addTaskCallback(function(expr, value, ok, visible) {
-      # 1. Update Data Viewer quietly if active
-      if (!is.null(.rlayout_active_df_to_export) && exists(.rlayout_active_df_to_export, envir = .GlobalEnv)) {
-        try({
-          .r_layout_view_data(.rlayout_active_df_to_export)
-        }, silent = TRUE)
-      }
+      # Data Viewer auto-update was removed to conserve resources.
+      # Users must click the Refresh button to manually re-load variables.
 
       # 2. Check for manual view requests from the extension
       .view_req_path <- file.path("${absOutDir}", ".view_request")

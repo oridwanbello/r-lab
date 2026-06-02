@@ -608,6 +608,7 @@ tryCatch({
             text-align: left;
             font-weight: 600;
             font-style: italic;
+            letter-spacing: 0.5px;
             text-transform: none;
             background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
