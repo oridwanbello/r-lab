@@ -7,6 +7,7 @@ import { HelpPanel } from '../panels/helpPanel';
 import { ProblemsPanel } from '../panels/problemsPanel';
 import { WorkspacePanel } from '../panels/workspacePanel';
 import { DataViewerPanel } from '../panels/dataViewerPanel';
+import { ViewerPanel } from '../panels/viewerPanel';
 import { getRPath, getRArgs } from '../utils/rPathResolver';
 
 /**
@@ -46,6 +47,7 @@ let extensionContext: vscode.ExtensionContext;
 let currentAnchorUri: string | undefined;
 let cachedWorkspaceRoots: string[] = [];
 let dvWatcher: vscode.FileSystemWatcher | undefined;
+let viewerWatcher: vscode.FileSystemWatcher | undefined;
 
 export function getRConsoleTerminal(): vscode.Terminal | undefined {
     return rConsoleTerminal;
@@ -82,6 +84,18 @@ export function registerLayoutCommand(
     context.subscriptions.push(statusBarItem);
 
     // Layout Toggle Command
+    context.subscriptions.push(
+        vscode.commands.registerCommand("r-layout.activate", () => {
+            activateLayout(context);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand("r-layout.focusViewer", () => {
+            ViewerPanel.currentPanel?.reveal();
+        })
+    );
+
     context.subscriptions.push(
         vscode.commands.registerCommand('r-layout.toggleLayout', async () => {
             if (isLayoutActive) {
@@ -219,6 +233,7 @@ export function registerLayoutCommand(
             WorkspacePanel.currentPanel?.setMinimized(true);
             PlotsPanel.currentPanel?.setMinimized(true);
             DataViewerPanel.currentPanel?.setMinimized(true);
+            ViewerPanel.currentPanel?.setMinimized(true);
             await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', true);
         }),
         vscode.commands.registerCommand('r-layout.restoreRightSplit', async () => {
@@ -230,6 +245,7 @@ export function registerLayoutCommand(
             WorkspacePanel.currentPanel?.setMinimized(false);
             PlotsPanel.currentPanel?.setMinimized(false);
             DataViewerPanel.currentPanel?.setMinimized(false);
+            ViewerPanel.currentPanel?.setMinimized(false);
 
             // Two-step restore:
             // 1) Read current layout (pixel values at current window scale),
@@ -547,7 +563,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     //    We preserve TabInputText so the user's source files remain open.
     for (const group of vscode.window.tabGroups.all) {
         for (const tab of group.tabs) {
-            const disposablePanels = ['Workspace', 'Plots', 'Data Viewer', 'Problems'];
+            const disposablePanels = ['Workspace', 'Plots', 'Data Viewer', 'Viewer', 'Problems'];
             if (disposablePanels.includes(tab.label)) {
                 try { await vscode.window.tabGroups.close(tab); } catch {}
             }
@@ -874,8 +890,8 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         await vscode.commands.executeCommand('workbench.action.firstEditorInGroup');
     } catch {}
 
-    // 11. Group 3 (bottom-right): Workspace → Plots → Data Viewer  (Workspace FIRST, Workspace FOCUSED)
-    //     Create Workspace first (leftmost tab), then Plots, then Data Viewer.
+    // 11. Group 3 (bottom-right): Workspace → Plots → Data Viewer → Viewer (Workspace FIRST, Workspace FOCUSED)
+    //     Create Workspace first (leftmost tab), then Plots, then Data Viewer, then Viewer.
     //     Reveal Workspace at the end to make it the active/focused tab.
     const workspacePanel = WorkspacePanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
     // Note: forceRefresh() is deferred (see end of activation) to give the webview
@@ -883,6 +899,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     const plotsPanel = PlotsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
     plotsPanel.syncPlots(); // catch up on any plots created while layout was closed
     const dataPanel = DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
+    const viewerPanel = ViewerPanel.createOrShow(context.extensionUri, undefined, vscode.ViewColumn.Three);
     workspacePanel.reveal(); // restore Workspace as the focused tab in Group 3
 
     // Wire up: clicking "View" on a data.frame in Workspace opens it in Data Viewer
@@ -890,6 +907,37 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         dataPanel.loadVariable(varName);
         dataPanel.reveal();
     });
+
+    if (!viewerWatcher) {
+        const wf = getEffectiveWorkspaceRoot();
+        const pattern = new vscode.RelativePattern(vscode.Uri.file(path.join(wf, '.r_layout')), 'viewer_url.txt');
+        viewerWatcher = vscode.workspace.createFileSystemWatcher(pattern);
+        const viewerHandler = async () => {
+            if (!isLayoutActive) return;
+            const urlPath = path.join(wf, '.r_layout', 'viewer_url.txt');
+            try {
+                let url = '';
+                // Wait for file creation + flush
+                for (let i = 0; i < 10; i++) {
+                    try {
+                        url = fs.readFileSync(urlPath, 'utf8');
+                        if (url.trim().length > 0) break;
+                    } catch {
+                        // ignore ENOENT
+                    }
+                    await new Promise(r => setTimeout(r, 100));
+                }
+                url = url.trim();
+                if (url) {
+                    const vp = ViewerPanel.createOrShow(context.extensionUri, url, vscode.ViewColumn.Three);
+                    vp.reveal();
+                }
+            } catch {}
+        };
+        viewerWatcher.onDidChange(viewerHandler);
+        viewerWatcher.onDidCreate(viewerHandler);
+        context.subscriptions.push(viewerWatcher);
+    }
 
     if (!dvWatcher) {
         const wf = getEffectiveWorkspaceRoot();
@@ -981,6 +1029,9 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     }
     if (panelPositions['dataViewer'] && panelPositions['dataViewer'] !== vscode.ViewColumn.Three) {
         DataViewerPanel.createOrShow(context.extensionUri, panelPositions['dataViewer']);
+    }
+    if (panelPositions['viewer'] && panelPositions['viewer'] !== vscode.ViewColumn.Three) {
+        ViewerPanel.createOrShow(context.extensionUri, undefined, panelPositions['viewer']);
     }
 
     // Reposition text files
@@ -1540,7 +1591,12 @@ function _buildWatcherRprofile(): string | undefined {
     .vars <- .vars[!grepl("^\\\\.rlayout_|^\\\\.r_layout|^null_dev$|^\\\\.First$|^\\\\.Last$|^\\\\.r_layout_view_data$|^View$", .vars)]
     .info <- if (length(.vars) == 0) character(0) else vapply(.vars, function(nm) {
       obj <- get(nm, envir = .GlobalEnv)
-      cls <- paste(class(obj), collapse = ", ")
+      cls_vec <- class(obj)
+      if (length(cls_vec) > 3) {
+        cls <- paste(c(cls_vec[1:2], "..."), collapse = ", ")
+      } else {
+        cls <- paste(cls_vec, collapse = ", ")
+      }
       dims <- if (!is.null(dim(obj))) paste(dim(obj), collapse = " x ") else as.character(length(obj))
       sz <- format(object.size(obj), units = "auto")
       sz <- sub(" bytes|Bytes", " B", sz)
@@ -1555,10 +1611,10 @@ function _buildWatcherRprofile(): string | undefined {
           type_lbl <- typeof(obj)
           if (type_lbl == "double") type_lbl <- "num" else if (type_lbl == "integer") type_lbl <- "int" else if (type_lbl == "character") type_lbl <- "chr" else if (type_lbl == "logical") type_lbl <- "logi"
           dim_ranges <- paste0("1:", dim(obj), collapse = ", ")
-          flat_vals <- as.vector(head(as.vector(obj), 5))
+          flat_vals <- as.vector(head(as.vector(obj), 3))
           if (typeof(obj) == "character") flat_vals <- paste0('"', flat_vals, '"')
           vals_str <- paste(flat_vals, collapse = " ")
-          if (length(obj) > 5) vals_str <- paste0(vals_str, " ...")
+          if (length(obj) > 3) vals_str <- paste0(vals_str, " ...")
           paste0(type_lbl, " [", dim_ranges, "] ", vals_str)
         } else if (is.list(obj)) {
           paste0("List of ", length(obj))
@@ -1667,21 +1723,105 @@ options(.rlayout_plot_dir = "${absPlotsDir}")
 null_dev <- if (.Platform$OS.type == "windows") "NUL" else "/dev/null"
 options(device = function(...) { pdf(file=null_dev, ...); dev.control("enable") })
 
+# Function to emit an SVG placeholder for interactive widgets
+.rlayout_emit_interactive_placeholder <- function() {
+  svg_content <- '<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2a2d3e"/><stop offset="100%" stop-color="#1e1e1e"/></linearGradient></defs><rect width="800" height="600" fill="url(#g)"/><g fill="none" stroke="#333" stroke-width="2"><path d="M0 100h800M0 200h800M0 300h800M0 400h800M0 500h800M100 0v600M200 0v600M300 0v600M400 0v600M500 0v600M600 0v600M700 0v600"/></g><g fill="#007acc" transform="translate(352, 170) scale(6)"><path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/><path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/></g><text x="400" y="340" fill="#007acc" font-family="sans-serif" font-size="36" text-anchor="middle">Open</text><text x="400" y="390" fill="#007acc" font-family="sans-serif" font-size="36" text-anchor="middle">Interactive Widget(s)</text></svg>'
+  
+  .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
+  if (!dir.exists(.out_dir)) dir.create(.out_dir, recursive = TRUE, showWarnings = FALSE)
+  
+  existing_placeholders <- list.files(.out_dir, pattern = "^plot_[0-9]{5}_interactive\\\\.svg$")
+  if (length(existing_placeholders) > 0) {
+      return()
+  }
+  
+  if (.rlayout_current_plot_id == 0) {
+    files <- list.files(.out_dir, pattern = "^plot_[0-9]{5}.*\\\\.(png|svg)$")
+    if (length(files) == 0) .rlayout_current_plot_id <<- 1
+    else {
+      nums <- as.numeric(sub("^plot_([0-9]{5}).*$", "\\\\1", files))
+      .rlayout_current_plot_id <<- max(nums, na.rm = TRUE) + 1
+    }
+  } else {
+    .rlayout_current_plot_id <<- .rlayout_current_plot_id + 1
+  }
+  
+  plot_name <- file.path(.out_dir, sprintf("plot_%05d_interactive.svg", .rlayout_current_plot_id))
+  writeLines(svg_content, plot_name)
+}
+
+# Hook HTML/Shiny viewer
+options(viewer = function(url, height = NULL) {
+  .viewer_req_path <- file.path("${absOutDir}", "viewer_url.txt")
+  writeLines(url, .viewer_req_path)
+  .rlayout_emit_interactive_placeholder()
+})
+options(page_viewer = function(url) {
+  .viewer_req_path <- file.path("${absOutDir}", "viewer_url.txt")
+  writeLines(url, .viewer_req_path)
+  .rlayout_emit_interactive_placeholder()
+})
+options(browser = function(url) {
+  .viewer_req_path <- file.path("${absOutDir}", "viewer_url.txt")
+  writeLines(url, .viewer_req_path)
+  .rlayout_emit_interactive_placeholder()
+})
+
 # Hook plot.new to increment plot ID. Instead of naive +1, we scan the directory
 # to find the highest existing plot number and append. This is safe for custom
 # directories and idempotent if multiple hooks fire for the same plot.
-.rlayout_update_plot_id <- function() {
-  .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
-  if (!dir.exists(.out_dir)) {
-    .rlayout_current_plot_id <<- 1
-    return()
+.rlayout_force_save_plot <- function() {
+  if (dev.cur() > 1) {
+    .p <- recordPlot()
+    if (!is.null(.p) && length(.p[[1]]) > 0) {
+      .hash <- sum(as.numeric(serialize(.p, NULL)))
+      if (!identical(.hash, .rlayout_last_plot_hash)) {
+        .rlayout_last_plot_hash <<- .hash
+        if (.rlayout_current_plot_id == 0) {
+          .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
+          if (!dir.exists(.out_dir)) {
+            .rlayout_current_plot_id <<- 1
+          } else {
+            files <- list.files(.out_dir, pattern = "^plot_[0-9]{5}.*\\\\.(png|svg)$")
+            if (length(files) == 0) .rlayout_current_plot_id <<- 1
+            else {
+              nums <- as.numeric(sub("^plot_([0-9]{5}).*$", "\\\\1", files))
+              .rlayout_current_plot_id <<- max(nums, na.rm = TRUE) + 1
+            }
+          }
+        }
+        .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
+        dir.create(.out_dir, showWarnings = FALSE, recursive = TRUE)
+        .file <- file.path(.out_dir, sprintf("plot_%05d.png", .rlayout_current_plot_id))
+        .rds_file <- file.path(.out_dir, sprintf("plot_%05d.rds", .rlayout_current_plot_id))
+        try(saveRDS(.p, .rds_file), silent = TRUE)
+        png(filename = .file, width = 1600, height = 1200, res = 200, bg = "white")
+        try(replayPlot(.p), silent = TRUE)
+        dev.off()
+      }
+    }
   }
-  files <- list.files(.out_dir, pattern = "^plot_[0-9]{5}\\\\.png$")
-  if (length(files) == 0) {
-    .rlayout_current_plot_id <<- 1
+}
+
+.rlayout_update_plot_id <- function() {
+  # Force save the PREVIOUS plot before we clear the device
+  tryCatch(.rlayout_force_save_plot(), error = function(e) {})
+
+  if (exists(".rlayout_current_plot_id", envir = .GlobalEnv) && .rlayout_current_plot_id > 0) {
+    .rlayout_current_plot_id <<- .rlayout_current_plot_id + 1
   } else {
-    nums <- as.numeric(sub("^plot_([0-9]{5})\\\\.png$", "\\\\1", files))
-    .rlayout_current_plot_id <<- max(nums, na.rm = TRUE) + 1
+    .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
+    if (!dir.exists(.out_dir)) {
+      .rlayout_current_plot_id <<- 1
+      return()
+    }
+    files <- list.files(.out_dir, pattern = "^plot_[0-9]{5}\\\\.png$")
+    if (length(files) == 0) {
+      .rlayout_current_plot_id <<- 1
+    } else {
+      nums <- as.numeric(sub("^plot_([0-9]{5})\\\\.png$", "\\\\1", files))
+      .rlayout_current_plot_id <<- max(nums, na.rm = TRUE) + 1
+    }
   }
 }
 setHook("before.plot.new", .rlayout_update_plot_id)
@@ -1823,27 +1963,7 @@ invisible(local({
       ${plotExportCode}
 
       # 2. Capture plots quietly
-      if (dev.cur() > 1) {
-        .p <- recordPlot()
-        if (!is.null(.p) && length(.p[[1]]) > 0) {
-          .hash <- sum(as.numeric(serialize(.p, NULL)))
-          if (!identical(.hash, .rlayout_last_plot_hash)) {
-            .rlayout_last_plot_hash <<- .hash
-            # If no plot ID yet (startup), calculate the next available ID safely
-            if (.rlayout_current_plot_id == 0) .rlayout_update_plot_id()
-            # Resolve output directory: user override via options() or default absolute plots dir
-            .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
-            dir.create(.out_dir, showWarnings = FALSE, recursive = TRUE)
-            .file <- file.path(.out_dir, sprintf("plot_%05d.png", .rlayout_current_plot_id))
-            .rds_file <- file.path(.out_dir, sprintf("plot_%05d.rds", .rlayout_current_plot_id))
-            try(saveRDS(.p, .rds_file), silent = TRUE)
-            # Explicitly set background to white for the generated PNG file
-            png(filename = .file, width = 1600, height = 1200, res = 200, bg = "white")
-            try(replayPlot(.p), silent = TRUE)
-            dev.off()
-          }
-        }
-      }
+      tryCatch(.rlayout_force_save_plot(), error = function(e) {})
 
       # 3. Snapshot Workspace
       ${snapshotCode}

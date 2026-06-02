@@ -990,7 +990,7 @@ tryCatch({
                         + '<td class="preview-col">' + escapeHtml(v.preview) + '</td>'
                         + '</tr>';
                 }).join('');
-                el.innerHTML = '<table><thead><tr><th class="frozen-col">Name</th><th>Type</th><th>Size</th><th>Value</th></tr></thead><tbody>' + rows + '</tbody></table>';
+                el.innerHTML = '<table><thead><tr><th class="frozen-col">Name</th><th>Class</th><th>Size</th><th>Value</th></tr></thead><tbody>' + rows + '</tbody></table>';
 
                 attachViewListeners();
             }

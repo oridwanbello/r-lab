@@ -140,6 +140,9 @@ export class PlotsPanel {
                     case 'setOutViewDir':
                         this._handleSetCustomDir((msg as any).path, true);
                         break;
+                    case 'openViewer':
+                        vscode.commands.executeCommand('r-layout.focusViewer');
+                        break;
                     case 'copyImage':
                         this._handleCopyImage();
                         break;
@@ -629,7 +632,6 @@ export class PlotsPanel {
             max-height: 100%;
             object-fit: contain;
             background: white;
-            padding: 16px;
             border-radius: 6px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
             transition: background-color 0.2s ease;
@@ -882,7 +884,7 @@ export class PlotsPanel {
     </div>
     <div id="tooltip" class="tooltip"></div>
     <div class="main-container">
-        <div class="plot-area">
+        <div class="plot-area" style="position: relative;">
             <img id="main-image" src="" alt="Plot" style="display: none;" />
             <div id="empty-state" class="empty-state">
                 <svg viewBox="0 0 16 16"><path fill="currentColor" d="M2 2h1v11h11v1H2V2zm3 8h2v3H5v-3zm3-4h2v7H8V6zm3-3h2v10h-2V3z"/></svg>
@@ -936,12 +938,55 @@ export class PlotsPanel {
             const emptyState = document.getElementById('empty-state');
             const plotBg = state.isNightMode ? '#C8C8C8' : 'white';
 
+            function getInteractiveSvgUri(isNightMode) {
+                const linkColor = getComputedStyle(document.documentElement).getPropertyValue('--vscode-textLink-foreground').trim() || '#007acc';
+                // Keep the background explicitly dark to differentiate from normal plots
+                const gridColor = '#333';
+                const bg1 = '#1e1e1e';
+                const bg2 = '#2a2d3e';
+
+                const svgStr = '<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">' +
+                    '<defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">' +
+                        '<stop offset="0%" stop-color="' + bg2 + '"/>' +
+                        '<stop offset="100%" stop-color="' + bg1 + '"/>' +
+                    '</linearGradient></defs>' +
+                    '<rect width="800" height="600" fill="url(#g)"/>' +
+                    '<g fill="none" stroke="' + gridColor + '" stroke-width="2">' +
+                        '<path d="M0 100h800M0 200h800M0 300h800M0 400h800M0 500h800M100 0v600M200 0v600M300 0v600M400 0v600M500 0v600M600 0v600M700 0v600"/>' +
+                    '</g>' +
+                    '<g fill="' + linkColor + '" transform="translate(352, 170) scale(6)">' +
+                        '<path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/>' +
+                        '<path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/>' +
+                    '</g>' +
+                    '<text x="400" y="340" fill="' + linkColor + '" font-family="sans-serif" font-size="36" text-anchor="middle">Open</text>' +
+                    '<text x="400" y="390" fill="' + linkColor + '" font-family="sans-serif" font-size="36" text-anchor="middle">Interactive Widget(s)</text>' +
+                '</svg>';
+                return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)));
+            }
+
             if (hasPlots) {
-                const newSrc = state.plots[state.currentIndex];
-                if (currentImageSrc !== newSrc) {
-                    currentImageSrc = newSrc;
+                const originalSrc = state.plots[state.currentIndex];
+                const isInteractive = originalSrc.includes('_interactive.svg');
+                const newSrc = isInteractive ? getInteractiveSvgUri(state.isNightMode) : originalSrc;
+                
+                let srcChanged = currentImageSrc !== originalSrc;
+                let themeChanged = window.__lastNightMode !== state.isNightMode;
+                window.__lastNightMode = state.isNightMode;
+
+                if (srcChanged || (isInteractive && themeChanged)) {
+                    currentImageSrc = originalSrc;
                     mainImg.src = newSrc;
-                    resetZoom();
+                    if (srcChanged) resetZoom();
+                    
+                    if (isInteractive) {
+                        mainImg.setAttribute('data-tooltip', 'Open in Viewer Tab');
+                        mainImg.style.cursor = 'pointer';
+                        mainImg.style.pointerEvents = 'auto'; // allow click to go through
+                    } else {
+                        mainImg.removeAttribute('data-tooltip');
+                        mainImg.style.cursor = '';
+                        mainImg.style.pointerEvents = 'none'; // allow drag through
+                    }
                 }
                 mainImg.style.background = plotBg;
                 mainImg.style.display = 'block';
@@ -954,11 +999,15 @@ export class PlotsPanel {
             }
 
             const sidebar = document.getElementById('thumbnail-sidebar');
+            let themeChangedThumb = window.__lastNightModeThumb !== state.isNightMode;
+            window.__lastNightModeThumb = state.isNightMode;
+
             if (state.plots.length !== currentPlots.length) {
                 const scrollTop = sidebar.scrollTop;
-                sidebar.innerHTML = state.plots.map((url, i) =>
-                    \`<img src="\${url}" class="thumbnail \${i === state.currentIndex ? 'active' : ''}" data-index="\${i}" style="background: \${plotBg}" onerror="if(!this.dataset.retried){this.dataset.retried='true'; setTimeout(()=>this.src='\${url}', 200);}" />\`
-                ).join('');
+                sidebar.innerHTML = state.plots.map((url, i) => {
+                    const thumbUrl = url.includes('_interactive.svg') ? getInteractiveSvgUri(state.isNightMode) : url;
+                    return \`<img src="\${thumbUrl}" class="thumbnail \${i === state.currentIndex ? 'active' : ''}" data-index="\${i}" style="background: \${plotBg}" onerror="if(!this.dataset.retried){this.dataset.retried='true'; setTimeout(()=>this.src='\${thumbUrl}', 200);}" />\`;
+                }).join('');
                 sidebar.scrollTop = scrollTop;
                 currentPlots = state.plots;
             } else {
@@ -967,6 +1016,10 @@ export class PlotsPanel {
                     t.style.background = plotBg;
                     if (i === state.currentIndex) t.classList.add('active');
                     else t.classList.remove('active');
+                    
+                    if (themeChangedThumb && state.plots[i].includes('_interactive.svg')) {
+                        t.src = getInteractiveSvgUri(state.isNightMode);
+                    }
                 });
             }
 
@@ -1110,6 +1163,12 @@ export class PlotsPanel {
                     }
                 }
                 currentUnit = unitSelect.value;
+            });
+
+            document.getElementById('main-image')?.addEventListener('click', (e) => {
+                if (currentImageSrc && currentImageSrc.includes('_interactive.svg')) {
+                    vscode.postMessage({ type: 'openViewer' });
+                }
             });
 
             document.getElementById('btn-export-confirm')?.addEventListener('click', () => {
@@ -1286,18 +1345,31 @@ export class PlotsPanel {
 
             // Instant Tooltip Controller
             const tooltip = document.getElementById('tooltip');
-            document.querySelectorAll('[data-tooltip]').forEach(el => {
+            const setupTooltip = (el) => {
+                if (!el) return;
                 el.addEventListener('mouseenter', (e) => {
                     const text = el.getAttribute('data-tooltip');
                     if (!text) return;
                     tooltip.textContent = text;
                     tooltip.style.display = 'block';
                     const rect = el.getBoundingClientRect();
-                    tooltip.style.top = (rect.bottom + 5) + 'px';
+                    
+                    if (el.id === 'main-image') {
+                        // Place tooltip near the top middle to avoid obscuring the center text
+                        tooltip.style.top = (rect.top + 20) + 'px';
+                    } else {
+                        tooltip.style.top = (rect.bottom + 5) + 'px';
+                    }
 
                     // Boundary detection
                     const padding = 10;
                     let left = rect.left + (rect.width/2) - (tooltip.offsetWidth/2);
+                    
+                    if (el.id === 'main-image') {
+                        // For large images, just center it in the window width if image spans the whole width
+                        left = window.innerWidth / 2 - tooltip.offsetWidth / 2;
+                    }
+                    
                     if (left < padding) left = padding;
                     if (left + tooltip.offsetWidth > window.innerWidth - padding) {
                         left = window.innerWidth - tooltip.offsetWidth - padding;
@@ -1307,7 +1379,10 @@ export class PlotsPanel {
                 el.addEventListener('mouseleave', () => {
                     tooltip.style.display = 'none';
                 });
-            });
+            };
+
+            document.querySelectorAll('[data-tooltip]').forEach(setupTooltip);
+            setupTooltip(document.getElementById('main-image'));
 
             // Keyboard Navigation for Plots
             window.addEventListener('keydown', (e) => {

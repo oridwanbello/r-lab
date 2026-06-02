@@ -6,6 +6,11 @@ All notable changes to the R Layout extension will be documented in this file.
 
 ### Added
 
+- **HTML Widget & Shiny App Viewer**: Introduced a brand new "Viewer" tab to natively host R's `viewer()` output (such as `htmlwidgets` and Shiny apps) directly within the VS Code layout.
+  - **Local Proxying**: Safely proxies localhost URLs from the R session into a sandboxed VS Code iframe.
+  - **Navigation & Controls**: Includes a dedicated toolbar for navigating back/forward through widget history, refreshing the current widget, and popping the widget out to an external browser.
+  - **Workspace Integration**: The Workspace Explorer now actively detects active `htmlwidget` objects and displays a distinct blue globe icon, allowing one-click rendering directly into the Viewer tab.
+  - **Consistent UX**: Implemented a "Night Mode" toggle identical to the Plots panel, allowing users to switch the background of bright widgets to a dimmed gray for eye comfort.
 - **Plot Zoom & Pan**: Introduced interactive zoom and pan support in the Plots panel.
   - Scroll and pinch-to-zoom anchored to the mouse pointer.
   - Drag-to-pan functionality to navigate large or zoomed-in plots.
@@ -20,7 +25,7 @@ All notable changes to the R Layout extension will be documented in this file.
 
 ### Fixed
 
-- **Windows Data Viewer Race Condition**: Fixed a bug where running `View()` on Windows would intermittently show stale data and an incorrect variable name in the UI due to the OS triggering file watcher events before R had completely flushed the CSV to disk.
+- **Windows Data Viewer Race Condition**: Fixed a bug where running `View()` or clicking the manual Refresh button on Windows would intermittently show stale data and an incorrect variable name in the UI due to the OS triggering file watcher events before R had completely flushed the CSV to disk.
 - **Plots Panel Image Loading**: Resolved an intermittent issue on Windows where newly generated plots would occasionally show a broken thumbnail icon in the sidebar due to aggressive file system watcher allocation. The extension now strictly polls file size before passing plots to the webview.
 - **Copy Plot Feature**: Fixed a bug where the "Copy Plot" button silently failed. It now executes native OS commands (PowerShell on Windows, AppleScript on macOS) to cleanly push high-resolution plot images straight into the system clipboard.
 
