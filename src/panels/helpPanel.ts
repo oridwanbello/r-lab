@@ -54,7 +54,13 @@ export class HelpPanel {
     }
 
     public reveal(column?: vscode.ViewColumn, preserveFocus?: boolean): void {
-        this._panel.reveal(column, preserveFocus);
+        if (!this._panel.visible) {
+            const activeEditor = vscode.window.activeTextEditor;
+            if (activeEditor && activeEditor.viewColumn === this._panel.viewColumn) {
+                return;
+            }
+            this._panel.reveal(column, preserveFocus);
+        }
     }
 
     // State Serialization

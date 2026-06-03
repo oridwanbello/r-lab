@@ -116,7 +116,12 @@ export function registerLayoutCommand(
     // It also overrides r.runSource so the R extension's built-in
     // "Run Source" button routes to our terminal instead of a generic shell.
     const doSourceFile = async () => {
-        const editor = vscode.window.activeTextEditor;
+        let editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            const visibleEditors = vscode.window.visibleTextEditors;
+            editor = visibleEditors.find(e => e.viewColumn === vscode.ViewColumn.One) || visibleEditors[0];
+        }
+
         const filePath = editor?.document.uri.fsPath;
         if (!filePath) {
             vscode.window.showWarningMessage('No active file to source.');
@@ -153,7 +158,12 @@ export function registerLayoutCommand(
     // Run Selection in R Console
     // This command sends the currently selected text to the R Console.
     const doRunSelection = async () => {
-        const editor = vscode.window.activeTextEditor;
+        let editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            const visibleEditors = vscode.window.visibleTextEditors;
+            editor = visibleEditors.find(e => e.viewColumn === vscode.ViewColumn.One) || visibleEditors[0];
+        }
+
         if (!editor) {
             return;
         }
@@ -185,7 +195,12 @@ export function registerLayoutCommand(
 
     // Run Smart: Run selection if there is one, otherwise source file.
     const doRunSmart = async () => {
-        const editor = vscode.window.activeTextEditor;
+        let editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            const visibleEditors = vscode.window.visibleTextEditors;
+            editor = visibleEditors.find(e => e.viewColumn === vscode.ViewColumn.One) || visibleEditors[0];
+        }
+        
         if (!editor) {return;}
         if (!editor.selection.isEmpty && editor.document.getText(editor.selection).trim()) {
             await doRunSelection();
@@ -561,11 +576,16 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     // 2. Close stale R Layout panels from previous sessions.
     //    We explicitly PRESERVE the Help tab and any Chat tabs so their sessions survive layout toggles.
     //    We preserve TabInputText so the user's source files remain open.
+    const config = vscode.workspace.getConfiguration('r-layout');
+    const restoreCustom = config.get<boolean>('restoreCustomPanelPositions', false);
+
     for (const group of vscode.window.tabGroups.all) {
         for (const tab of group.tabs) {
             const disposablePanels = ['Workspace', 'Plots', 'Data Viewer', 'Viewer', 'Problems'];
             if (disposablePanels.includes(tab.label)) {
-                try { await vscode.window.tabGroups.close(tab); } catch {}
+                if (!restoreCustom || tab.label === 'Problems') {
+                    try { await vscode.window.tabGroups.close(tab); } catch {}
+                }
             }
         }
     }
@@ -684,7 +704,6 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     //         currently focused editor group (Group 2). ✓
     //
     //    For NEW terminals, createTerminal with location.viewColumn is reliable.
-    const config = vscode.workspace.getConfiguration('r-layout');
     const useArk = config.get<boolean>('useArkInteractiveConsole', false);
 
     // 9a. Anchor Group 2 with ProblemsPanel before any terminal placement.
@@ -893,14 +912,17 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     // 11. Group 3 (bottom-right): Workspace → Plots → Data Viewer → Viewer (Workspace FIRST, Workspace FOCUSED)
     //     Create Workspace first (leftmost tab), then Plots, then Data Viewer, then Viewer.
     //     Reveal Workspace at the end to make it the active/focused tab.
-    const workspacePanel = WorkspacePanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
+    const workspacePanel = WorkspacePanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three, !restoreCustom);
     // Note: forceRefresh() is deferred (see end of activation) to give the webview
     // time to fully render before the message is posted.
-    const plotsPanel = PlotsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
+    const plotsPanel = PlotsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three, !restoreCustom);
     plotsPanel.syncPlots(); // catch up on any plots created while layout was closed
-    const dataPanel = DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
-    const viewerPanel = ViewerPanel.createOrShow(context.extensionUri, undefined, vscode.ViewColumn.Three);
-    workspacePanel.reveal(); // restore Workspace as the focused tab in Group 3
+    const dataPanel = DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three, !restoreCustom);
+    const viewerPanel = ViewerPanel.createOrShow(context.extensionUri, undefined, vscode.ViewColumn.Three, !restoreCustom);
+    
+    if (!restoreCustom) {
+        workspacePanel.reveal(); // restore Workspace as the focused tab in Group 3
+    }
 
     // Wire up: clicking "View" on a data.frame in Workspace opens it in Data Viewer
     workspacePanel.onRequestDataView((varName) => {
@@ -912,24 +934,43 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         const wf = getEffectiveWorkspaceRoot();
         const pattern = new vscode.RelativePattern(vscode.Uri.file(path.join(wf, '.r_layout')), 'viewer_url.txt');
         viewerWatcher = vscode.workspace.createFileSystemWatcher(pattern);
+        let lastViewerLineCount = 0;
+        
         const viewerHandler = async () => {
             if (!isLayoutActive) return;
             const urlPath = path.join(wf, '.r_layout', 'viewer_url.txt');
             try {
-                let url = '';
+                let content = '';
                 // Wait for file creation + flush
                 for (let i = 0; i < 10; i++) {
                     try {
-                        url = fs.readFileSync(urlPath, 'utf8');
-                        if (url.trim().length > 0) break;
+                        content = fs.readFileSync(urlPath, 'utf8');
+                        if (content.trim().length > 0) break;
                     } catch {
                         // ignore ENOENT
                     }
                     await new Promise(r => setTimeout(r, 100));
                 }
-                url = url.trim();
-                if (url) {
-                    const vp = ViewerPanel.createOrShow(context.extensionUri, url, vscode.ViewColumn.Three);
+                
+                const lines = content.split(/\r?\n/).filter(l => l.trim().length > 0);
+                
+                // Reset if file was truncated/cleared
+                if (lines.length < lastViewerLineCount) {
+                    lastViewerLineCount = 0;
+                }
+                
+                if (lines.length > lastViewerLineCount) {
+                    const newLines = lines.slice(lastViewerLineCount);
+                    lastViewerLineCount = lines.length;
+                    
+                    let vp = ViewerPanel.currentPanel;
+                    if (!vp) {
+                        vp = ViewerPanel.createOrShow(context.extensionUri, undefined, vscode.ViewColumn.Three);
+                    }
+                    
+                    for (const url of newLines) {
+                        await vp.loadUrl(url.trim());
+                    }
                     vp.reveal();
                 }
             } catch {}
@@ -1015,37 +1056,40 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     }
 
     // Reposition custom panels
-    if (panelPositions['problems'] && panelPositions['problems'] !== vscode.ViewColumn.Two) {
-        ProblemsPanel.createOrShow(context.extensionUri, panelPositions['problems']);
-    }
-    if (panelPositions['help'] && panelPositions['help'] !== vscode.ViewColumn.Two) {
-        HelpPanel.createOrShow(context.extensionUri, panelPositions['help']);
-    }
-    if (panelPositions['workspace'] && panelPositions['workspace'] !== vscode.ViewColumn.Three) {
-        WorkspacePanel.createOrShow(context.extensionUri, panelPositions['workspace']);
-    }
-    if (panelPositions['plots'] && panelPositions['plots'] !== vscode.ViewColumn.Three) {
-        PlotsPanel.createOrShow(context.extensionUri, panelPositions['plots']);
-    }
-    if (panelPositions['dataViewer'] && panelPositions['dataViewer'] !== vscode.ViewColumn.Three) {
-        DataViewerPanel.createOrShow(context.extensionUri, panelPositions['dataViewer']);
-    }
-    if (panelPositions['viewer'] && panelPositions['viewer'] !== vscode.ViewColumn.Three) {
-        ViewerPanel.createOrShow(context.extensionUri, undefined, panelPositions['viewer']);
-    }
+    const restoreCustomPositions = vscode.workspace.getConfiguration('r-layout').get<boolean>('restoreCustomPanelPositions', false);
+    if (restoreCustomPositions) {
+        if (panelPositions['problems'] && panelPositions['problems'] !== vscode.ViewColumn.Two) {
+            ProblemsPanel.createOrShow(context.extensionUri, panelPositions['problems']);
+        }
+        if (panelPositions['help'] && panelPositions['help'] !== vscode.ViewColumn.Two) {
+            HelpPanel.createOrShow(context.extensionUri, panelPositions['help']);
+        }
+        if (panelPositions['workspace'] && panelPositions['workspace'] !== vscode.ViewColumn.Three) {
+            WorkspacePanel.createOrShow(context.extensionUri, panelPositions['workspace']);
+        }
+        if (panelPositions['plots'] && panelPositions['plots'] !== vscode.ViewColumn.Three) {
+            PlotsPanel.createOrShow(context.extensionUri, panelPositions['plots']);
+        }
+        if (panelPositions['dataViewer'] && panelPositions['dataViewer'] !== vscode.ViewColumn.Three) {
+            DataViewerPanel.createOrShow(context.extensionUri, panelPositions['dataViewer']);
+        }
+        if (panelPositions['viewer'] && panelPositions['viewer'] !== vscode.ViewColumn.Three) {
+            ViewerPanel.createOrShow(context.extensionUri, undefined, panelPositions['viewer']);
+        }
 
-    // Reposition text files
-    if (openFiles.length > 0) {
-        for (const uri of openFiles) {
-            const col = textFilePositions[uri.fsPath];
-            if (col && col !== vscode.ViewColumn.One) {
-                try {
-                    await vscode.window.showTextDocument(uri, {
-                        viewColumn: col,
-                        preview: false,
-                        preserveFocus: true,
-                    });
-                } catch {}
+        // Reposition text files
+        if (openFiles.length > 0) {
+            for (const uri of openFiles) {
+                const col = textFilePositions[uri.fsPath];
+                if (col && col !== vscode.ViewColumn.One) {
+                    try {
+                        await vscode.window.showTextDocument(uri, {
+                            viewColumn: col,
+                            preview: false,
+                            preserveFocus: true,
+                        });
+                    } catch {}
+                }
             }
         }
     }
@@ -1564,7 +1608,13 @@ function _buildWatcherRprofile(): string | undefined {
     if (!fs.existsSync(outDir)) {
         fs.mkdirSync(outDir, { recursive: true });
     }
-    const plotsDir = path.join(outDir, 'plots');
+    const configPlotDir = vscode.workspace.getConfiguration('r-layout').get<string>('plotOutputDir') || '';
+    let plotsDir = path.join(outDir, 'plots');
+    if (configPlotDir.trim()) {
+        const resolved = configPlotDir.replace('~', os.homedir());
+        plotsDir = path.isAbsolute(resolved) ? path.normalize(resolved) : path.join(wf, resolved);
+    }
+
     if (!fs.existsSync(plotsDir)) {
         fs.mkdirSync(plotsDir, { recursive: true });
     }
@@ -1581,11 +1631,13 @@ function _buildWatcherRprofile(): string | undefined {
     const absVarsTsv = path.join(outDir, '.workspace_vars.tsv').replace(/\\/g, '/');
     const absLoadedTsv = path.join(outDir, '.workspace_loaded.tsv').replace(/\\/g, '/');
     const absAttachedTsv = path.join(outDir, '.workspace_attached.tsv').replace(/\\/g, '/');
+    const absVarsMeta = path.join(outDir, '.workspace_meta.txt').replace(/\\/g, '/');
 
     // Helper R code to snapshot the current workspace - used both at
     // startup and in the task callback. We use TSV to avoid base R JSON serialization issues.
     const snapshotCode = `
   tryCatch({
+    unlink("${absVarsMeta}")
     dir.create("${absPlotsDir}", showWarnings = FALSE, recursive = TRUE)
     .vars <- ls(envir = .GlobalEnv)
     .vars <- .vars[!grepl("^\\\\.rlayout_|^\\\\.r_layout|^null_dev$|^\\\\.First$|^\\\\.Last$|^\\\\.r_layout_view_data$|^View$", .vars)]
@@ -1678,6 +1730,7 @@ function _buildWatcherRprofile(): string | undefined {
     .def_pkgs <- getOption("defaultPackages", c("datasets", "utils", "grDevices", "graphics", "stats", "methods"))
     writeLines(unique(c(loadedNamespaces(), .def_pkgs)), "${absLoadedTsv}")
     writeLines(unique(c(search(), paste0("package:", .def_pkgs))), "${absAttachedTsv}")
+    writeLines("OK", "${absVarsMeta}")
   }, error = function(e) NULL)`;
 
     const plotExportCode = `
@@ -1697,22 +1750,37 @@ function _buildWatcherRprofile(): string | undefined {
             if (file.exists(.rds_file)) {
               .p_obj <- readRDS(.rds_file)
               
-              .w_in <- .w
-              .h_in <- .h
+              .res <- 300
               if (.unit == "cm") { .w_in <- .w / 2.54; .h_in <- .h / 2.54 }
-              if (.unit == "mm") { .w_in <- .w / 25.4; .h_in <- .h / 25.4 }
-              if (.unit == "px") { .w_in <- .w / 300; .h_in <- .h / 300 }
+              else if (.unit == "mm") { .w_in <- .w / 25.4; .h_in <- .h / 25.4 }
+              else if (.unit == "px") {
+                .base_res <- 150
+                .w_in <- .w / .base_res
+                .h_in <- .h / .base_res
+                if (.w_in < 5 || .h_in < 5) {
+                  .scale <- max(5 / .w_in, 5 / .h_in)
+                  .w_in <- .w_in * .scale
+                  .h_in <- .h_in * .scale
+                }
+                .res <- .w / .w_in
+              } else {
+                .w_in <- .w; .h_in <- .h
+              }
               
               if (.fmt == "pdf") {
-                pdf(file = .dest, width = .w_in, height = .h_in)
+                pdf(file = .dest, width = .w_in, height = .h_in, onefile = FALSE)
               } else if (.fmt == "svg") {
-                svg(filename = .dest, width = .w_in, height = .h_in)
+                svg(filename = .dest, width = .w_in, height = .h_in, onefile = FALSE)
               } else if (.fmt == "eps") {
-                postscript(file = .dest, width = .w_in, height = .h_in, horizontal = FALSE, onefile = FALSE, paper = "special")
+                if (capabilities("cairo")) {
+                  cairo_ps(filename = .dest, width = .w_in, height = .h_in, onefile = FALSE, fallback_resolution = 300)
+                } else {
+                  postscript(file = .dest, width = .w_in, height = .h_in, horizontal = FALSE, onefile = FALSE, paper = "special")
+                }
               } else if (.fmt == "png") {
-                png(filename = .dest, width = .w, height = .h, units = .unit, res = 300, bg = "white")
+                png(filename = .dest, width = .w, height = .h, units = .unit, res = .res, bg = "white")
               } else if (.fmt == "jpeg" || .fmt == "jpg") {
-                jpeg(filename = .dest, width = .w, height = .h, units = .unit, res = 300, bg = "white")
+                jpeg(filename = .dest, width = .w, height = .h, units = .unit, res = .res, bg = "white")
               }
               try(replayPlot(.p_obj), silent = TRUE)
               dev.off()
@@ -1775,7 +1843,7 @@ options(device = function(...) { pdf(file=null_dev, ...); dev.control("enable") 
 # Hook HTML/Shiny viewer
 options(viewer = function(url, height = NULL) {
   .viewer_req_path <- file.path("${absOutDir}", "viewer_url.txt")
-  writeLines(url, .viewer_req_path)
+  cat(url, "\n", file = .viewer_req_path, append = TRUE)
   
   # Only emit placeholder for htmlwidgets (which print to tempdir/viewhtml.../index.html)
   if (grepl("viewhtml.*(/|\\\\\\\\)index\\\\.html$", url)) {
@@ -1784,14 +1852,15 @@ options(viewer = function(url, height = NULL) {
 })
 options(page_viewer = function(url) {
   .viewer_req_path <- file.path("${absOutDir}", "viewer_url.txt")
-  writeLines(url, .viewer_req_path)
+  cat(url, "\n", file = .viewer_req_path, append = TRUE)
 })
 options(browser = function(url) {
   .viewer_req_path <- file.path("${absOutDir}", "viewer_url.txt")
-  writeLines(url, .viewer_req_path)
+  cat(url, "\n", file = .viewer_req_path, append = TRUE)
 })
 
 # Hook plot.new to increment plot ID safely by scanning directory
+.rlayout_advance_next_plot <- FALSE
 .rlayout_force_save_plot <- function() {
   if (dev.cur() > 1) {
     .p <- recordPlot()
@@ -1803,12 +1872,15 @@ options(browser = function(url) {
         .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
         dir.create(.out_dir, showWarnings = FALSE, recursive = TRUE)
         
-        files <- list.files(.out_dir, pattern = "^plot_[0-9]{5}.*\\\\.(png|svg)$")
-        if (length(files) == 0) {
-          .rlayout_current_plot_id <<- 1
-        } else {
-          nums <- as.numeric(sub("^plot_([0-9]{5}).*$", "\\\\1", files))
-          .rlayout_current_plot_id <<- max(nums, na.rm = TRUE) + 1
+        if (.rlayout_advance_next_plot || .rlayout_current_plot_id == 0) {
+          files <- list.files(.out_dir, pattern = "^plot_[0-9]{5}.*\\\\.(png|svg)$")
+          if (length(files) == 0) {
+            .rlayout_current_plot_id <<- 1
+          } else {
+            nums <- as.numeric(sub("^plot_([0-9]{5}).*$", "\\\\1", files))
+            .rlayout_current_plot_id <<- max(nums, na.rm = TRUE) + 1
+          }
+          .rlayout_advance_next_plot <<- FALSE
         }
         
         .file <- file.path(.out_dir, sprintf("plot_%05d.png", .rlayout_current_plot_id))
@@ -1825,6 +1897,7 @@ options(browser = function(url) {
 .rlayout_update_plot_id <- function() {
   # Force save the PREVIOUS plot before we clear the device
   tryCatch(.rlayout_force_save_plot(), error = function(e) {})
+  .rlayout_advance_next_plot <<- TRUE
 }
 setHook("before.plot.new", .rlayout_update_plot_id)
 setHook("before.grid.newpage", .rlayout_update_plot_id)

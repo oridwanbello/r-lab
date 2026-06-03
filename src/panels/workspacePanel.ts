@@ -39,10 +39,13 @@ export class WorkspacePanel {
 
     public static createOrShow(
         extensionUri: vscode.Uri,
-        column: vscode.ViewColumn = vscode.ViewColumn.Three
+        column: vscode.ViewColumn = vscode.ViewColumn.Three,
+        forceReveal: boolean = true
     ): WorkspacePanel {
         if (WorkspacePanel.currentPanel) {
-            WorkspacePanel.currentPanel._panel.reveal(column, true);
+            if (forceReveal) {
+                WorkspacePanel.currentPanel._panel.reveal(column, true);
+            }
             return WorkspacePanel.currentPanel;
         }
 
@@ -390,9 +393,15 @@ tryCatch({
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
 
         const outDir = path.join(wf, '.r_layout');
+        const metaFile = path.join(outDir, '.workspace_meta.txt');
         const varsFile = path.join(outDir, '.workspace_vars.tsv');
         const loadedFile = path.join(outDir, '.workspace_loaded.tsv');
         const attachedFile = path.join(outDir, '.workspace_attached.tsv');
+
+        // Check for the atomic signal file first. If it's missing, R is actively writing the TSVs.
+        if (!fs.existsSync(metaFile)) {
+            return null;
+        }
 
         if (!fs.existsSync(varsFile) && !fs.existsSync(loadedFile) && !fs.existsSync(attachedFile)) {
             return null;

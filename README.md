@@ -68,6 +68,8 @@ A professional documentation viewer and intelligent execution routing.
 | Setting                           | Default | Description                                                      |
 | --------------------------------- | ------- | ---------------------------------------------------------------- |
 | r-layout.rConsolePath             | "R"     | Path or command for the R Console terminal.                      |
+| r-layout.restoreCustomPanelPositions | false | Restore the webview panels to custom pane locations set by the user during their last session. |
+| r-layout.plotOutputDir | "" | A custom directory path where R Layout should silently write plot images. If left blank, it uses `.r_layout/plots` in the workspace root. |
 
 ## Commands
 

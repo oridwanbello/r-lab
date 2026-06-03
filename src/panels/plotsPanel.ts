@@ -5,6 +5,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as child_process from 'child_process';
 import { getRConsoleTerminal } from '../layout/layoutManager';
+import { getRscriptPath } from '../utils/rPathResolver';
 
 /**
  * Plots Panel - a WebviewPanel (editor tab) that watches a directory
@@ -26,6 +27,7 @@ export class PlotsPanel {
     private _disposables: vscode.Disposable[] = [];
     private _isNightMode: boolean = false;
     private _isMinimized: boolean = false;
+    private _lastRenderedDims: Map<string, { w: number, h: number }> = new Map();
     private _customPlotDir?: string;
     private _lastDirAction: 'view' | 'outview' | undefined = undefined;
     private _extensionUri: vscode.Uri;
@@ -34,10 +36,13 @@ export class PlotsPanel {
 
     public static createOrShow(
         extensionUri: vscode.Uri,
-        column: vscode.ViewColumn = vscode.ViewColumn.Three
+        column: vscode.ViewColumn = vscode.ViewColumn.Three,
+        forceReveal: boolean = true
     ): PlotsPanel {
         if (PlotsPanel.currentPanel) {
-            PlotsPanel.currentPanel._panel.reveal(column, true);
+            if (forceReveal) {
+                PlotsPanel.currentPanel._panel.reveal(column, true);
+            }
             return PlotsPanel.currentPanel;
         }
 
@@ -55,6 +60,10 @@ export class PlotsPanel {
 
         PlotsPanel.currentPanel = new PlotsPanel(panel, extensionUri);
         return PlotsPanel.currentPanel;
+    }
+
+    public static revive(panel: vscode.WebviewPanel, extensionUri: vscode.Uri): void {
+        PlotsPanel.currentPanel = new PlotsPanel(panel, extensionUri);
     }
 
     public static resetSessionState(): void {
@@ -93,8 +102,13 @@ export class PlotsPanel {
         this._panel = panel;
         this._extensionUri = extensionUri;
 
-        // Restore persisted state from static session memory
-        this._customPlotDir = PlotsPanel._sessionCustomPlotDir;
+        // Restore persisted state from static session memory, falling back to VS Code settings
+        const configPlotDir = vscode.workspace.getConfiguration('r-layout').get<string>('plotOutputDir');
+        if (PlotsPanel._sessionCustomPlotDir === undefined && configPlotDir && configPlotDir.trim() !== '') {
+            this._customPlotDir = configPlotDir.trim();
+        } else {
+            this._customPlotDir = PlotsPanel._sessionCustomPlotDir;
+        }
         this._lastDirAction = PlotsPanel._sessionLastDirAction;
 
         this._render();
@@ -134,6 +148,9 @@ export class PlotsPanel {
                         this._isNightMode = !this._isNightMode;
                         this._render();
                         break;
+                    case 'resize':
+                        this._handleResize((msg as any).width, (msg as any).height);
+                        break;
                     case 'setCustomDir':
                         this._handleSetCustomDir((msg as any).path, false);
                         break;
@@ -148,6 +165,20 @@ export class PlotsPanel {
                         break;
                     case 'browseCustomDir':
                         this._handleBrowseCustomDir();
+                        break;
+                    case 'popout':
+                        this._panel.reveal(vscode.ViewColumn.One, false);
+                        setTimeout(() => vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'), 150);
+                        this._postState();
+                        break;
+                    case 'restore':
+                        this._panel.reveal(vscode.ViewColumn.Three, false);
+                        setTimeout(() => {
+                            vscode.commands.executeCommand('moveActiveEditor', { to: 'position', value: 2 }).then(() => {
+                                setTimeout(() => vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'), 150);
+                            });
+                        }, 100);
+                        this._postState();
                         break;
                 }
             },
@@ -256,14 +287,79 @@ export class PlotsPanel {
         }
     }
 
+    private async _handleResize(width: number, height: number): Promise<void> {
+        if (this._currentIndex < 0) return;
+        const sourceUri = this._plots[this._currentIndex];
+        // Only dynamically resize generated plots, not interactive SVG placeholders
+        if (sourceUri.fsPath.includes('_interactive.svg')) return;
+
+        const ext = path.extname(sourceUri.fsPath);
+        if (ext !== '.png') return; // We only resize PNG plots saved via layoutManager.ts
+
+        const rdsPath = sourceUri.fsPath.replace(/\.png$/, '.rds');
+        if (!fs.existsSync(rdsPath)) return;
+
+        const rscriptPath = getRscriptPath();
+        
+        let w = width * 2;
+        let h = height * 2;
+        const res = 150; // Fixed baseline resolution for consistent text proportionality
+
+        // Ensure physical dimensions never drop below 5 inches to prevent R "figure margins too large" errors.
+        // We scale w and h proportionally to preserve the exact CSS aspect ratio, acting like a clean zoom out.
+        const minPixels = 5 * res; // 750 pixels
+        if (w < minPixels || h < minPixels) {
+            const scale = Math.max(minPixels / w, minPixels / h);
+            w = Math.round(w * scale);
+            h = Math.round(h * scale);
+        } else {
+            w = Math.round(w);
+            h = Math.round(h);
+        }
+
+        // Prevent redundant re-rendering if this plot was already rendered at this exact dimension
+        const cacheKey = sourceUri.fsPath;
+        const lastDims = this._lastRenderedDims.get(cacheKey);
+        if (lastDims && lastDims.w === w && lastDims.h === h) {
+            return; // Already perfectly rendered for this size
+        }
+        
+        // Save these dimensions as the latest for this plot
+        this._lastRenderedDims.set(cacheKey, { w, h });
+
+        // Escape paths for R
+        const safeRdsPath = rdsPath.replace(/\\/g, '/');
+        const safePngPath = sourceUri.fsPath.replace(/\\/g, '/');
+
+        const script = `
+tryCatch({
+    p <- readRDS('${safeRdsPath}')
+    png('${safePngPath}', width=${w}, height=${h}, res=${res}, bg='white')
+    replayPlot(p)
+    dev.off()
+}, error = function(e) {})
+`;
+
+        child_process.execFile(rscriptPath, ['-e', script], (error) => {
+            if (error) {
+                console.error('[R Layout] Dynamic resize re-rendering failed:', error);
+            }
+            // If successful, the file watcher picks up the modified PNG and automatically calls _render().
+        });
+    }
+
     private async _handleSaveAs(format: string, widthStr: string, heightStr: string, unit: string): Promise<void> {
         if (this._currentIndex < 0) { return; }
         const sourceUri = this._plots[this._currentIndex];
 
         const filterName = format.toUpperCase();
         const ext = format;
+        
+        const effectiveRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
+        const defaultFilename = path.basename(sourceUri.fsPath).replace('.png', `.${ext}`);
+        
         const saveUri = await vscode.window.showSaveDialog({
-            defaultUri: vscode.Uri.file(path.basename(sourceUri.fsPath).replace('.png', `.${ext}`)),
+            defaultUri: vscode.Uri.file(path.join(effectiveRoot, defaultFilename)),
             filters: { [filterName]: [ext] }
         });
 
@@ -283,7 +379,28 @@ export class PlotsPanel {
                 ].join('\n');
 
                 fs.writeFileSync(reqPath, reqContent, 'utf8');
-                vscode.window.showInformationMessage(`Exporting plot to ${saveUri.fsPath}...`);
+                
+                vscode.window.withProgress({
+                    location: vscode.ProgressLocation.Notification,
+                    title: `Exporting plot...`,
+                    cancellable: false
+                }, async (progress) => {
+                    let attempts = 0;
+                    // Wait up to 10 seconds for the R process to consume the request
+                    while (fs.existsSync(reqPath) && attempts < 50) {
+                        await new Promise(r => setTimeout(r, 200));
+                        attempts++;
+                    }
+                    
+                    // Allow a brief moment for OS flush
+                    await new Promise(r => setTimeout(r, 500));
+                    
+                    if (fs.existsSync(saveUri.fsPath)) {
+                        vscode.window.showInformationMessage(`Export completed: ${path.basename(saveUri.fsPath)}`);
+                    } else {
+                        vscode.window.showErrorMessage(`Failed to export plot to ${path.basename(saveUri.fsPath)}. Please check directory permissions.`);
+                    }
+                });
             } catch (err: any) {
                 vscode.window.showErrorMessage(`Failed to export plot: ${err.message}`);
             }
@@ -360,17 +477,19 @@ export class PlotsPanel {
                 await new Promise(r => setTimeout(r, 100));
             }
 
+            // Second guard: prevent duplicates if another event pushed the same URI while we were waiting
+            if (this._plots.some(p => p.fsPath === uri.fsPath)) { return; }
+
             this._plots.push(uri);
-            this._currentIndex = this._plots.length - 1;
+            this._plots.sort((a, b) => a.fsPath.localeCompare(b.fsPath));
+            this._currentIndex = this._plots.findIndex(p => p.fsPath === uri.fsPath);
             this._render();
-            // Automatically bring Plots panel to front without stealing focus
-            this._panel.reveal(undefined, true);
+            this._revealWithoutStealingContext();
         });
         this._watcher.onDidChange(() => {
             // Re-render current plot to pick up the updated file content
             this._render();
-            // Automatically bring Plots panel to front without stealing focus
-            this._panel.reveal(undefined, true);
+            this._revealWithoutStealingContext();
         });
         this._watcher.onDidDelete((uri) => {
             const idx = this._plots.findIndex(p => p.fsPath === uri.fsPath);
@@ -457,6 +576,7 @@ export class PlotsPanel {
         }
 
         if (added > 0) {
+            this._plots.sort((a, b) => a.fsPath.localeCompare(b.fsPath));
             this._currentIndex = this._plots.length - 1;
             this._render();
         }
@@ -464,9 +584,24 @@ export class PlotsPanel {
 
     // Rendering
 
+    private _revealWithoutStealingContext() {
+        if (!this._panel.visible) {
+            // Do not reveal if it would hide the currently active text editor
+            const activeEditor = vscode.window.activeTextEditor;
+            if (activeEditor && activeEditor.viewColumn === this._panel.viewColumn) {
+                // The panel is in the same group as the user's active code.
+                // Revealing it would hide their code, causing "No text editor active" errors
+                // when running R commands. Do nothing.
+                return;
+            }
+
+            this._panel.reveal(undefined, true);
+        }
+    }
+
     private _render(): void {
         if (!this._panel.webview.html) {
-            this._panel.webview.html = this._getHtml();
+            this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
         } else {
             this._postState();
         }
@@ -482,6 +617,8 @@ export class PlotsPanel {
             defaultDir = defaultDir.replace(homedir, '~');
         }
 
+        const isPoppedOut = this._panel.viewColumn !== vscode.ViewColumn.Three && this._panel.viewColumn !== undefined;
+
         this._panel.webview.postMessage({
             type: 'updateState',
             state: {
@@ -491,13 +628,15 @@ export class PlotsPanel {
                 minimized: this._isMinimized,
                 customPlotDir: this._customPlotDir,
                 defaultDir: defaultDir,
-                lastDirAction: this._lastDirAction
+                lastDirAction: this._lastDirAction,
+                isPoppedOut: isPoppedOut
             }
         });
     }
 
-    private _getHtml(): string {
+    private _getHtmlForWebview(webview: vscode.Webview): string {
         const nonce = getNonce();
+        const isPoppedOut = this._panel.viewColumn !== vscode.ViewColumn.Three && this._panel.viewColumn !== undefined;
 
         const effectiveRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
         const homedir = os.homedir();
@@ -515,7 +654,7 @@ export class PlotsPanel {
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy"
           content="default-src 'none';
-                   img-src ${this._panel.webview.cspSource} data:;
+                   img-src ${webview.cspSource} data:;
                    style-src 'nonce-${nonce}';
                    script-src 'nonce-${nonce}';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -541,6 +680,8 @@ export class PlotsPanel {
             height: 32px; /* Fixed height to prevent shrinking */
             background: var(--vscode-editor-background); /* Matches active tab */
             border-bottom: 1px solid var(--vscode-editorGroup-border);
+            z-index: 100;
+            position: relative;
             flex-shrink: 0;
         }
         .nav-controls {
@@ -548,12 +689,36 @@ export class PlotsPanel {
             align-items: center;
             gap: 6px;
         }
+        .separator {
+            width: 1px;
+            height: 16px;
+            background-color: var(--vscode-toolbar-hoverBackground);
+            margin: 0 4px;
+        }
         .counter {
             font-size: 0.9em;
             opacity: 0.7;
             min-width: 44px;
             text-align: center;
             font-variant-numeric: tabular-nums;
+        }
+        .toolbar .btn-group {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 6px;
+            gap: 0;
+        }
+        .toolbar .btn-group button {
+            border-radius: 0 !important;
+            padding: 3px 4px !important;
+        }
+        .toolbar .btn-group:hover:not(.disabled),
+        .toolbar .btn-group.active {
+            background: var(--vscode-toolbar-hoverBackground);
+        }
+        .toolbar .btn-group:hover:not(.disabled) button,
+        .toolbar .btn-group.active button {
+            background: transparent !important;
         }
         .toolbar button {
             background: none;
@@ -621,30 +786,34 @@ export class PlotsPanel {
             background: var(--vscode-scrollbarSlider-background);
             border-radius: 6px;
         }
+        body.night-mode {
+            --plot-filter: contrast(1.05) brightness(0.765);
+        }
         .thumbnail {
             width: 100%;
             height: auto;
             object-fit: contain;
-            border: 2px solid transparent;
+            border: 4px solid transparent;
             border-radius: 6px;
             cursor: pointer;
             transition: all 0.2s ease;
-            background: white;
+            background: white !important;
+            background-clip: padding-box !important;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             opacity: 0.6;
-            filter: grayscale(20%);
+            filter: var(--plot-filter, none) grayscale(20%);
         }
         .thumbnail.active {
             border-color: var(--vscode-focusBorder);
             box-shadow: 0 0 8px var(--vscode-focusBorder);
             opacity: 1;
-            filter: grayscale(0%);
+            filter: var(--plot-filter, none) grayscale(0%);
             transform: scale(1.04);
         }
         .thumbnail:hover:not(.active) {
             border-color: var(--vscode-button-secondaryHoverBackground);
             opacity: 0.9;
-            filter: grayscale(0%);
+            filter: var(--plot-filter, none) grayscale(0%);
         }
 
         .plot-area {
@@ -652,23 +821,113 @@ export class PlotsPanel {
             display: flex;
             align-items: center;
             justify-content: center;
-            overflow: hidden; /* Changed from auto to hide overflow during zoom */
             padding: 8px;
-            cursor: grab;
+            cursor: default;
             user-select: none;
         }
-        .plot-area:active {
+        .plot-viewport {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            border-radius: 6px;
+            transform: translateZ(0); /* preserves rounded corners when panning */
+        }
+        .plot-area.zoomed {
+            cursor: grab;
+        }
+        .plot-area.zoomed:active {
             cursor: grabbing;
         }
         .plot-area img {
             max-width: 100%;
             max-height: 100%;
             object-fit: contain;
-            background: white;
+            background: white !important;
             border-radius: 6px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-            transition: background-color 0.2s ease;
+            transition: filter 0.2s ease, background-color 0.2s ease;
+            filter: var(--plot-filter, none);
             pointer-events: none; /* Let drag events fall through to the area */
+        }
+        #overlay-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 4px;
+            background: transparent;
+            outline: none;
+            cursor: pointer;
+            margin: 8px 0; /* extra margin for overflowing thumb */
+            padding: 0;
+        }
+        #overlay-slider::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            background: var(--vscode-textLink-foreground);
+            border-radius: 2px;
+            margin: 0;
+        }
+        #overlay-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 14px;
+            width: 14px;
+            border-radius: 50%;
+            background: var(--vscode-textLink-foreground);
+            cursor: pointer;
+            border: none;
+            margin-top: -5px; /* Center thumb vertically over the 4px track */
+        }
+        .compare-view {
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: row;
+            gap: 8px;
+            position: relative;
+        }
+        .compare-pane {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+            border-radius: 6px;
+            transform: translateZ(0); /* preserves rounded corners when panning */
+            border: 4px solid transparent;
+            transition: border-color 0.2s ease;
+        }
+        .compare-pane.active {
+            border-color: var(--vscode-focusBorder);
+        }
+        .compare-pane img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            background: white !important;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            pointer-events: none;
+            transition: transform 0.1s ease-out, background-color 0.2s ease;
+            filter: var(--plot-filter, none);
+        }
+        .compare-pane.overlay-mode {
+            position: absolute !important;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 10;
+            background: transparent;
+            border: none;
+            opacity: 0;
+            pointer-events: none; /* allow clicking through to left pane when overlaying */
+        }
+        .compare-pane.overlay-mode img {
+            background: transparent !important;
+            box-shadow: none !important;
         }
         .empty-state {
             text-align: center;
@@ -786,6 +1045,45 @@ export class PlotsPanel {
         .export-dropdown.open {
             display: flex;
         }
+        .compare-dropdown {
+            font-size: calc(1em - 1px);
+            width: max-content !important;
+            right: 80px !important;
+            padding: 12px 14px !important;
+        }
+        .compare-dropdown label {
+            font-size: inherit !important;
+        }
+        .sync-zoom-label {
+            display: flex !important;
+            flex-direction: row;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 0 !important;
+            cursor: pointer;
+        }
+        .sync-zoom-checkbox {
+            width: 13px !important;
+            height: 13px !important;
+            margin: 0 !important;
+            flex-shrink: 0;
+            cursor: pointer;
+            accent-color: var(--vscode-textLink-foreground);
+        }
+        .overlay-slider-wrapper {
+            display: inline-flex;
+            flex-direction: column;
+            width: max-content;
+        }
+        .overlay-slider-header {
+            display: flex;
+            gap: 4px;
+            align-items: baseline;
+            margin-bottom: 6px;
+        }
+        .overlay-val {
+            font-variant-numeric: tabular-nums;
+        }
         .export-dropdown label {
             font-size: 0.9em;
             opacity: 0.9;
@@ -869,7 +1167,12 @@ export class PlotsPanel {
             <button id="btn-night-mode" disabled data-tooltip="Switch to Night Mode">${moonIcon}</button>
             <button id="btn-delete" disabled data-tooltip="Delete Current Plot"><svg viewBox="0 0 16 16"><path fill="none" d="M9.25,2H6.75a0.25,0.25,0,0,0-0.25,0.25V3h3V2.25A0.25,0.25,0,0,0,9.25,2Z"/><path fill="currentColor" d="M13.5,3H10.5V2.25A1.25,1.25,0,0,0,9.25,1H6.75A1.25,1.25,0,0,0,5.5,2.25V3H2.5a0.5,0.5,0,0,0,0,1H3L3.63,13.53C3.67,14.37,4.31,15,5.13,15h5.75c0.82,0,1.45-.62,1.5-1.47L13,4h0.5a0.5,0.5,0,0,0,0-1ZM6,13H6a0.5,0.5,0,0,1-.5-.48l-0.25-7a0.5,0.5,0,1,1,1-.04l0.25,7A0.5,0.5,0,0,1,6,13ZM8.5,12.5a0.5,0.5,0,0,1-1,0V5.5a0.5,0.5,0,0,1,1,0ZM9.5,3H6.5V2.25a0.25,0.25,0,0,1,.25-.25h2.5a0.25,0.25,0,0,1,.25.25Zm1,9.55a0.5,0.5,0,0,1-.5.45H10a0.5,0.5,0,0,1-.5-.52l0.25-7a0.5,0.5,0,1,1,1,.04Z"/></svg></button>
             <button id="btn-clear" disabled data-tooltip="Clear All Plots"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.91,1.81L13.85,2.76L10.04,6.57C10.75,7.59 10.85,8.83 10.25,9.63L6.04,5.41C6.84,4.81 8.07,4.91 9.1,5.63L12.91,1.81M3.95,11.71C2.61,10.37 1.79,8.77 1.57,7.28L4.82,5.89L9.78,10.85L8.39,14.1C6.89,13.87 5.29,13.05 3.95,11.71Z"/></svg></button>
+            <div id="compare-btn-group" class="btn-group">
+                <button id="btn-compare" disabled data-tooltip="Enter Compare Mode"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M2 2h5v12H2V2zm7 0h5v12H9V2z"/></svg></button>
+                <button id="btn-compare-options" style="display: none;" data-tooltip="Compare Options"><svg viewBox="0 0 16 16"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M7.976 10.072l4.357-4.357.62.618L8.284 11h-.618L3 6.333l.619-.618 4.357 4.357z"/></svg></button>
+            </div>
             <button id="btn-custom-dir" class="btn-custom-dir" data-tooltip="Set Custom Plot Directory"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="m7.52 2c-0.00591-2.1e-4 -0.0118-3.1e-4 -0.0178-3.1e-4l-1.2-1.6c-0.0932-0.124-0.214-0.225-0.353-0.294-0.139-0.0694-0.292-0.106-0.447-0.106h-3.5c-0.53 0-1.04 0.211-1.41 0.586-0.375 0.375-0.586 0.884-0.586 1.41v10c0 0.53 0.211 1.04 0.586 1.41 0.375 0.375 0.884 0.586 1.41 0.586h4v-1h-4c-0.265 0-0.52-0.105-0.707-0.293-0.188-0.188-0.293-0.442-0.293-0.707v-7l3.88 3e-5c0.203 1.9e-4 0.383 3.5e-4 0.557-0.0415 0.153-0.0368 0.299-0.0974 0.434-0.18 0.153-0.0936 0.279-0.221 0.423-0.365l1.41-1.41h6.29c0.265 0 0.52 0.105 0.707 0.293s0.293 0.442 0.293 0.707v2h1v-2c0-0.53-0.211-1.04-0.586-1.41s-0.884-0.586-1.41-0.586h-6.48zm-2.02-1 1.2 1.6-1.08 1.08c-0.19 0.19-0.229 0.225-0.268 0.248-0.0447 0.0274-0.0935 0.0476-0.145 0.0599-0.0442 0.0106-0.0969 0.0138-0.365 0.0138h-3.84v-2c0-0.265 0.105-0.52 0.293-0.707 0.188-0.188 0.442-0.293 0.707-0.293h3.5z" clip-rule="evenodd" fill="currentColor" fill-rule="evenodd"/><path d="m11.5 7c0.276 0 0.5 0.224 0.5 0.5v3.5h3.5c0.276 0 0.5 0.224 0.5 0.5s-0.224 0.5-0.5 0.5h-3.5v3.5c0 0.276-0.224 0.5-0.5 0.5s-0.5-0.224-0.5-0.5v-3.5h-3.5c-0.276 0-0.5-0.224-0.5-0.5s0.224-0.5 0.5-0.5h3.5v-3.5c0-0.276 0.224-0.5 0.5-0.5z" fill="currentColor"/></svg></button>
+            <button id="btn-popout" data-tooltip="${isPoppedOut ? 'Restore to Side Panel' : 'Pop-out to Main Editor'}"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/><path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/></svg></button>
         </div>
     </div>
     <div id="dir-dropdown" class="dir-dropdown">
@@ -915,117 +1218,218 @@ export class PlotsPanel {
         </div>
         <button id="btn-export-confirm" class="btn-export">Export Plot</button>
     </div>
+    <div id="compare-dropdown" class="export-dropdown compare-dropdown">
+        <label id="sync-zoom-label" for="chk-sync-zoom" class="sync-zoom-label">
+            <input type="checkbox" id="chk-sync-zoom" checked class="sync-zoom-checkbox" />
+            <span>Sync Zoom & Pan</span>
+        </label>
+        <div class="overlay-slider-wrapper">
+            <div class="overlay-slider-header">
+                <span>Overlay Transparency:</span>
+                <span id="overlay-val" class="overlay-val">0%</span>
+            </div>
+            <input type="range" id="overlay-slider" min="0" max="1" step="0.01" value="0" />
+        </div>
+    </div>
     <div id="tooltip" class="tooltip"></div>
     <div class="main-container">
-        <div class="plot-area" style="position: relative;">
-            <img id="main-image" src="" alt="Plot" style="display: none;" />
-            <div id="empty-state" class="empty-state">
-                <svg viewBox="0 0 16 16"><path fill="currentColor" d="M2 2h1v11h11v1H2V2zm3 8h2v3H5v-3zm3-4h2v7H8V6zm3-3h2v10h-2V3z"/></svg>
-                <p>No plots yet.<br/>
-                Plots generated in the R Console or found in your<br/>
-                custom directory will automatically appear here.</p>
+        <div class="plot-area" id="plot-area" style="position: relative;">
+            <div class="plot-viewport">
+                <img id="main-image" src="" alt="Plot" style="display: none;" />
+                <div id="compare-view" class="compare-view">
+                    <div id="compare-left" class="compare-pane active" data-side="left">
+                        <img id="img-left" src="" />
+                    </div>
+                    <div id="compare-right" class="compare-pane" data-side="right">
+                        <img id="img-right" src="" />
+                    </div>
+                </div>
+                <div id="empty-state" class="empty-state">
+                    <svg viewBox="0 0 16 16"><path fill="currentColor" d="M2 2h1v11h11v1H2V2zm3 8h2v3H5v-3zm3-4h2v7H8V6zm3-3h2v10h-2V3z"/></svg>
+                    <p>No plots yet.<br/>
+                    Plots generated in the R Console or found in your<br/>
+                    custom directory will automatically appear here.</p>
+                </div>
             </div>
         </div>
         <div class="thumbnail-sidebar" id="thumbnail-sidebar"></div>
     </div>
     <script nonce="${nonce}">
+        const vscode = acquireVsCodeApi();
+        let isPoppedOut = ${isPoppedOut};
+
+        window.addEventListener('message', event => {
+            const message = event.data;
+            if (message.type === 'updateState') {
+                renderState(message.state);
+            } else if (message.command === 'setMinimized') {
+                document.body.classList.toggle('minimized', message.minimized);
+            }
+        });
+
         const moonIcon = \`${moonIcon}\`;
         const sunIcon = \`${sunIcon}\`;
 
         const initialState = {
-            plots: ${JSON.stringify(this._plots.map(uri => this._panel.webview.asWebviewUri(uri).toString() + `?t=${Date.now()}`))},
+            plots: ${JSON.stringify(this._plots.map(uri => webview.asWebviewUri(uri).toString() + '?t=' + Date.now()))},
             currentIndex: ${this._currentIndex},
             isNightMode: ${this._isNightMode},
             minimized: ${this._isMinimized},
             customPlotDir: ${JSON.stringify(this._customPlotDir || '')},
             defaultDir: ${JSON.stringify(defaultDir)},
-            lastDirAction: ${JSON.stringify(this._lastDirAction || null)}
+            lastDirAction: ${JSON.stringify(this._lastDirAction || null)},
+            isPoppedOut: isPoppedOut
         };
 
         let currentPlots = [];
         let currentImageSrc = '';
 
-        // Pan and Zoom State
-        let scale = 1;
-        let translateX = 0;
-        let translateY = 0;
+        let isCompareMode = false;
+        let compareLeftIndex = -1;
+        let compareRightIndex = -1;
+        let activeCompareSide = 'left';
+        let isSyncZoom = true;
+        let lastBackendIndex = -1;
+
+        let transformState = {
+            main: { scale: 1, translateX: 0, translateY: 0 },
+            left: { scale: 1, translateX: 0, translateY: 0 },
+            right: { scale: 1, translateX: 0, translateY: 0 }
+        };
 
         function updateTransform() {
-            const img = document.getElementById('main-image');
-            if (img) {
-                img.style.transform = \`translate(\${translateX}px, \${translateY}px) scale(\${scale})\`;
+            const plotArea = document.getElementById('plot-area');
+            if (!isCompareMode) {
+                const img = document.getElementById('main-image');
+                if (img) img.style.transform = 'translate(' + transformState.main.translateX + 'px, ' + transformState.main.translateY + 'px) scale(' + transformState.main.scale + ')';
+                if (plotArea) plotArea.classList.toggle('zoomed', transformState.main.scale > 1.001);
+            } else {
+                const imgLeft = document.getElementById('img-left');
+                const imgRight = document.getElementById('img-right');
+                if (imgLeft) imgLeft.style.transform = 'translate(' + transformState.left.translateX + 'px, ' + transformState.left.translateY + 'px) scale(' + transformState.left.scale + ')';
+                if (imgRight) imgRight.style.transform = 'translate(' + transformState.right.translateX + 'px, ' + transformState.right.translateY + 'px) scale(' + transformState.right.scale + ')';
+                if (plotArea) plotArea.classList.toggle('zoomed', transformState.left.scale > 1.001 || transformState.right.scale > 1.001);
             }
         }
 
         function resetZoom() {
-            scale = 1;
-            translateX = 0;
-            translateY = 0;
+            transformState.main = { scale: 1, translateX: 0, translateY: 0 };
+            transformState.left = { scale: 1, translateX: 0, translateY: 0 };
+            transformState.right = { scale: 1, translateX: 0, translateY: 0 };
             updateTransform();
         }
 
         function renderState(state) {
             document.body.classList.toggle('minimized', !!state.minimized);
             const hasPlots = state.plots.length > 0;
+            
+            if (state.plots.length !== currentPlots.length || state.currentIndex !== lastBackendIndex) {
+                if (isCompareMode) {
+                    if (activeCompareSide === 'left') compareLeftIndex = state.currentIndex;
+                    else compareRightIndex = state.currentIndex;
+                } else {
+                    compareLeftIndex = state.currentIndex;
+                    compareRightIndex = state.currentIndex > 0 ? state.currentIndex - 1 : 0;
+                }
+            }
+            lastBackendIndex = state.currentIndex;
+
             const mainImg = document.getElementById('main-image');
             const emptyState = document.getElementById('empty-state');
-            const plotBg = state.isNightMode ? '#C8C8C8' : 'white';
+            document.body.classList.toggle('night-mode', state.isNightMode);
 
-            function getInteractiveSvgUri(isNightMode) {
+            function getInteractiveSvgUri(isNightMode, isThumbnail = false) {
                 const linkColor = getComputedStyle(document.documentElement).getPropertyValue('--vscode-textLink-foreground').trim() || '#007acc';
-                
-                // Minimalist dot grid colors
                 const bgColor = '#151515';
                 const dotColor = '#2d2d2d';
-
+                const fontSize = isThumbnail ? "65" : "36";
+                const y1 = "325";
+                const y2 = "384";
                 const svgStr = '<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">' +
-                    '<defs>' +
-                        '<pattern id="dot-grid" width="20" height="20" patternUnits="userSpaceOnUse">' +
-                            '<circle cx="2" cy="2" r="1.5" fill="' + dotColor + '"/>' +
-                        '</pattern>' +
-                    '</defs>' +
+                    '<defs><pattern id="dot-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="10" cy="10" r="1.5" fill="' + dotColor + '"/></pattern></defs>' +
                     '<rect width="800" height="600" fill="' + bgColor + '"/>' +
-                    '<rect width="800" height="600" fill="url(#dot-grid)"/>' +
+                    '<rect x="40" y="40" width="720" height="520" fill="url(#dot-grid)"/>' +
                     '<g fill="' + linkColor + '" transform="translate(352, 170) scale(6)">' +
-                        '<path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/>' +
-                        '<path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/>' +
+                        '<path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/><path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/>' +
                     '</g>' +
-                    '<text x="400" y="340" fill="' + linkColor + '" font-family="sans-serif" font-size="36" text-anchor="middle">Open</text>' +
-                    '<text x="400" y="390" fill="' + linkColor + '" font-family="sans-serif" font-size="36" text-anchor="middle">Interactive Widget(s)</text>' +
+                    '<text x="400" y="' + y1 + '" fill="' + linkColor + '" font-family="sans-serif" font-weight="normal" font-size="' + fontSize + '" text-anchor="middle">Open</text>' +
+                    '<text x="400" y="' + y2 + '" fill="' + linkColor + '" font-family="sans-serif" font-weight="normal" font-size="' + fontSize + '" text-anchor="middle">Interactive Widget(s)</text>' +
                 '</svg>';
                 return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)));
             }
 
-            if (hasPlots) {
-                const originalSrc = state.plots[state.currentIndex];
-                const isInteractive = originalSrc.includes('_interactive.svg');
-                const newSrc = isInteractive ? getInteractiveSvgUri(state.isNightMode) : originalSrc;
-                
-                let srcChanged = currentImageSrc !== originalSrc;
-                let themeChanged = window.__lastNightMode !== state.isNightMode;
-                window.__lastNightMode = state.isNightMode;
+            if (isCompareMode) {
+                document.getElementById('main-image').style.display = 'none';
+                document.getElementById('compare-view').style.display = 'flex';
+                document.getElementById('btn-compare').setAttribute('data-tooltip', 'Exit Compare Mode');
+                document.getElementById('btn-compare').classList.add('active');
+                document.getElementById('btn-compare').style.color = 'var(--vscode-textLink-foreground)';
+                document.getElementById('btn-compare-options').style.display = 'flex';
+                document.getElementById('compare-btn-group').classList.add('active');
+            } else {
+                document.getElementById('main-image').style.display = hasPlots ? 'block' : 'none';
+                document.getElementById('compare-view').style.display = 'none';
+                document.getElementById('btn-compare').setAttribute('data-tooltip', 'Enter Compare Mode');
+                document.getElementById('btn-compare').classList.remove('active');
+                document.getElementById('btn-compare').style.color = '';
+                document.getElementById('btn-compare-options').style.display = 'none';
+                document.getElementById('compare-btn-group').classList.remove('active');
+            }
 
-                if (srcChanged || (isInteractive && themeChanged)) {
-                    currentImageSrc = originalSrc;
-                    mainImg.src = newSrc;
-                    if (srcChanged) resetZoom();
+            if (hasPlots) {
+                let themeChanged = window.__lastNightMode !== state.isNightMode;
+                if (!isCompareMode) {
+                    const originalSrc = state.plots[state.currentIndex];
+                    const isInteractive = originalSrc.includes('_interactive.svg');
+                    const newSrc = isInteractive ? getInteractiveSvgUri(state.isNightMode, false) : originalSrc;
                     
-                    if (isInteractive) {
-                        mainImg.setAttribute('data-tooltip', 'Open in Viewer Tab');
-                        mainImg.style.cursor = 'pointer';
-                        mainImg.style.pointerEvents = 'auto'; // allow click to go through
-                    } else {
-                        mainImg.removeAttribute('data-tooltip');
-                        mainImg.style.cursor = '';
-                        mainImg.style.pointerEvents = 'none'; // allow drag through
+                    let srcChanged = currentImageSrc !== originalSrc;
+                    if (srcChanged || (isInteractive && themeChanged)) {
+                        currentImageSrc = originalSrc;
+                        mainImg.src = newSrc;
+                        if (srcChanged) resetZoom();
+                        
+                        // Dynamically request re-render for this specific plot if it's new
+                        // to ensure it matches the current window dimensions.
+                        if (srcChanged && typeof triggerRerender === 'function') {
+                            clearTimeout(window._plotSwitchTimeout);
+                            window._plotSwitchTimeout = setTimeout(() => {
+                                triggerRerender();
+                            }, 400);
+                        }
+
+                        if (isInteractive) {
+                            mainImg.setAttribute('data-tooltip', 'Open in Viewer Tab');
+                            mainImg.style.cursor = 'pointer';
+                            mainImg.style.pointerEvents = 'auto'; 
+                        } else {
+                            mainImg.removeAttribute('data-tooltip');
+                            mainImg.style.cursor = '';
+                            mainImg.style.pointerEvents = 'none'; 
+                        }
                     }
+                } else {
+                    const lUrl = state.plots[compareLeftIndex] || state.plots[0];
+                    const rUrl = state.plots[compareRightIndex] || state.plots[0];
+                    const lSrc = lUrl.includes('_interactive.svg') ? getInteractiveSvgUri(state.isNightMode) : lUrl;
+                    const rSrc = rUrl.includes('_interactive.svg') ? getInteractiveSvgUri(state.isNightMode) : rUrl;
+                    
+                    const imgLeft = document.getElementById('img-left');
+                    const imgRight = document.getElementById('img-right');
+                    
+                    if (imgLeft.getAttribute('src') !== lSrc) imgLeft.src = lSrc;
+                    if (imgRight.getAttribute('src') !== rSrc) imgRight.src = rSrc;
+                    
+                    document.getElementById('compare-left').classList.toggle('active', activeCompareSide === 'left');
+                    document.getElementById('compare-right').classList.toggle('active', activeCompareSide === 'right');
                 }
-                mainImg.style.background = plotBg;
-                mainImg.style.display = 'block';
+                
+                window.__lastNightMode = state.isNightMode;
                 emptyState.style.display = 'none';
             } else {
                 currentImageSrc = '';
                 mainImg.style.display = 'none';
+                document.getElementById('compare-view').style.display = 'none';
                 emptyState.style.display = 'block';
                 resetZoom();
             }
@@ -1034,7 +1438,6 @@ export class PlotsPanel {
             let themeChangedThumb = window.__lastNightModeThumb !== state.isNightMode;
             window.__lastNightModeThumb = state.isNightMode;
 
-            // Sync DOM nodes natively instead of destroying innerHTML to prevent flickering
             while (sidebar.children.length > state.plots.length) {
                 sidebar.removeChild(sidebar.lastChild);
             }
@@ -1051,11 +1454,10 @@ export class PlotsPanel {
             }
             currentPlots = state.plots;
 
-            // Update attributes safely
             const thumbs = sidebar.querySelectorAll('.thumbnail');
             thumbs.forEach((t, i) => {
                 const url = state.plots[i];
-                const thumbUrl = url.includes('_interactive.svg') ? getInteractiveSvgUri(state.isNightMode) : url;
+                const thumbUrl = url.includes('_interactive.svg') ? getInteractiveSvgUri(state.isNightMode, true) : url;
                 
                 if (t.getAttribute('src') !== thumbUrl || (themeChangedThumb && url.includes('_interactive.svg'))) {
                     t.dataset.originalSrc = thumbUrl;
@@ -1064,10 +1466,22 @@ export class PlotsPanel {
                 }
                 
                 t.dataset.index = i;
-                t.style.background = plotBg;
                 
-                if (i === state.currentIndex) t.classList.add('active');
-                else t.classList.remove('active');
+                if (isCompareMode) {
+                    if (i === compareLeftIndex || i === compareRightIndex) {
+                        t.classList.add('active');
+                        if (i === compareLeftIndex && i === compareRightIndex) t.style.borderColor = 'var(--vscode-focusBorder)';
+                        else if (i === compareLeftIndex) t.style.borderColor = 'var(--vscode-charts-blue, #3794ff)';
+                        else t.style.borderColor = 'var(--vscode-charts-purple, #b146c2)';
+                    } else {
+                        t.classList.remove('active');
+                        t.style.borderColor = '';
+                    }
+                } else {
+                    t.style.borderColor = '';
+                    if (i === state.currentIndex) t.classList.add('active');
+                    else t.classList.remove('active');
+                }
             });
 
             const activeThumb = sidebar.querySelector('.thumbnail.active');
@@ -1079,87 +1493,166 @@ export class PlotsPanel {
                 }
             }
 
-            document.querySelector('.counter').textContent = hasPlots ? \`\${state.currentIndex + 1} / \${state.plots.length}\` : '-';
-
-            const btnPrev = document.getElementById('btn-prev');
-            const btnNext = document.getElementById('btn-next');
-            if (state.currentIndex <= 0) btnPrev.setAttribute('disabled', 'true');
-            else btnPrev.removeAttribute('disabled');
-            if (state.currentIndex >= state.plots.length - 1 || !hasPlots) btnNext.setAttribute('disabled', 'true');
-            else btnNext.removeAttribute('disabled');
+            document.querySelector('.counter').textContent = hasPlots ? (state.currentIndex + 1) + ' / ' + state.plots.length : '-';
 
             const toggleDisabled = (id, condition) => {
                 const btn = document.getElementById(id);
-                if (condition) btn.setAttribute('disabled', 'true');
-                else btn.removeAttribute('disabled');
+                if (btn) {
+                    if (condition) btn.setAttribute('disabled', 'true');
+                    else btn.removeAttribute('disabled');
+                }
             };
 
             const isWidget = hasPlots && state.plots[state.currentIndex] && state.plots[state.currentIndex].includes('_interactive.svg');
 
+            if (!isCompareMode) {
+                if (state.currentIndex <= 0) toggleDisabled('btn-prev', true);
+                else toggleDisabled('btn-prev', false);
+                if (state.currentIndex >= state.plots.length - 1 || !hasPlots) toggleDisabled('btn-next', true);
+                else toggleDisabled('btn-next', false);
+            } else {
+                toggleDisabled('btn-prev', true);
+                toggleDisabled('btn-next', true);
+            }
+
             toggleDisabled('btn-zoom-in', !hasPlots);
             toggleDisabled('btn-zoom-out', !hasPlots);
             toggleDisabled('btn-reset-zoom', !hasPlots);
-            toggleDisabled('btn-copy', !hasPlots);
-            toggleDisabled('btn-save', !hasPlots);
+            toggleDisabled('btn-copy', !hasPlots || isCompareMode);
+            toggleDisabled('btn-save', !hasPlots || isCompareMode);
+            toggleDisabled('btn-compare', !hasPlots || state.plots.length < 1);
+            if (!hasPlots || state.plots.length < 1) {
+                document.getElementById('compare-btn-group')?.classList.add('disabled');
+            } else {
+                document.getElementById('compare-btn-group')?.classList.remove('disabled');
+            }
             toggleDisabled('btn-night-mode', !hasPlots);
-            toggleDisabled('btn-delete', !hasPlots || isWidget);
-            toggleDisabled('btn-clear', !hasPlots);
+            toggleDisabled('btn-delete', !hasPlots || isWidget || isCompareMode);
+            toggleDisabled('btn-clear', !hasPlots || isCompareMode);
 
             const nightModeBtn = document.getElementById('btn-night-mode');
-            nightModeBtn.innerHTML = state.isNightMode ? sunIcon : moonIcon;
-            nightModeBtn.setAttribute('data-tooltip', state.isNightMode ? 'Switch to Day Mode' : 'Switch to Night Mode');
+            if(nightModeBtn) {
+                nightModeBtn.innerHTML = state.isNightMode ? sunIcon : moonIcon;
+                nightModeBtn.setAttribute('data-tooltip', state.isNightMode ? 'Switch to Day Mode' : 'Switch to Night Mode');
+            }
 
             const btnCustomDir = document.getElementById('btn-custom-dir');
-            if (state.customPlotDir) btnCustomDir.classList.add('active');
-            else btnCustomDir.classList.remove('active');
+            if (btnCustomDir) {
+                if (state.customPlotDir) btnCustomDir.classList.add('active');
+                else btnCustomDir.classList.remove('active');
+            }
 
             const dirInput = document.getElementById('dir-input');
-            dirInput.value = state.customPlotDir || '';
-            dirInput.placeholder = state.defaultDir || 'Custom plot directory...';
+            if (dirInput) {
+                dirInput.value = state.customPlotDir || '';
+                dirInput.placeholder = state.defaultDir || 'Custom plot directory...';
+            }
 
-            document.getElementById('btn-set-view-dir').className = state.lastDirAction === 'view' ? 'active' : '';
-            document.getElementById('btn-set-out-view-dir').className = (state.lastDirAction === 'outview' || !state.lastDirAction) ? 'active' : '';
-        }
+            const btnSetViewDir = document.getElementById('btn-set-view-dir');
+            if (btnSetViewDir) btnSetViewDir.className = state.lastDirAction === 'view' ? 'active' : '';
+            const btnSetOutViewDir = document.getElementById('btn-set-out-view-dir');
+            if (btnSetOutViewDir) btnSetOutViewDir.className = (state.lastDirAction === 'outview' || !state.lastDirAction) ? 'active' : '';
 
-        (function() {
-            const vscode = acquireVsCodeApi();
-
-            window.addEventListener('message', event => {
-                const message = event.data;
-                if (message.type === 'updateState') {
-                    renderState(message.state);
+            if (state.isPoppedOut !== undefined) {
+                isPoppedOut = state.isPoppedOut;
+                const btnPopout = document.getElementById('btn-popout');
+                if (btnPopout) {
+                    btnPopout.setAttribute('data-tooltip', isPoppedOut ? 'Restore to Side Panel' : 'Pop-out to Main Editor');
                 }
-            });
+            }
+        }
 
             renderState(initialState);
 
             document.getElementById('thumbnail-sidebar')?.addEventListener('click', (e) => {
                 if (e.target && e.target.classList.contains('thumbnail')) {
                     const index = parseInt(e.target.getAttribute('data-index'), 10);
-                    vscode.postMessage({ type: 'navigateTo', index: index });
+                    if (isCompareMode) {
+                        if (activeCompareSide === 'left') compareLeftIndex = index;
+                        else compareRightIndex = index;
+                        
+                        renderState({ plots: currentPlots, currentIndex: lastBackendIndex, isNightMode: window.__lastNightMode });
+                    } else {
+                        vscode.postMessage({ type: 'navigateTo', index: index });
+                    }
                 }
             });
 
-            document.getElementById('btn-prev')?.addEventListener('click', () => {
-                if (!document.getElementById('btn-prev').hasAttribute('disabled')) {
-                    vscode.postMessage({ type: 'navigatePrev' });
+            const compareDropdown = document.getElementById('compare-dropdown');
+            const btnCompareOptions = document.getElementById('btn-compare-options');
+
+            document.getElementById('btn-compare')?.addEventListener('click', () => {
+                if (!document.getElementById('btn-compare').hasAttribute('disabled')) {
+                    isCompareMode = !isCompareMode;
+                    if (isCompareMode) {
+                        activeCompareSide = 'left';
+                    } else {
+                        compareDropdown.classList.remove('open');
+                        document.getElementById('overlay-slider').value = 0;
+                        const valLabel = document.getElementById('overlay-val');
+                        if (valLabel) valLabel.textContent = '0%';
+                        document.getElementById('compare-right').classList.remove('overlay-mode');
+                        document.getElementById('compare-right').style.opacity = '1';
+                    }
+                    resetZoom();
+                    renderState({ plots: currentPlots, currentIndex: lastBackendIndex, isNightMode: window.__lastNightMode });
                 }
+            });
+
+            btnCompareOptions?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                compareDropdown.classList.toggle('open');
+                document.getElementById('dir-dropdown')?.classList.remove('open');
+                document.getElementById('export-dropdown')?.classList.remove('open');
+            });
+
+            document.getElementById('chk-sync-zoom')?.addEventListener('change', (e) => {
+                isSyncZoom = e.target.checked;
+                if (isSyncZoom) {
+                    transformState.right = JSON.parse(JSON.stringify(transformState.left));
+                    updateTransform();
+                }
+            });
+
+            document.getElementById('overlay-slider')?.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                const percentage = Math.round(val * 100);
+                const valLabel = document.getElementById('overlay-val');
+                if (valLabel) valLabel.textContent = percentage + '%';
+                
+                const rightPane = document.getElementById('compare-right');
+                if (val > 0) {
+                    rightPane.classList.add('overlay-mode');
+                    rightPane.style.opacity = val.toString();
+                } else {
+                    rightPane.classList.remove('overlay-mode');
+                    rightPane.style.opacity = '1';
+                }
+            });
+
+            document.getElementById('compare-left')?.addEventListener('mousedown', () => {
+                activeCompareSide = 'left';
+                renderState({ plots: currentPlots, currentIndex: lastBackendIndex, isNightMode: window.__lastNightMode });
+            });
+
+            document.getElementById('compare-right')?.addEventListener('mousedown', () => {
+                activeCompareSide = 'right';
+                renderState({ plots: currentPlots, currentIndex: lastBackendIndex, isNightMode: window.__lastNightMode });
+            });
+
+            document.getElementById('btn-prev')?.addEventListener('click', () => {
+                if (!document.getElementById('btn-prev').hasAttribute('disabled')) vscode.postMessage({ type: 'navigatePrev' });
             });
             document.getElementById('btn-next')?.addEventListener('click', () => {
-                if (!document.getElementById('btn-next').hasAttribute('disabled')) {
-                    vscode.postMessage({ type: 'navigateNext' });
-                }
+                if (!document.getElementById('btn-next').hasAttribute('disabled')) vscode.postMessage({ type: 'navigateNext' });
             });
             document.getElementById('btn-clear')?.addEventListener('click', () => {
-                if (!document.getElementById('btn-clear').hasAttribute('disabled')) {
-                    vscode.postMessage({ type: 'clear' });
-                }
+                if (!document.getElementById('btn-clear').hasAttribute('disabled')) vscode.postMessage({ type: 'clear' });
             });
             document.getElementById('btn-delete')?.addEventListener('click', () => {
-                if (!document.getElementById('btn-delete').hasAttribute('disabled')) {
-                    vscode.postMessage({ type: 'deleteCurrent' });
-                }
+                if (!document.getElementById('btn-delete').hasAttribute('disabled')) vscode.postMessage({ type: 'deleteCurrent' });
             });
+
             const btnSave = document.getElementById('btn-save');
             const exportDropdown = document.getElementById('export-dropdown');
             const formatSelect = document.getElementById('export-format');
@@ -1171,13 +1664,13 @@ export class PlotsPanel {
                 if (!btnSave.hasAttribute('disabled')) {
                     e.stopPropagation();
                     exportDropdown.classList.toggle('open');
-                    document.getElementById('dir-dropdown').classList.remove('open');
+                    document.getElementById('dir-dropdown')?.classList.remove('open');
                 }
             });
 
-            let currentUnit = unitSelect.value;
+            let currentUnit = unitSelect ? unitSelect.value : 'in';
 
-            formatSelect.addEventListener('change', () => {
+            formatSelect?.addEventListener('change', () => {
                 const isRaster = formatSelect.value === 'png' || formatSelect.value === 'jpg';
                 if (isRaster) {
                     unitSelect.value = 'px';
@@ -1191,25 +1684,19 @@ export class PlotsPanel {
                 currentUnit = unitSelect.value;
             });
 
-            unitSelect.addEventListener('change', () => {
+            unitSelect?.addEventListener('change', () => {
                 const w = parseFloat(widthInput.value) || 0;
                 const h = parseFloat(heightInput.value) || 0;
                 if (currentUnit === 'in' && unitSelect.value === 'px') {
                     widthInput.value = Math.round(w * 300).toString();
                     heightInput.value = Math.round(h * 300).toString();
-
                     const isRaster = formatSelect.value === 'png' || formatSelect.value === 'jpg';
-                    if (!isRaster) {
-                        formatSelect.value = 'png';
-                    }
+                    if (!isRaster) formatSelect.value = 'png';
                 } else if (currentUnit === 'px' && unitSelect.value === 'in') {
                     widthInput.value = Number((w / 300).toFixed(2)).toString();
                     heightInput.value = Number((h / 300).toFixed(2)).toString();
-
                     const isRaster = formatSelect.value === 'png' || formatSelect.value === 'jpg';
-                    if (isRaster) {
-                        formatSelect.value = 'pdf';
-                    }
+                    if (isRaster) formatSelect.value = 'pdf';
                 }
                 currentUnit = unitSelect.value;
             });
@@ -1231,87 +1718,134 @@ export class PlotsPanel {
                 });
             });
 
-            // Close dropdowns on outside click
             document.addEventListener('click', (e) => {
-                if (!exportDropdown.contains(e.target) && e.target !== btnSave && !btnSave.contains(e.target)) {
+                if (exportDropdown && !exportDropdown.contains(e.target) && e.target !== btnSave && !btnSave?.contains(e.target)) {
                     exportDropdown.classList.remove('open');
+                }
+                if (compareDropdown && !compareDropdown.contains(e.target) && e.target !== btnCompareOptions && !btnCompareOptions?.contains(e.target)) {
+                    compareDropdown.classList.remove('open');
                 }
             });
             document.getElementById('btn-night-mode')?.addEventListener('click', () => {
-                if (!document.getElementById('btn-night-mode').hasAttribute('disabled')) {
-                    vscode.postMessage({ type: 'toggleNightMode' });
-                }
+                if (!document.getElementById('btn-night-mode').hasAttribute('disabled')) vscode.postMessage({ type: 'toggleNightMode' });
             });
             document.getElementById('btn-copy')?.addEventListener('click', () => {
                 if (document.getElementById('btn-copy').hasAttribute('disabled')) return;
                 vscode.postMessage({ type: 'copyImage' });
-                
                 const btn = document.getElementById('btn-copy');
                 const oldHtml = btn.innerHTML;
                 btn.innerHTML = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M6.5 12.2L2.1 7.8l.7-.7 3.7 3.7 7.4-7.4.7.7-8.1 8.1z"/></svg>';
                 setTimeout(() => btn.innerHTML = oldHtml, 1000);
             });
 
-            // Zoom and Pan Logic
             const plotArea = document.querySelector('.plot-area');
 
-            function applyZoom(zoomFactor, mouseX, mouseY) {
-                const img = document.getElementById('main-image');
-                if (!img || img.style.display === 'none') return;
+            function applyZoom(zoomFactor, mouseX, mouseY, targetPaneId) {
+                let targetKeys = [];
+                if (!isCompareMode) {
+                    targetKeys = ['main'];
+                } else {
+                    if (isSyncZoom) targetKeys = ['left', 'right'];
+                    else {
+                        if (targetPaneId === 'compare-left' || targetPaneId === 'img-left') targetKeys = ['left'];
+                        else if (targetPaneId === 'compare-right' || targetPaneId === 'img-right') targetKeys = ['right'];
+                        else targetKeys = [activeCompareSide];
+                    }
+                }
 
-                let newScale = scale * zoomFactor;
-                if (newScale < 0.1) newScale = 0.1;
-                if (newScale > 50) newScale = 50;
+                targetKeys.forEach(k => {
+                    const st = transformState[k];
+                    let newScale = st.scale * zoomFactor;
+                    if (newScale < 0.1) newScale = 0.1;
+                    if (newScale > 50) newScale = 50;
 
-                const actualZoomFactor = newScale / scale;
-                const rect = img.getBoundingClientRect();
-                const plotRect = plotArea.getBoundingClientRect();
+                    const actualZoomFactor = newScale / st.scale;
+                    
+                    let img;
+                    if (k === 'main') img = document.getElementById('main-image');
+                    else if (k === 'left') img = document.getElementById('img-left');
+                    else img = document.getElementById('img-right');
 
-                const centerX = rect.left + rect.width / 2;
-                const centerY = rect.top + rect.height / 2;
+                    if (!img || img.style.display === 'none') return;
 
-                const viewportCenterX = plotRect.left + plotRect.width / 2;
-                const viewportCenterY = plotRect.top + plotRect.height / 2;
+                    const rect = img.getBoundingClientRect();
+                    
+                    let container;
+                    if (k === 'main') container = plotArea;
+                    else if (k === 'left') container = document.getElementById('compare-left');
+                    else container = document.getElementById('compare-right');
 
-                const cx = mouseX !== undefined ? mouseX : viewportCenterX;
-                const cy = mouseY !== undefined ? mouseY : viewportCenterY;
+                    const containerRect = container.getBoundingClientRect();
 
-                // Adjust translate so the point under the cursor stays in place
-                translateX += (cx - centerX) * (1 - actualZoomFactor);
-                translateY += (cy - centerY) * (1 - actualZoomFactor);
+                    const centerX = rect.left + rect.width / 2;
+                    const centerY = rect.top + rect.height / 2;
 
-                scale = newScale;
+                    const viewportCenterX = containerRect.left + containerRect.width / 2;
+                    const viewportCenterY = containerRect.top + containerRect.height / 2;
+
+                    const cx = mouseX !== undefined ? mouseX : viewportCenterX;
+                    const cy = mouseY !== undefined ? mouseY : viewportCenterY;
+
+                    st.translateX += (cx - centerX) * (1 - actualZoomFactor);
+                    st.translateY += (cy - centerY) * (1 - actualZoomFactor);
+                    st.scale = newScale;
+                });
+                
                 updateTransform();
             }
 
             plotArea.addEventListener('wheel', (e) => {
-                const img = document.getElementById('main-image');
-                if (!img || img.style.display === 'none') return;
                 e.preventDefault();
-
                 const zoomIntensity = 0.002;
                 const zoomFactor = Math.exp(-e.deltaY * zoomIntensity);
-                applyZoom(zoomFactor, e.clientX, e.clientY);
+                applyZoom(zoomFactor, e.clientX, e.clientY, e.target.id);
             }, { passive: false });
 
             let isDragging = false;
-            let dragStartX, dragStartY;
+            let dragStart = { main: {x:0, y:0}, left: {x:0, y:0}, right: {x:0, y:0} };
+            let dragTargetPaneId = '';
 
             plotArea.addEventListener('mousedown', (e) => {
-                if (e.button !== 0) return; // Only drag with left click
-                const img = document.getElementById('main-image');
-                if (!img || img.style.display === 'none') return;
-
+                if (e.button !== 0) return;
+                const isZoomed = !isCompareMode
+                    ? transformState.main.scale > 1.001
+                    : (transformState.left.scale > 1.001 || transformState.right.scale > 1.001);
+                if (!isZoomed) return;
                 isDragging = true;
-                dragStartX = e.clientX - translateX;
-                dragStartY = e.clientY - translateY;
+                dragTargetPaneId = e.target.id;
+                dragStart.main = { x: e.clientX - transformState.main.translateX, y: e.clientY - transformState.main.translateY };
+                dragStart.left = { x: e.clientX - transformState.left.translateX, y: e.clientY - transformState.left.translateY };
+                dragStart.right = { x: e.clientX - transformState.right.translateX, y: e.clientY - transformState.right.translateY };
             });
 
             window.addEventListener('mousemove', (e) => {
                 if (!isDragging) return;
                 e.preventDefault();
-                translateX = e.clientX - dragStartX;
-                translateY = e.clientY - dragStartY;
+                
+                if (!isCompareMode) {
+                    transformState.main.translateX = e.clientX - dragStart.main.x;
+                    transformState.main.translateY = e.clientY - dragStart.main.y;
+                } else {
+                    if (isSyncZoom) {
+                        transformState.left.translateX = e.clientX - dragStart.left.x;
+                        transformState.left.translateY = e.clientY - dragStart.left.y;
+                        transformState.right.translateX = e.clientX - dragStart.right.x;
+                        transformState.right.translateY = e.clientY - dragStart.right.y;
+                    } else {
+                        if (dragTargetPaneId === 'compare-left' || dragTargetPaneId === 'img-left') {
+                            transformState.left.translateX = e.clientX - dragStart.left.x;
+                            transformState.left.translateY = e.clientY - dragStart.left.y;
+                        } else if (dragTargetPaneId === 'compare-right' || dragTargetPaneId === 'img-right') {
+                            transformState.right.translateX = e.clientX - dragStart.right.x;
+                            transformState.right.translateY = e.clientY - dragStart.right.y;
+                        } else {
+                            const tState = transformState[activeCompareSide];
+                            const dStart = dragStart[activeCompareSide];
+                            tState.translateX = e.clientX - dStart.x;
+                            tState.translateY = e.clientY - dStart.y;
+                        }
+                    }
+                }
                 updateTransform();
             });
 
@@ -1324,22 +1858,15 @@ export class PlotsPanel {
             plotArea.addEventListener('dblclick', resetZoom);
 
             document.getElementById('btn-zoom-in')?.addEventListener('click', () => {
-                if (!document.getElementById('btn-zoom-in').hasAttribute('disabled')) {
-                    applyZoom(1.2);
-                }
+                if (!document.getElementById('btn-zoom-in').hasAttribute('disabled')) applyZoom(1.2);
             });
             document.getElementById('btn-zoom-out')?.addEventListener('click', () => {
-                if (!document.getElementById('btn-zoom-out').hasAttribute('disabled')) {
-                    applyZoom(1 / 1.2);
-                }
+                if (!document.getElementById('btn-zoom-out').hasAttribute('disabled')) applyZoom(1 / 1.2);
             });
             document.getElementById('btn-reset-zoom')?.addEventListener('click', () => {
-                if (!document.getElementById('btn-reset-zoom').hasAttribute('disabled')) {
-                    resetZoom();
-                }
+                if (!document.getElementById('btn-reset-zoom').hasAttribute('disabled')) resetZoom();
             });
 
-            // Custom Directory Dropdown Logic
             const btnCustomDir = document.getElementById('btn-custom-dir');
             const dropdown = document.getElementById('dir-dropdown');
             const btnSetViewDir = document.getElementById('btn-set-view-dir');
@@ -1350,52 +1877,45 @@ export class PlotsPanel {
 
             btnCustomDir?.addEventListener('click', (e) => {
                 e.stopPropagation();
-                dropdown.classList.toggle('open');
-                if (dropdown.classList.contains('open')) {
-                    dirInput.focus();
-                }
+                dropdown?.classList.toggle('open');
+                if (dropdown?.classList.contains('open')) dirInput?.focus();
             });
-
             dropdown?.addEventListener('click', (e) => {
-                e.stopPropagation(); // Prevent clicks inside from closing it
+                e.stopPropagation();
             });
-
             document.addEventListener('click', () => {
-                dropdown.classList.remove('open');
+                dropdown?.classList.remove('open');
             });
-
             btnSetViewDir?.addEventListener('click', () => {
-                dropdown.classList.remove('open');
-                vscode.postMessage({ type: 'setCustomDir', path: dirInput.value });
+                dropdown?.classList.remove('open');
+                vscode.postMessage({ type: 'setCustomDir', path: dirInput?.value });
             });
-
             btnSetOutViewDir?.addEventListener('click', () => {
-                dropdown.classList.remove('open');
-                vscode.postMessage({ type: 'setOutViewDir', path: dirInput.value });
+                dropdown?.classList.remove('open');
+                vscode.postMessage({ type: 'setOutViewDir', path: dirInput?.value });
             });
-
             dirInput?.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
-                    dropdown.classList.remove('open');
+                    dropdown?.classList.remove('open');
                     vscode.postMessage({ type: 'setCustomDir', path: dirInput.value });
                 }
             });
-
             btnClearDir?.addEventListener('click', () => {
-                dropdown.classList.remove('open');
-                dirInput.value = '';
+                dropdown?.classList.remove('open');
+                if(dirInput) dirInput.value = '';
                 vscode.postMessage({ type: 'setOutViewDir', path: '' });
             });
-
             btnBrowse?.addEventListener('click', () => {
-                dropdown.classList.remove('open');
+                dropdown?.classList.remove('open');
                 vscode.postMessage({ type: 'browseCustomDir' });
             });
+            document.getElementById('btn-popout')?.addEventListener('click', () => {
+                vscode.postMessage({ type: isPoppedOut ? 'restore' : 'popout' });
+            });
 
-            // Instant Tooltip Controller
             const tooltip = document.getElementById('tooltip');
             const setupTooltip = (el) => {
-                if (!el) return;
+                if (!el || !tooltip) return;
                 el.addEventListener('mouseenter', (e) => {
                     const text = el.getAttribute('data-tooltip');
                     if (!text) return;
@@ -1404,18 +1924,15 @@ export class PlotsPanel {
                     const rect = el.getBoundingClientRect();
                     
                     if (el.id === 'main-image') {
-                        // Place tooltip near the top middle to avoid obscuring the center text
                         tooltip.style.top = (rect.top + 20) + 'px';
                     } else {
                         tooltip.style.top = (rect.bottom + 5) + 'px';
                     }
 
-                    // Boundary detection
                     const padding = 10;
                     let left = rect.left + (rect.width/2) - (tooltip.offsetWidth/2);
                     
                     if (el.id === 'main-image') {
-                        // For large images, just center it in the window width if image spans the whole width
                         left = window.innerWidth / 2 - tooltip.offsetWidth / 2;
                     }
                     
@@ -1433,10 +1950,9 @@ export class PlotsPanel {
             document.querySelectorAll('[data-tooltip]').forEach(setupTooltip);
             setupTooltip(document.getElementById('main-image'));
 
-            // Keyboard Navigation for Plots
             window.addEventListener('keydown', (e) => {
-                // Do not trigger if typing in an input field
                 if (e.target && e.target.tagName === 'INPUT') return;
+                if (isCompareMode) return; 
 
                 if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
                     const btnPrev = document.getElementById('btn-prev');
@@ -1451,15 +1967,32 @@ export class PlotsPanel {
                 }
             });
 
-            // Immediate minimize/restore handler
-            window.addEventListener('message', function _minHandler(event) {
-                const msg = event.data;
-                if (msg.command === 'setMinimized') {
-                    document.body.classList.toggle('minimized', msg.minimized);
+            // Dynamic Resize Re-rendering Observer
+            window._plotSwitchTimeout = null;
+            let resizeTimeout;
+
+            window.triggerRerender = function() {
+                const plotArea = document.getElementById('plot-area');
+                if (plotArea && !isCompareMode) {
+                    vscode.postMessage({ 
+                        type: 'resize', 
+                        width: plotArea.clientWidth, 
+                        height: plotArea.clientHeight 
+                    });
                 }
+            };
+
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => {
+                    if (typeof triggerRerender === 'function') {
+                        triggerRerender();
+                    }
+                }, 400); // 400ms debounce
             });
-        })();
-    </script>
+
+
+</script>
 </body>
 </html>`;
     }

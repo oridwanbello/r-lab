@@ -38,6 +38,16 @@
           "type": "string",
           "default": "R",
           "description": "Path or command for the R Console terminal. Examples: 'R' or 'radian'."
+        },
+        "r-layout.restoreCustomPanelPositions": {
+          "type": "boolean",
+          "default": false,
+          "description": "When activating the layout, restore webview panels (Plots, Workspace, etc.) to custom locations where they were dragged in the previous session. If false, activating the layout strictly re-enforces the standard 3-pane arrangement."
+        },
+        "r-layout.plotOutputDir": {
+          "type": "string",
+          "default": "",
+          "description": "A custom directory path where R Layout should silently write plot images. If left blank, it uses the default temporary folder (.r_layout/plots in the workspace root, or your home directory if no workspace is open)."
         }
       }
     },
@@ -101,12 +111,22 @@
       {
         "command": "r-layout.runSmart",
         "key": "cmd+shift+s",
-        "when": "r-layout.layoutActive && editorLangId =~ /^(r|rmd|quarto)$/"
+        "when": "r-layout.layoutActive && (editorLangId =~ /^(r|rmd|quarto)$/ || activeWebviewPanelId =~ /^r-layout\\./)"
       },
       {
         "command": "r-layout.runSmart",
         "key": "ctrl+shift+s",
-        "when": "r-layout.layoutActive && editorLangId =~ /^(r|rmd|quarto)$/"
+        "when": "r-layout.layoutActive && (editorLangId =~ /^(r|rmd|quarto)$/ || activeWebviewPanelId =~ /^r-layout\\./)"
+      },
+      {
+        "command": "r-layout.runSelection",
+        "key": "cmd+enter",
+        "when": "r-layout.layoutActive && (editorLangId =~ /^(r|rmd|quarto)$/ || activeWebviewPanelId =~ /^r-layout\\./)"
+      },
+      {
+        "command": "r-layout.runSelection",
+        "key": "ctrl+enter",
+        "when": "r-layout.layoutActive && (editorLangId =~ /^(r|rmd|quarto)$/ || activeWebviewPanelId =~ /^r-layout\\./)"
       }
     ],
     "menus": {

@@ -39,10 +39,13 @@ export class DataViewerPanel {
 
     public static createOrShow(
         extensionUri: vscode.Uri,
-        column: vscode.ViewColumn = vscode.ViewColumn.Three
+        column: vscode.ViewColumn = vscode.ViewColumn.Three,
+        forceReveal: boolean = true
     ): DataViewerPanel {
         if (DataViewerPanel.currentPanel) {
-            DataViewerPanel.currentPanel._panel.reveal(column, true);
+            if (forceReveal) {
+                DataViewerPanel.currentPanel._panel.reveal(column, true);
+            }
             return DataViewerPanel.currentPanel;
         }
 
@@ -105,9 +108,14 @@ export class DataViewerPanel {
 
     // Public API
 
-    /** Bring this panel's tab to the front. */
     public reveal(): void {
-        this._panel.reveal(undefined, true);
+        if (!this._panel.visible) {
+            const activeEditor = vscode.window.activeTextEditor;
+            if (activeEditor && activeEditor.viewColumn === this._panel.viewColumn) {
+                return;
+            }
+            this._panel.reveal(undefined, true);
+        }
     }
 
     /** Hide or show all webview content (toolbar, table, controls).
@@ -516,7 +524,7 @@ export class DataViewerPanel {
         .truncation-notice {
             padding: 4px 12px;
             background: var(--vscode-editorInfo-background, rgba(60, 130, 250, 0.1));
-            color: var(--vscode-editorInfo-foreground, var(--vscode-foreground));
+            color: var(--vscode-textLink-foreground, var(--vscode-foreground));
             border-bottom: 1px solid var(--vscode-editorGroup-border);
         }
         .table-wrapper { flex: 1; overflow: auto; }

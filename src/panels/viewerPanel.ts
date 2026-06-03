@@ -19,6 +19,7 @@ export class ViewerPanel {
     private readonly _panel: vscode.WebviewPanel;
     private _disposables: vscode.Disposable[] = [];
     private _isMinimized: boolean = false;
+    private _isPoppedOut: boolean = false;
     private _isNightMode: boolean = false;
     private _extensionUri: vscode.Uri;
     
@@ -33,10 +34,13 @@ export class ViewerPanel {
     public static createOrShow(
         extensionUri: vscode.Uri,
         url?: string,
-        column: vscode.ViewColumn = vscode.ViewColumn.Three
+        column: vscode.ViewColumn = vscode.ViewColumn.Three,
+        forceReveal: boolean = true
     ): ViewerPanel {
         if (ViewerPanel.currentPanel) {
-            ViewerPanel.currentPanel._panel.reveal(column, true);
+            if (forceReveal) {
+                ViewerPanel.currentPanel._panel.reveal(column, true);
+            }
             if (url) {
                 ViewerPanel.currentPanel.loadUrl(url);
             }
@@ -63,7 +67,14 @@ export class ViewerPanel {
     }
 
     public reveal(column?: vscode.ViewColumn, preserveFocus?: boolean): void {
-        this._panel.reveal(column, preserveFocus);
+        if (!this._panel.visible) {
+            const activeEditor = vscode.window.activeTextEditor;
+            if (activeEditor && activeEditor.viewColumn === this._panel.viewColumn) {
+                // Do not steal focus if panel is in the same group as active editor
+                return;
+            }
+            this._panel.reveal(column, preserveFocus);
+        }
     }
 
     public setMinimized(minimized: boolean): void {
@@ -110,6 +121,22 @@ export class ViewerPanel {
                         break;
                     case 'clearAll':
                         this._handleClearAll();
+                        break;
+                    case 'popout':
+                        this._isPoppedOut = true;
+                        this._panel.reveal(vscode.ViewColumn.One, false);
+                        setTimeout(() => vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'), 150);
+                        this._updateWebviewState();
+                        break;
+                    case 'restore':
+                        this._isPoppedOut = false;
+                        this._panel.reveal(vscode.ViewColumn.Three, false);
+                        setTimeout(() => {
+                            vscode.commands.executeCommand('moveActiveEditor', { to: 'position', value: 2 }).then(() => {
+                                setTimeout(() => vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'), 150);
+                            });
+                        }, 100);
+                        this._updateWebviewState();
                         break;
                 }
             },
@@ -317,6 +344,7 @@ export class ViewerPanel {
                 url: this._currentUrl,
                 minimized: this._isMinimized,
                 isNightMode: this._isNightMode,
+                isPoppedOut: this._isPoppedOut,
                 hasPrev: this._currentIndex > 0,
                 hasNext: this._currentIndex >= 0 && this._currentIndex < this._history.length - 1,
                 currentIndex: this._currentIndex,
@@ -462,11 +490,11 @@ export class ViewerPanel {
 <body>
     <div class="toolbar" id="toolbar">
         <div class="nav-controls">
-            <button id="btn-prev" data-tooltip="Previous Widget" disabled>
+            <button id="btn-prev" data-tooltip="Previous Item" disabled>
                 ${prevIcon}
             </button>
             <span class="counter" id="viewer-counter">-</span>
-            <button id="btn-next" data-tooltip="Next Widget" disabled>
+            <button id="btn-next" data-tooltip="Next Item" disabled>
                 ${nextIcon}
             </button>
         </div>
@@ -474,10 +502,10 @@ export class ViewerPanel {
         <button id="btn-nightmode" data-tooltip="Switch to Night Mode" disabled>
             ${moonIcon}
         </button>
-        <button id="btn-delete" data-tooltip="Delete Current Widget" disabled>
+        <button id="btn-delete" data-tooltip="Delete Current Item" disabled>
             ${deleteIcon}
         </button>
-        <button id="btn-clear" data-tooltip="Clear All Widgets" disabled>
+        <button id="btn-clear" data-tooltip="Clear All Items" disabled>
             ${clearIcon}
         </button>
         <button id="btn-refresh" data-tooltip="Refresh Viewer" disabled>
@@ -485,6 +513,9 @@ export class ViewerPanel {
         </button>
         <button id="btn-external" data-tooltip="Open in Browser" disabled>
             ${externalIcon}
+        </button>
+        <button id="btn-popout" data-tooltip="Pop-out to Main Editor">
+            <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/><path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/></svg>
         </button>
     </div>
 
@@ -514,39 +545,39 @@ export class ViewerPanel {
         const btnDelete = document.getElementById('btn-delete');
         const btnClear = document.getElementById('btn-clear');
 
-        btnNightMode.addEventListener('click', () => {
-            if (!btnNightMode.hasAttribute('disabled')) {
-                vscode.postMessage({ type: 'toggleNightMode' });
-            }
-        });
-        btnDelete.addEventListener('click', () => {
-            if (!btnDelete.hasAttribute('disabled')) {
-                vscode.postMessage({ type: 'deleteCurrent' });
-            }
-        });
-        btnClear.addEventListener('click', () => {
-            if (!btnClear.hasAttribute('disabled')) {
-                vscode.postMessage({ type: 'clearAll' });
-            }
-        });
+        const btnPopout = document.getElementById('btn-popout');
 
-        let currentUrl = null;
+        let currentUrl = '';
+        let isPoppedOut = false;
 
+        // Handle messages from backend
         window.addEventListener('message', event => {
             const msg = event.data;
             if (msg.type === 'updateState') {
                 const state = msg.state;
+                const newUrl = state.url || '';
                 
-                // Handle minimization and night mode
-                document.body.classList.toggle('minimized', state.minimized);
+                if (state.isPoppedOut !== undefined) {
+                    isPoppedOut = state.isPoppedOut;
+                    if (btnPopout) {
+                        btnPopout.setAttribute('data-tooltip', isPoppedOut ? 'Restore to Side Panel' : 'Pop-out to Main Editor');
+                        // Force update tooltip text if it's currently showing for this button
+                        const tooltip = document.getElementById('tooltip');
+                        if (tooltip && tooltip.style.display === 'block' && btnPopout.matches(':hover')) {
+                            tooltip.textContent = btnPopout.getAttribute('data-tooltip');
+                        }
+                    }
+                }
+
+                document.body.classList.toggle('minimized', !!state.minimized);
                 document.body.classList.toggle('night-mode', state.isNightMode);
                 
                 btnNightMode.innerHTML = state.isNightMode ? \`${sunIcon}\` : \`${moonIcon}\`;
                 btnNightMode.setAttribute('data-tooltip', state.isNightMode ? 'Switch to Day Mode' : 'Switch to Night Mode');
 
                 // Handle URL updates
-                if (state.url !== currentUrl) {
-                    currentUrl = state.url;
+                if (newUrl !== currentUrl) {
+                    currentUrl = newUrl;
                     if (currentUrl) {
                         frame.src = currentUrl;
                         frame.style.display = 'block';
@@ -591,7 +622,6 @@ export class ViewerPanel {
 
         btnRefresh.addEventListener('click', () => {
             if (!btnRefresh.hasAttribute('disabled') && currentUrl) {
-                // To force a hard refresh, we can slightly modify the src or just reload the iframe
                 frame.src = frame.src;
             }
         });
@@ -611,6 +641,26 @@ export class ViewerPanel {
         btnExternal.addEventListener('click', () => {
             if (!btnExternal.hasAttribute('disabled')) {
                 vscode.postMessage({ type: 'openExternal' });
+            }
+        });
+
+        btnPopout.addEventListener('click', () => {
+            vscode.postMessage({ type: isPoppedOut ? 'restore' : 'popout' });
+        });
+
+        btnNightMode.addEventListener('click', () => {
+            if (!btnNightMode.hasAttribute('disabled')) {
+                vscode.postMessage({ type: 'toggleNightMode' });
+            }
+        });
+        btnDelete.addEventListener('click', () => {
+            if (!btnDelete.hasAttribute('disabled')) {
+                vscode.postMessage({ type: 'deleteCurrent' });
+            }
+        });
+        btnClear.addEventListener('click', () => {
+            if (!btnClear.hasAttribute('disabled')) {
+                vscode.postMessage({ type: 'clearAll' });
             }
         });
 
