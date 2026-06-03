@@ -211,12 +211,70 @@ tryCatch({
         sz <- sub("Mb|MB", "MB", sz)
         sz <- sub("Gb|GB", "GB", sz)
         preview <- tryCatch({
-            if (is.data.frame(obj) || is.matrix(obj)) paste0(nrow(obj), " obs. of ", ncol(obj), " variables")
-            else if (is.list(obj)) paste0("List of ", length(obj))
-            else if (is.function(obj)) "function"
-            else if (is.character(obj) && length(obj) == 1) paste0('"', substr(obj, 1, 60), '"')
-            else if (is.numeric(obj) && length(obj) <= 6) paste(head(obj, 6), collapse = " ")
-            else paste(head(obj, 3), collapse = " ")
+            get_type <- function(x) {
+                if (is.data.frame(x)) "df" else if (is.list(x)) "list" else {
+                    t <- typeof(x)
+                    if (t == "double") "num" else if (t == "integer") "int" else if (t == "character") "chr" else if (t == "logical") "logi" else t
+                }
+            }
+            if (is.data.frame(obj)) {
+                base_str <- paste0(nrow(obj), " obs. of ", ncol(obj), " variables")
+                if (length(obj) == 0) base_str else {
+                    nm_names <- names(obj)
+                    if (!is.null(nm_names) && length(nm_names) > 0 && any(nm_names != "")) {
+                        nm_valid <- nm_names[nm_names != ""]
+                        n_show <- if (length(nm_valid) > 3) 3 else length(nm_valid)
+                        types <- vapply(obj[1:n_show], get_type, character(1))
+                        paste0(base_str, " {", paste0("$", head(nm_valid, n_show), ": ", types, collapse=", "), if(length(nm_valid)>3) ", ...}" else "}")
+                    } else {
+                        n_show <- if (length(obj) > 3) 3 else length(obj)
+                        types <- vapply(obj[1:n_show], get_type, character(1))
+                        paste0(base_str, " {", paste(paste0(": ", types), collapse=", "), if(length(obj)>3) ", ...}" else "}")
+                    }
+                }
+            } else if (is.array(obj)) {
+                type_lbl <- typeof(obj)
+                if (type_lbl == "double") type_lbl <- "num" else if (type_lbl == "integer") type_lbl <- "int" else if (type_lbl == "character") type_lbl <- "chr" else if (type_lbl == "logical") type_lbl <- "logi"
+                dim_ranges <- paste0("1:", dim(obj), collapse = ", ")
+                n_show <- if (length(obj) > 3) 3 else length(obj)
+                flat_vals <- as.vector(head(as.vector(obj), n_show))
+                if (typeof(obj) == "character") flat_vals <- paste0('"', flat_vals, '"')
+                vals_str <- paste(flat_vals, collapse = " ")
+                if (length(obj) > 3) vals_str <- paste0(vals_str, " ...")
+                paste0(type_lbl, " [", dim_ranges, "] ", vals_str)
+            } else if (is.list(obj)) {
+                if (length(obj) == 0) "List of 0" else {
+                    nm_names <- names(obj)
+                    if (!is.null(nm_names) && length(nm_names) > 0 && any(nm_names != "")) {
+                        nm_valid <- nm_names[nm_names != ""]
+                        n_show <- if (length(nm_valid) > 3) 3 else length(nm_valid)
+                        types <- vapply(obj[1:n_show], get_type, character(1))
+                        paste0("List of ", length(obj), " {", paste0("$", head(nm_valid, n_show), ": ", types, collapse=", "), if(length(nm_valid)>3) ", ...}" else "}")
+                    } else {
+                        n_show <- if (length(obj) > 3) 3 else length(obj)
+                        types <- vapply(obj[1:n_show], get_type, character(1))
+                        paste0("List of ", length(obj), " {", paste(paste0(": ", types), collapse=", "), if(length(obj)>3) ", ...}" else "}")
+                    }
+                }
+            } else if (is.function(obj)) {
+                "function"
+            } else if (is.vector(obj)) {
+                if (length(obj) == 1) {
+                    if (is.character(obj)) paste0('"', obj, '"') else as.character(obj)
+                } else {
+                    type_lbl <- typeof(obj)
+                    if (type_lbl == "double") type_lbl <- "num" else if (type_lbl == "integer") type_lbl <- "int" else if (type_lbl == "character") type_lbl <- "chr" else if (type_lbl == "logical") type_lbl <- "logi"
+                    dim_range <- paste0("1:", length(obj))
+                    n_show <- if (length(obj) > 3) 3 else length(obj)
+                    flat_vals <- as.vector(head(obj, n_show))
+                    if (typeof(obj) == "character") flat_vals <- paste0('"', flat_vals, '"')
+                    vals_str <- paste(flat_vals, collapse = " ")
+                    if (length(obj) > 3) vals_str <- paste0(vals_str, " ...")
+                    paste0(type_lbl, " [", dim_range, "] ", vals_str)
+                }
+            } else {
+                substr(paste(as.character(obj), collapse = " "), 1, 60)
+            }
         }, error = function(e) "?")
         list(name = nm, type = cls, size = paste0(dims, " (", sz, ")"), preview = preview, isDataFrame = is.data.frame(obj) || is.matrix(obj) || (is.array(obj) && length(dim(obj)) == 3))
     })
@@ -659,6 +717,7 @@ tryCatch({
         }
         .preview-col {
             width: auto;
+            white-space: nowrap;
             font-family: var(--vscode-editor-font-family, monospace);
             opacity: 0.8;
             vertical-align: middle;

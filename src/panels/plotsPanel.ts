@@ -223,6 +223,11 @@ export class PlotsPanel {
         if (this._currentIndex < 0 || this._currentIndex >= this._plots.length) { return; }
         const uri = this._plots[this._currentIndex];
 
+        if (uri.fsPath.includes('_interactive.svg')) {
+            vscode.window.showWarningMessage('Interactive widget placeholders can only be deleted from the Viewer tab.');
+            return;
+        }
+
         // Only allow physical deletion for files inside the .r_layout directory.
         // User-specified directories must not be modified - we only display them.
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
@@ -240,6 +245,10 @@ export class PlotsPanel {
         try {
             if (fs.existsSync(uri.fsPath)) {
                 fs.unlinkSync(uri.fsPath);
+                const rdsPath = uri.fsPath.replace(/\.(png|jpg|jpeg|svg|gif|bmp|webp|ico)$/i, '.rds');
+                if (fs.existsSync(rdsPath)) {
+                    fs.unlinkSync(rdsPath);
+                }
             }
             // The watcher will pick up the deletion and update the UI
         } catch (err: any) {
@@ -379,8 +388,32 @@ export class PlotsPanel {
     // Public API
 
     public clear(): void {
-        this._plots = [];
-        this._currentIndex = -1;
+        const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
+        const rLayoutDir = path.join(wf, '.r_layout');
+
+        // Physically delete files only if they are inside the .r_layout directory
+        for (const uri of this._plots) {
+            if (uri.fsPath.includes('_interactive.svg')) continue; // Skip widget placeholders
+            
+            const relative = path.relative(rLayoutDir, uri.fsPath);
+            const isInside = relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+            if (isInside) {
+                try {
+                    if (fs.existsSync(uri.fsPath)) {
+                        fs.unlinkSync(uri.fsPath);
+                        // Delete the corresponding .rds file if it exists
+                        const rdsPath = uri.fsPath.replace(/\.(png|jpg|jpeg|svg|gif|bmp|webp|ico)$/i, '.rds');
+                        if (fs.existsSync(rdsPath)) {
+                            fs.unlinkSync(rdsPath);
+                        }
+                    }
+                } catch (e) {}
+            }
+        }
+
+        // Retain widget placeholders, clear everything else
+        this._plots = this._plots.filter(p => p.fsPath.includes('_interactive.svg'));
+        this._currentIndex = this._plots.length > 0 ? this._plots.length - 1 : -1;
         this._render();
     }
 
@@ -940,20 +973,19 @@ export class PlotsPanel {
 
             function getInteractiveSvgUri(isNightMode) {
                 const linkColor = getComputedStyle(document.documentElement).getPropertyValue('--vscode-textLink-foreground').trim() || '#007acc';
-                // Keep the background explicitly dark to differentiate from normal plots
-                const gridColor = '#333';
-                const bg1 = '#1e1e1e';
-                const bg2 = '#2a2d3e';
+                
+                // Minimalist dot grid colors
+                const bgColor = '#151515';
+                const dotColor = '#2d2d2d';
 
                 const svgStr = '<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">' +
-                    '<defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">' +
-                        '<stop offset="0%" stop-color="' + bg2 + '"/>' +
-                        '<stop offset="100%" stop-color="' + bg1 + '"/>' +
-                    '</linearGradient></defs>' +
-                    '<rect width="800" height="600" fill="url(#g)"/>' +
-                    '<g fill="none" stroke="' + gridColor + '" stroke-width="2">' +
-                        '<path d="M0 100h800M0 200h800M0 300h800M0 400h800M0 500h800M100 0v600M200 0v600M300 0v600M400 0v600M500 0v600M600 0v600M700 0v600"/>' +
-                    '</g>' +
+                    '<defs>' +
+                        '<pattern id="dot-grid" width="20" height="20" patternUnits="userSpaceOnUse">' +
+                            '<circle cx="2" cy="2" r="1.5" fill="' + dotColor + '"/>' +
+                        '</pattern>' +
+                    '</defs>' +
+                    '<rect width="800" height="600" fill="' + bgColor + '"/>' +
+                    '<rect width="800" height="600" fill="url(#dot-grid)"/>' +
                     '<g fill="' + linkColor + '" transform="translate(352, 170) scale(6)">' +
                         '<path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/>' +
                         '<path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/>' +
@@ -1002,26 +1034,41 @@ export class PlotsPanel {
             let themeChangedThumb = window.__lastNightModeThumb !== state.isNightMode;
             window.__lastNightModeThumb = state.isNightMode;
 
-            if (state.plots.length !== currentPlots.length) {
-                const scrollTop = sidebar.scrollTop;
-                sidebar.innerHTML = state.plots.map((url, i) => {
-                    const thumbUrl = url.includes('_interactive.svg') ? getInteractiveSvgUri(state.isNightMode) : url;
-                    return \`<img src="\${thumbUrl}" class="thumbnail \${i === state.currentIndex ? 'active' : ''}" data-index="\${i}" style="background: \${plotBg}" onerror="if(!this.dataset.retried){this.dataset.retried='true'; setTimeout(()=>this.src='\${thumbUrl}', 200);}" />\`;
-                }).join('');
-                sidebar.scrollTop = scrollTop;
-                currentPlots = state.plots;
-            } else {
-                const thumbs = sidebar.querySelectorAll('.thumbnail');
-                thumbs.forEach((t, i) => {
-                    t.style.background = plotBg;
-                    if (i === state.currentIndex) t.classList.add('active');
-                    else t.classList.remove('active');
-                    
-                    if (themeChangedThumb && state.plots[i].includes('_interactive.svg')) {
-                        t.src = getInteractiveSvgUri(state.isNightMode);
-                    }
-                });
+            // Sync DOM nodes natively instead of destroying innerHTML to prevent flickering
+            while (sidebar.children.length > state.plots.length) {
+                sidebar.removeChild(sidebar.lastChild);
             }
+            while (sidebar.children.length < state.plots.length) {
+                const img = document.createElement('img');
+                img.className = 'thumbnail';
+                img.onerror = function() {
+                    if (!this.dataset.retried) {
+                        this.dataset.retried = 'true';
+                        setTimeout(() => this.src = this.dataset.originalSrc, 200);
+                    }
+                };
+                sidebar.appendChild(img);
+            }
+            currentPlots = state.plots;
+
+            // Update attributes safely
+            const thumbs = sidebar.querySelectorAll('.thumbnail');
+            thumbs.forEach((t, i) => {
+                const url = state.plots[i];
+                const thumbUrl = url.includes('_interactive.svg') ? getInteractiveSvgUri(state.isNightMode) : url;
+                
+                if (t.getAttribute('src') !== thumbUrl || (themeChangedThumb && url.includes('_interactive.svg'))) {
+                    t.dataset.originalSrc = thumbUrl;
+                    t.setAttribute('src', thumbUrl);
+                    delete t.dataset.retried;
+                }
+                
+                t.dataset.index = i;
+                t.style.background = plotBg;
+                
+                if (i === state.currentIndex) t.classList.add('active');
+                else t.classList.remove('active');
+            });
 
             const activeThumb = sidebar.querySelector('.thumbnail.active');
             if (activeThumb) {
@@ -1047,13 +1094,15 @@ export class PlotsPanel {
                 else btn.removeAttribute('disabled');
             };
 
+            const isWidget = hasPlots && state.plots[state.currentIndex] && state.plots[state.currentIndex].includes('_interactive.svg');
+
             toggleDisabled('btn-zoom-in', !hasPlots);
             toggleDisabled('btn-zoom-out', !hasPlots);
             toggleDisabled('btn-reset-zoom', !hasPlots);
             toggleDisabled('btn-copy', !hasPlots);
             toggleDisabled('btn-save', !hasPlots);
             toggleDisabled('btn-night-mode', !hasPlots);
-            toggleDisabled('btn-delete', !hasPlots);
+            toggleDisabled('btn-delete', !hasPlots || isWidget);
             toggleDisabled('btn-clear', !hasPlots);
 
             const nightModeBtn = document.getElementById('btn-night-mode');

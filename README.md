@@ -14,51 +14,41 @@ R Layout brings the familiar multi-pane workflow of RStudio to VS Code and its f
 
 ### Instant Layout Orchestration
 
-One click to transform your editor into an asymmetrical 3-pane grid:
+One click to transform your editor into an RStudio-inspired 3-pane grid.
 
-- **Left Pane**: Main source editor (Full Height).
-- **Top-Right Pane**: R Console, Terminal, Problems, and Help.
-- **Bottom-Right Pane**: Workspace Explorer, Plots, and Data Viewer.
+- **Left**: Main source editor (Full Height)
+- **Top-Right**: R Console, Terminal, Problems, Help
+- **Bottom-Right**: Workspace, Plots, Data Viewer, Viewer
 
-### Workspace Explorer
+### Workspace & Package Manager
 
-A live variable inspector that synchronizes with your R session to display:
+A live variable inspector and environment manager.
 
-- Active variables, types, and values.
-- Direct interaction with the Data Viewer for dataframes, tibbles, and 2D/3D matrices.
+- **Inline Previews**: Elegant dictionary-style previews for lists and dataframes with un-cluttered horizontal scrolling.
+- **Data Viewing**: 1-click inspection of dataframes and matrices using a high-performance, spreadsheet-style viewer.
+- **Package Control**: Instantly search, attach, and detach R packages via dedicated subtabs.
 
-### Plot Gallery
+### Plot Gallery & Export
 
-A high-fidelity rendering panel for your R plots:
+A high-fidelity rendering panel for your R plots.
 
-- **Auto-Sync**: Automatically detects and displays new plots generated from the console.
-- **Interactive Zoom & Pan**: Easily inspect plots using scroll/pinch-to-zoom (anchored to mouse cursor) and click-and-drag panning, complete with precision toolbar controls.
-- **Advanced Export Menu**: Export plots with vector formats (`PDF`, `SVG`, `EPS`) or raster formats (`PNG`, `JPG`), custom dimensions, intelligent unit conversion (inches/pixels), and background preservation.
-- **History**: Navigate through your session's plot history with dedicated controls.
+- **Interactive Navigation**: Scroll/pinch-to-zoom and click-to-pan with precision toolbar controls.
+- **Advanced Export**: Save plots in vector (`PDF`, `SVG`, `EPS`) or raster (`PNG`, `JPG`) formats with dimension controls and unit auto-switching.
 
-### Data Viewer
+### HTML Widget & Shiny Viewer
 
-A high-performance spreadsheet-style inspector:
+Host R `viewer()` outputs (Shiny apps, `htmlwidgets`, package vignettes) inside VS Code.
 
-- **Silent Refresh**: Zero-resource background footprint; refreshes only on demand.
-- **Search & Sort**: Real-time filtering and multi-column sorting.
-- **Responsive Theme**: Automatic light/dark mode support with curated aesthetics.
+- Proxies local and localhost URLs into a sandboxed layout tab.
+- Toolbar controls to toggle night mode, navigate history, refresh, delete widgets, and open in an external browser.
 
-### Integrated R Help
+### Integrated R Help & Smart Execution
 
-A professional, high-performance R documentation viewer built natively into the editor layout:
+A professional documentation viewer and intelligent execution routing.
 
-- **KaTeX Math Rendering**: High-quality mathematical equation rendering out of the box.
-- **Smart Linker**: Automatically detects and links cross-references in documentation.
-- **Interactive Execution**: Dedicated "Run" buttons embedded inside example code blocks that send the code directly to your R Console.
-
-### Advanced Problems Panel
-
-A modern diagnostic inspector that anchors the top-right pane:
-
-- **Native Codicons**: Full integration with VS Code's official SVG Codicon library for severe, warning, and info states.
-- **Accordion File Groups**: Collapsible file grouping with dynamic problem-count badges.
-- **Theme Responsive**: Inherits native VS Code variables for seamless integration with any light or dark theme.
+- **Docs**: KaTeX math rendering, cross-reference linking, and embedded "Run" buttons for examples.
+- **Smart Execution**: The "Source File" button dynamically switches to "Run Selection" when text is highlighted. Natively supports `.Rmd`/`.qmd` context execution.
+- **Diagnostics**: A native Codicon-integrated problems panel with collapsible file groups.
 
 ## Getting Started
 

@@ -1605,19 +1605,51 @@ function _buildWatcherRprofile(): string | undefined {
       sz <- sub("Gb|GB", "GB", sz)
       dims <- paste0(dims, " (", sz, ")")
       prev <- tryCatch({
+        get_type <- function(x) {
+          if (is.data.frame(x)) "df" else if (is.list(x)) "list" else {
+            t <- typeof(x)
+            if (t == "double") "num" else if (t == "integer") "int" else if (t == "character") "chr" else if (t == "logical") "logi" else t
+          }
+        }
         if (is.data.frame(obj)) {
-          paste0(nrow(obj), " obs. of ", ncol(obj), " variables")
+          base_str <- paste0(nrow(obj), " obs. of ", ncol(obj), " variables")
+          if (length(obj) == 0) base_str else {
+            nm_names <- names(obj)
+            if (!is.null(nm_names) && length(nm_names) > 0 && any(nm_names != "")) {
+              nm_valid <- nm_names[nm_names != ""]
+              n_show <- if (length(nm_valid) > 3) 3 else length(nm_valid)
+              types <- vapply(obj[1:n_show], get_type, character(1))
+              paste0(base_str, " {", paste0("$", head(nm_valid, n_show), ": ", types, collapse=", "), if(length(nm_valid)>3) ", ...}" else "}")
+            } else {
+              n_show <- if (length(obj) > 3) 3 else length(obj)
+              types <- vapply(obj[1:n_show], get_type, character(1))
+              paste0(base_str, " {", paste(paste0(": ", types), collapse=", "), if(length(obj)>3) ", ...}" else "}")
+            }
+          }
         } else if (is.array(obj)) {
           type_lbl <- typeof(obj)
           if (type_lbl == "double") type_lbl <- "num" else if (type_lbl == "integer") type_lbl <- "int" else if (type_lbl == "character") type_lbl <- "chr" else if (type_lbl == "logical") type_lbl <- "logi"
           dim_ranges <- paste0("1:", dim(obj), collapse = ", ")
-          flat_vals <- as.vector(head(as.vector(obj), 3))
+          n_show <- if (length(obj) > 3) 3 else length(obj)
+          flat_vals <- as.vector(head(as.vector(obj), n_show))
           if (typeof(obj) == "character") flat_vals <- paste0('"', flat_vals, '"')
           vals_str <- paste(flat_vals, collapse = " ")
           if (length(obj) > 3) vals_str <- paste0(vals_str, " ...")
           paste0(type_lbl, " [", dim_ranges, "] ", vals_str)
         } else if (is.list(obj)) {
-          paste0("List of ", length(obj))
+          if (length(obj) == 0) "List of 0" else {
+            nm_names <- names(obj)
+            if (!is.null(nm_names) && length(nm_names) > 0 && any(nm_names != "")) {
+              nm_valid <- nm_names[nm_names != ""]
+              n_show <- if (length(nm_valid) > 3) 3 else length(nm_valid)
+              types <- vapply(obj[1:n_show], get_type, character(1))
+              paste0("List of ", length(obj), " {", paste0("$", head(nm_valid, n_show), ": ", types, collapse=", "), if(length(nm_valid)>3) ", ...}" else "}")
+            } else {
+              n_show <- if (length(obj) > 3) 3 else length(obj)
+              types <- vapply(obj[1:n_show], get_type, character(1))
+              paste0("List of ", length(obj), " {", paste(paste0(": ", types), collapse=", "), if(length(obj)>3) ", ...}" else "}")
+            }
+          }
         } else if (is.function(obj)) {
           "function"
         } else if (is.vector(obj)) {
@@ -1627,10 +1659,11 @@ function _buildWatcherRprofile(): string | undefined {
             type_lbl <- typeof(obj)
             if (type_lbl == "double") type_lbl <- "num" else if (type_lbl == "integer") type_lbl <- "int" else if (type_lbl == "character") type_lbl <- "chr" else if (type_lbl == "logical") type_lbl <- "logi"
             dim_range <- paste0("1:", length(obj))
-            flat_vals <- as.vector(head(obj, 5))
+            n_show <- if (length(obj) > 3) 3 else length(obj)
+            flat_vals <- as.vector(head(obj, n_show))
             if (typeof(obj) == "character") flat_vals <- paste0('"', flat_vals, '"')
             vals_str <- paste(flat_vals, collapse = " ")
-            if (length(obj) > 5) vals_str <- paste0(vals_str, " ...")
+            if (length(obj) > 3) vals_str <- paste0(vals_str, " ...")
             paste0(type_lbl, " [", dim_range, "] ", vals_str)
           }
         } else {
@@ -1725,28 +1758,17 @@ options(device = function(...) { pdf(file=null_dev, ...); dev.control("enable") 
 
 # Function to emit an SVG placeholder for interactive widgets
 .rlayout_emit_interactive_placeholder <- function() {
-  svg_content <- '<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2a2d3e"/><stop offset="100%" stop-color="#1e1e1e"/></linearGradient></defs><rect width="800" height="600" fill="url(#g)"/><g fill="none" stroke="#333" stroke-width="2"><path d="M0 100h800M0 200h800M0 300h800M0 400h800M0 500h800M100 0v600M200 0v600M300 0v600M400 0v600M500 0v600M600 0v600M700 0v600"/></g><g fill="#007acc" transform="translate(352, 170) scale(6)"><path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/><path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/></g><text x="400" y="340" fill="#007acc" font-family="sans-serif" font-size="36" text-anchor="middle">Open</text><text x="400" y="390" fill="#007acc" font-family="sans-serif" font-size="36" text-anchor="middle">Interactive Widget(s)</text></svg>'
+  tryCatch(.rlayout_force_save_plot(), error = function(e) {})
   
   .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
   if (!dir.exists(.out_dir)) dir.create(.out_dir, recursive = TRUE, showWarnings = FALSE)
   
-  existing_placeholders <- list.files(.out_dir, pattern = "^plot_[0-9]{5}_interactive\\\\.svg$")
-  if (length(existing_placeholders) > 0) {
-      return()
-  }
+  # We only ever use ONE widget placeholder file so it doesn't consume or skip plot numbers
+  plot_name <- file.path(.out_dir, "widget_interactive.svg")
   
-  if (.rlayout_current_plot_id == 0) {
-    files <- list.files(.out_dir, pattern = "^plot_[0-9]{5}.*\\\\.(png|svg)$")
-    if (length(files) == 0) .rlayout_current_plot_id <<- 1
-    else {
-      nums <- as.numeric(sub("^plot_([0-9]{5}).*$", "\\\\1", files))
-      .rlayout_current_plot_id <<- max(nums, na.rm = TRUE) + 1
-    }
-  } else {
-    .rlayout_current_plot_id <<- .rlayout_current_plot_id + 1
-  }
-  
-  plot_name <- file.path(.out_dir, sprintf("plot_%05d_interactive.svg", .rlayout_current_plot_id))
+  # Write a minimal SVG to trigger the filesystem watcher and update modified time.
+  # The VS Code UI dynamically injects the true visual design.
+  svg_content <- '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'
   writeLines(svg_content, plot_name)
 }
 
@@ -1754,22 +1776,22 @@ options(device = function(...) { pdf(file=null_dev, ...); dev.control("enable") 
 options(viewer = function(url, height = NULL) {
   .viewer_req_path <- file.path("${absOutDir}", "viewer_url.txt")
   writeLines(url, .viewer_req_path)
-  .rlayout_emit_interactive_placeholder()
+  
+  # Only emit placeholder for htmlwidgets (which print to tempdir/viewhtml.../index.html)
+  if (grepl("viewhtml.*(/|\\\\\\\\)index\\\\.html$", url)) {
+    .rlayout_emit_interactive_placeholder()
+  }
 })
 options(page_viewer = function(url) {
   .viewer_req_path <- file.path("${absOutDir}", "viewer_url.txt")
   writeLines(url, .viewer_req_path)
-  .rlayout_emit_interactive_placeholder()
 })
 options(browser = function(url) {
   .viewer_req_path <- file.path("${absOutDir}", "viewer_url.txt")
   writeLines(url, .viewer_req_path)
-  .rlayout_emit_interactive_placeholder()
 })
 
-# Hook plot.new to increment plot ID. Instead of naive +1, we scan the directory
-# to find the highest existing plot number and append. This is safe for custom
-# directories and idempotent if multiple hooks fire for the same plot.
+# Hook plot.new to increment plot ID safely by scanning directory
 .rlayout_force_save_plot <- function() {
   if (dev.cur() > 1) {
     .p <- recordPlot()
@@ -1777,21 +1799,18 @@ options(browser = function(url) {
       .hash <- sum(as.numeric(serialize(.p, NULL)))
       if (!identical(.hash, .rlayout_last_plot_hash)) {
         .rlayout_last_plot_hash <<- .hash
-        if (.rlayout_current_plot_id == 0) {
-          .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
-          if (!dir.exists(.out_dir)) {
-            .rlayout_current_plot_id <<- 1
-          } else {
-            files <- list.files(.out_dir, pattern = "^plot_[0-9]{5}.*\\\\.(png|svg)$")
-            if (length(files) == 0) .rlayout_current_plot_id <<- 1
-            else {
-              nums <- as.numeric(sub("^plot_([0-9]{5}).*$", "\\\\1", files))
-              .rlayout_current_plot_id <<- max(nums, na.rm = TRUE) + 1
-            }
-          }
-        }
+        
         .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
         dir.create(.out_dir, showWarnings = FALSE, recursive = TRUE)
+        
+        files <- list.files(.out_dir, pattern = "^plot_[0-9]{5}.*\\\\.(png|svg)$")
+        if (length(files) == 0) {
+          .rlayout_current_plot_id <<- 1
+        } else {
+          nums <- as.numeric(sub("^plot_([0-9]{5}).*$", "\\\\1", files))
+          .rlayout_current_plot_id <<- max(nums, na.rm = TRUE) + 1
+        }
+        
         .file <- file.path(.out_dir, sprintf("plot_%05d.png", .rlayout_current_plot_id))
         .rds_file <- file.path(.out_dir, sprintf("plot_%05d.rds", .rlayout_current_plot_id))
         try(saveRDS(.p, .rds_file), silent = TRUE)
@@ -1806,23 +1825,6 @@ options(browser = function(url) {
 .rlayout_update_plot_id <- function() {
   # Force save the PREVIOUS plot before we clear the device
   tryCatch(.rlayout_force_save_plot(), error = function(e) {})
-
-  if (exists(".rlayout_current_plot_id", envir = .GlobalEnv) && .rlayout_current_plot_id > 0) {
-    .rlayout_current_plot_id <<- .rlayout_current_plot_id + 1
-  } else {
-    .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
-    if (!dir.exists(.out_dir)) {
-      .rlayout_current_plot_id <<- 1
-      return()
-    }
-    files <- list.files(.out_dir, pattern = "^plot_[0-9]{5}\\\\.png$")
-    if (length(files) == 0) {
-      .rlayout_current_plot_id <<- 1
-    } else {
-      nums <- as.numeric(sub("^plot_([0-9]{5})\\\\.png$", "\\\\1", files))
-      .rlayout_current_plot_id <<- max(nums, na.rm = TRUE) + 1
-    }
-  }
 }
 setHook("before.plot.new", .rlayout_update_plot_id)
 setHook("before.grid.newpage", .rlayout_update_plot_id)

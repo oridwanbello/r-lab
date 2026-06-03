@@ -105,6 +105,12 @@ export class ViewerPanel {
                         this._isNightMode = !this._isNightMode;
                         this._updateWebviewState();
                         break;
+                    case 'deleteCurrent':
+                        this._handleDeleteCurrent();
+                        break;
+                    case 'clearAll':
+                        this._handleClearAll();
+                        break;
                 }
             },
             null,
@@ -261,6 +267,49 @@ export class ViewerPanel {
         this._panel.webview.html = this._getHtml();
     }
 
+    private _handleDeleteCurrent(): void {
+        if (this._currentIndex < 0 || this._currentIndex >= this._history.length) return;
+        this._history.splice(this._currentIndex, 1);
+        
+        if (this._history.length === 0) {
+            this._currentIndex = -1;
+            this._currentUrl = undefined;
+            this._cleanupWidgetPlaceholders();
+        } else {
+            if (this._currentIndex >= this._history.length) {
+                this._currentIndex = this._history.length - 1;
+            }
+            // Navigate triggers updateWebviewState
+            this._navigate(this._history[this._currentIndex]);
+            return; 
+        }
+        this._updateWebviewState();
+    }
+
+    private _handleClearAll(): void {
+        this._history = [];
+        this._currentIndex = -1;
+        this._currentUrl = undefined;
+        this._cleanupWidgetPlaceholders();
+        this._updateWebviewState();
+    }
+
+    private _cleanupWidgetPlaceholders(): void {
+        // Find and delete all _interactive.svg files in the plots directory
+        const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
+        const plotsDir = path.join(wf, '.r_layout', 'plots');
+        try {
+            if (fs.existsSync(plotsDir)) {
+                const files = fs.readdirSync(plotsDir);
+                for (const file of files) {
+                    if (file.endsWith('_interactive.svg')) {
+                        fs.unlinkSync(path.join(plotsDir, file));
+                    }
+                }
+            }
+        } catch (e) {}
+    }
+
     private _updateWebviewState(): void {
         this._panel.webview.postMessage({
             type: 'updateState',
@@ -286,6 +335,8 @@ export class ViewerPanel {
         const externalIcon = '<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/><path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/></svg>';
         const moonIcon = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786z"/></svg>';
         const sunIcon = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2A.5.5 0 018 0zm0 13a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2A.5.5 0 018 13zm8-5a.5.5 0 01-.5.5h-2a.5.5 0 010-1h2a.5.5 0 01.5.5zM3 8a.5.5 0 01-.5.5h-2a.5.5 0 010-1h2A.5.5 0 013 8zm10.657-5.657a.5.5 0 010 .707l-1.414 1.415a.5.5 0 11-.707-.708l1.414-1.414a.5.5 0 01.707 0zm-9.193 9.193a.5.5 0 010 .707L3.05 13.657a.5.5 0 01-.707-.707l1.414-1.414a.5.5 0 01.707 0zm9.193 2.121a.5.5 0 01-.707 0l-1.414-1.414a.5.5 0 01.707-.707l1.414 1.414a.5.5 0 010 .707zM4.464 2.343a.5.5 0 01-.707 0L2.343 3.757a.5.5 0 11.707.707l1.414-1.414a.5.5 0 010-.707z"/></svg>';
+        const deleteIcon = '<svg viewBox="0 0 16 16"><path fill="none" d="M9.25,2H6.75a0.25,0.25,0,0,0-0.25,0.25V3h3V2.25A0.25,0.25,0,0,0,9.25,2Z"/><path fill="currentColor" d="M13.5,3H10.5V2.25A1.25,1.25,0,0,0,9.25,1H6.75A1.25,1.25,0,0,0,5.5,2.25V3H2.5a0.5,0.5,0,0,0,0,1H3L3.63,13.53C3.67,14.37,4.31,15,5.13,15h5.75c0.82,0,1.45-.62,1.5-1.47L13,4h0.5a0.5,0.5,0,0,0,0-1ZM6,13H6a0.5,0.5,0,0,1-.5-.48l-0.25-7a0.5,0.5,0,1,1,1-.04l0.25,7A0.5,0.5,0,0,1,6,13ZM8.5,12.5a0.5,0.5,0,0,1-1,0V5.5a0.5,0.5,0,0,1,1,0ZM9.5,3H6.5V2.25a0.25,0.25,0,0,1,.25-.25h2.5a0.25,0.25,0,0,1,.25.25Zm1,9.55a0.5,0.5,0,0,1-.5.45H10a0.5,0.5,0,0,1-.5-.52l0.25-7a0.5,0.5,0,1,1,1,.04Z"/></svg>';
+        const clearIcon = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.91,1.81L13.85,2.76L10.04,6.57C10.75,7.59 10.85,8.83 10.25,9.63L6.04,5.41C6.84,4.81 8.07,4.91 9.1,5.63L12.91,1.81M3.95,11.71C2.61,10.37 1.79,8.77 1.57,7.28L4.82,5.89L9.78,10.85L8.39,14.1C6.89,13.87 5.29,13.05 3.95,11.71Z"/></svg>';
 
         return /* html */ `<!DOCTYPE html>
 <html lang="en">
@@ -423,6 +474,12 @@ export class ViewerPanel {
         <button id="btn-nightmode" data-tooltip="Switch to Night Mode" disabled>
             ${moonIcon}
         </button>
+        <button id="btn-delete" data-tooltip="Delete Current Widget" disabled>
+            ${deleteIcon}
+        </button>
+        <button id="btn-clear" data-tooltip="Clear All Widgets" disabled>
+            ${clearIcon}
+        </button>
         <button id="btn-refresh" data-tooltip="Refresh Viewer" disabled>
             ${refreshIcon}
         </button>
@@ -454,10 +511,22 @@ export class ViewerPanel {
         const btnPrev = document.getElementById('btn-prev');
         const btnNext = document.getElementById('btn-next');
         const btnNightMode = document.getElementById('btn-nightmode');
+        const btnDelete = document.getElementById('btn-delete');
+        const btnClear = document.getElementById('btn-clear');
 
         btnNightMode.addEventListener('click', () => {
             if (!btnNightMode.hasAttribute('disabled')) {
                 vscode.postMessage({ type: 'toggleNightMode' });
+            }
+        });
+        btnDelete.addEventListener('click', () => {
+            if (!btnDelete.hasAttribute('disabled')) {
+                vscode.postMessage({ type: 'deleteCurrent' });
+            }
+        });
+        btnClear.addEventListener('click', () => {
+            if (!btnClear.hasAttribute('disabled')) {
+                vscode.postMessage({ type: 'clearAll' });
             }
         });
 
@@ -476,20 +545,27 @@ export class ViewerPanel {
                 btnNightMode.setAttribute('data-tooltip', state.isNightMode ? 'Switch to Day Mode' : 'Switch to Night Mode');
 
                 // Handle URL updates
-                if (state.url && state.url !== currentUrl) {
+                if (state.url !== currentUrl) {
                     currentUrl = state.url;
-                    frame.src = currentUrl;
-                    frame.style.display = 'block';
-                    emptyState.style.display = 'none';
-                    btnRefresh.removeAttribute('disabled');
-                    btnExternal.removeAttribute('disabled');
-                    btnNightMode.removeAttribute('disabled');
-                } else if (!state.url && !currentUrl) {
-                    frame.style.display = 'none';
-                    emptyState.style.display = 'block';
-                    btnRefresh.setAttribute('disabled', 'true');
-                    btnExternal.setAttribute('disabled', 'true');
-                    btnNightMode.setAttribute('disabled', 'true');
+                    if (currentUrl) {
+                        frame.src = currentUrl;
+                        frame.style.display = 'block';
+                        emptyState.style.display = 'none';
+                        btnRefresh.removeAttribute('disabled');
+                        btnExternal.removeAttribute('disabled');
+                        btnNightMode.removeAttribute('disabled');
+                        btnDelete.removeAttribute('disabled');
+                        btnClear.removeAttribute('disabled');
+                    } else {
+                        frame.src = '';
+                        frame.style.display = 'none';
+                        emptyState.style.display = 'block';
+                        btnRefresh.setAttribute('disabled', 'true');
+                        btnExternal.setAttribute('disabled', 'true');
+                        btnNightMode.setAttribute('disabled', 'true');
+                        btnDelete.setAttribute('disabled', 'true');
+                        btnClear.setAttribute('disabled', 'true');
+                    }
                 }
 
                 // Handle navigation states
