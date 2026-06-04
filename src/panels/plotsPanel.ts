@@ -1245,6 +1245,7 @@ tryCatch({
         }
         .export-modal-header select {
             padding: 4px 8px;
+            cursor: pointer;
         }
         .export-modal-header input {
             padding: 4px 8px 4px 12px;
