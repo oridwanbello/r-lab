@@ -812,6 +812,7 @@ tryCatch({
         }
         .pkg-search {
             flex: 1;
+            min-width: 0;
             background: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border, transparent);

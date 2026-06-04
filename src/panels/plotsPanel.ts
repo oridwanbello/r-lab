@@ -1020,33 +1020,39 @@ tryCatch({
             position: absolute;
             top: 32px;
             right: 8px;
-            background: var(--vscode-editorWidget-background);
-            border: 1px solid var(--vscode-widget-border);
+            background: var(--vscode-editorHoverWidget-background, #252526);
+            border: 1px solid var(--vscode-editorHoverWidget-border, #454545);
             border-radius: 6px;
             padding: 6px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
             display: none;
             flex-direction: row;
             align-items: center;
             gap: 6px;
             z-index: 1000;
-            width: 100%;
-            max-width: 400px;
-            min-width: 250px;
+            width: 400px;
+            max-width: calc(100vw - 24px);
         }
         .dir-dropdown.open {
             display: flex;
         }
-        .dir-dropdown input {
+        .dir-input-wrapper {
+            position: relative;
             flex: 1 1 0%;
             min-width: 0;
+            display: flex;
+            align-items: center;
+        }
+        .dir-dropdown input {
+            width: 100%;
             background: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border, transparent);
-            padding: 4px 8px;
+            padding: 4px 28px 4px 8px;
             border-radius: 6px;
             font-size: 12px;
             outline: none;
+            box-sizing: border-box;
         }
         .dir-dropdown input::placeholder {
             color: var(--vscode-input-placeholderForeground);
@@ -1055,11 +1061,13 @@ tryCatch({
             border-color: var(--vscode-focusBorder);
         }
         .dir-dropdown .btn-browse {
+            position: absolute;
+            right: 2px;
             background: none;
-            color: var(--vscode-foreground);
-            border: 1px solid transparent;
-            padding: 5px;
-            border-radius: 6px;
+            color: var(--vscode-icon-foreground);
+            border: none;
+            padding: 4px;
+            border-radius: 4px;
             cursor: pointer;
             display: flex;
             align-items: center;
@@ -1069,6 +1077,7 @@ tryCatch({
         }
         .dir-dropdown .btn-browse:hover {
             background: var(--vscode-toolbar-hoverBackground);
+            color: var(--vscode-textLink-foreground);
             opacity: 1;
         }
         .dir-dropdown .btn-browse svg {
@@ -1076,10 +1085,12 @@ tryCatch({
             height: 14px;
         }
         .dir-dropdown .dir-btn {
-            background: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
+            background: var(--vscode-button-background) !important;
+            color: var(--vscode-button-foreground) !important;
             border: none;
-            padding: 5px 12px;
+            padding: 5px 0;
+            width: 60px;
+            text-align: center;
             border-radius: 6px;
             font-size: 12px;
             cursor: pointer;
@@ -1087,11 +1098,12 @@ tryCatch({
             flex-shrink: 0;
         }
         .dir-dropdown .dir-btn:hover {
-            background: var(--vscode-button-hoverBackground);
+            background: var(--vscode-button-hoverBackground) !important;
         }
         .btn-custom-dir.active {
             color: var(--vscode-textLink-foreground) !important;
             opacity: 1 !important;
+            background: var(--vscode-toolbar-hoverBackground) !important;
         }
         .export-dropdown {
             position: absolute;
@@ -1167,6 +1179,7 @@ tryCatch({
             width: 100%;
             box-sizing: border-box;
         }
+
         .export-modal {
             display: none;
             position: fixed;
@@ -1223,12 +1236,18 @@ tryCatch({
             background: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border);
-            padding: 4px 8px;
             border-radius: 4px;
             font-size: 0.9em;
             outline: none;
             width: 75px;
+            height: 26px;
             box-sizing: border-box;
+        }
+        .export-modal-header select {
+            padding: 4px 8px;
+        }
+        .export-modal-header input {
+            padding: 4px 8px 4px 12px;
         }
         .export-modal-header input[type="number"] {
             -moz-appearance: textfield;
@@ -1378,10 +1397,12 @@ tryCatch({
         </div>
     </div>
     <div id="dir-dropdown" class="dir-dropdown">
-        <input type="text" id="dir-input" placeholder="Custom directory (absolute or relative)..." value="" />
-        <button id="btn-browse" class="btn-browse" data-tooltip="Browse for Folder"><svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="m14 3h-6.5l-1.2-1.6c-0.0932-0.124-0.214-0.225-0.353-0.294-0.139-0.0694-0.292-0.106-0.447-0.106h-3.5c-0.53 0-1.04 0.211-1.41 0.586-0.375 0.375-0.586 0.884-0.586 1.41v10c0 0.53 0.211 1.04 0.586 1.41 0.375 0.375 0.884 0.586 1.41 0.586h12c0.53 0 1.04-0.211 1.41-0.586s0.586-0.884 0.586-1.41v-8c0-0.53-0.211-1.04-0.586-1.41-0.375-0.375-0.884-0.586-1.41-0.586zm-7.3 0.6c0.0932 0.124 0.214 0.225 0.353 0.294 0.139 0.0694 0.292 0.106 0.447 0.106h6.5c0.265 0 0.52 0.105 0.707 0.293 0.188 0.188 0.293 0.442 0.293 0.707v8c0 0.265-0.105 0.52-0.293 0.707s-0.442 0.293-0.707 0.293h-12c-0.265 0-0.52-0.105-0.707-0.293-0.188-0.188-0.293-0.442-0.293-0.707v-10c0-0.265 0.105-0.52 0.293-0.707 0.188-0.188 0.442-0.293 0.707-0.293h3.5l1.2 1.6z" fill="currentColor"/></svg></button>
-        <button id="btn-set-out-view-dir" class="dir-btn">Set</button>
+        <div class="dir-input-wrapper">
+            <input type="text" id="dir-input" placeholder="Custom directory (absolute or relative)..." value="" />
+            <button id="btn-browse" class="btn-browse" data-tooltip="Browse for Folder"><svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="m14 3h-6.5l-1.2-1.6c-0.0932-0.124-0.214-0.225-0.353-0.294-0.139-0.0694-0.292-0.106-0.447-0.106h-3.5c-0.53 0-1.04 0.211-1.41 0.586-0.375 0.375-0.586 0.884-0.586 1.41v10c0 0.53 0.211 1.04 0.586 1.41 0.375 0.375 0.884 0.586 1.41 0.586h12c0.53 0 1.04-0.211 1.41-0.586s0.586-0.884 0.586-1.41v-8c0-0.53-0.211-1.04-0.586-1.41-0.375-0.375-0.884-0.586-1.41-0.586zm-7.3 0.6c0.0932 0.124 0.214 0.225 0.353 0.294 0.139 0.0694 0.292 0.106 0.447 0.106h6.5c0.265 0 0.52 0.105 0.707 0.293 0.188 0.188 0.293 0.442 0.293 0.707v8c0 0.265-0.105 0.52-0.293 0.707s-0.442 0.293-0.707 0.293h-12c-0.265 0-0.52-0.105-0.707-0.293-0.188-0.188-0.293-0.442-0.293-0.707v-10c0-0.265 0.105-0.52 0.293-0.707 0.188-0.188 0.442-0.293 0.707-0.293h3.5l1.2 1.6z" fill="currentColor"/></svg></button>
+        </div>
         <button id="btn-clear-dir" class="dir-btn">Clear</button>
+        <button id="btn-set-out-view-dir" class="dir-btn">Set</button>
     </div>
     <div id="export-modal" class="export-modal">
         <div class="export-modal-content">
@@ -1398,7 +1419,7 @@ tryCatch({
                         </select>
                     </div>
                     <div class="control-group">
-                        <label>Units</label>
+                        <label>Unit</label>
                         <select id="export-unit">
                             <option value="in">in</option>
                             <option value="px">px</option>
@@ -1790,7 +1811,7 @@ tryCatch({
             const btnSetViewDir = document.getElementById('btn-set-view-dir');
             if (btnSetViewDir) btnSetViewDir.className = state.lastDirAction === 'view' ? 'active' : '';
             const btnSetOutViewDir = document.getElementById('btn-set-out-view-dir');
-            if (btnSetOutViewDir) btnSetOutViewDir.className = (state.lastDirAction === 'outview' || !state.lastDirAction) ? 'active' : '';
+            if (btnSetOutViewDir) btnSetOutViewDir.classList.toggle('active', state.lastDirAction === 'outview' || !state.lastDirAction);
 
             if (state.isPoppedOut !== undefined) {
                 isPoppedOut = state.isPoppedOut;
@@ -2255,6 +2276,7 @@ tryCatch({
             btnCustomDir?.addEventListener('click', (e) => {
                 e.stopPropagation();
                 dropdown?.classList.toggle('open');
+                btnCustomDir?.classList.toggle('active', dropdown?.classList.contains('open') || false);
                 if (dropdown?.classList.contains('open')) dirInput?.focus();
             });
             dropdown?.addEventListener('click', (e) => {
@@ -2262,6 +2284,7 @@ tryCatch({
             });
             document.addEventListener('click', () => {
                 dropdown?.classList.remove('open');
+                btnCustomDir?.classList.remove('active');
             });
             btnSetOutViewDir?.addEventListener('click', () => {
                 dropdown?.classList.remove('open');
