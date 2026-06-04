@@ -1696,7 +1696,7 @@ tryCatch({
                         }
 
                         if (isInteractive) {
-                            mainImg.setAttribute('data-tooltip', 'Open in Viewer Tab');
+                            mainImg.removeAttribute('data-tooltip');
                             mainImg.style.cursor = 'pointer';
                             mainImg.style.pointerEvents = 'auto'; 
                             mainImg.classList.add('is-interactive');
@@ -1812,6 +1812,14 @@ tryCatch({
             };
 
             const isWidget = hasPlots && state.plots[state.currentIndex] && state.plots[state.currentIndex].includes('_interactive.svg');
+            let hasWidgetInView = false;
+            if (isCompareMode) {
+                const lUrl = state.plots[compareLeftIndex] || "";
+                const rUrl = state.plots[compareRightIndex] || "";
+                hasWidgetInView = lUrl.includes('_interactive.svg') || rUrl.includes('_interactive.svg');
+            } else {
+                hasWidgetInView = isWidget;
+            }
 
             if (!isCompareMode) {
                 if (state.currentIndex <= 0) toggleDisabled('btn-prev', true);
@@ -1823,11 +1831,11 @@ tryCatch({
                 toggleDisabled('btn-next', true);
             }
 
-            toggleDisabled('btn-zoom-in', !hasPlots);
-            toggleDisabled('btn-zoom-out', !hasPlots);
-            toggleDisabled('btn-reset-zoom', !hasPlots);
-            toggleDisabled('btn-copy', !hasPlots || isCompareMode);
-            toggleDisabled('btn-save', !hasPlots || isCompareMode);
+            toggleDisabled('btn-zoom-in', !hasPlots || hasWidgetInView);
+            toggleDisabled('btn-zoom-out', !hasPlots || hasWidgetInView);
+            toggleDisabled('btn-reset-zoom', !hasPlots || hasWidgetInView);
+            toggleDisabled('btn-copy', !hasPlots || isCompareMode || hasWidgetInView);
+            toggleDisabled('btn-save', !hasPlots || isCompareMode || hasWidgetInView);
             toggleDisabled('btn-compare', !hasPlots || state.plots.length < 1);
             if (!hasPlots || state.plots.length < 1) {
                 document.getElementById('compare-btn-group')?.classList.add('disabled');

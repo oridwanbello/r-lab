@@ -54,6 +54,7 @@ let rConsoleTerminal: vscode.Terminal | undefined;
 let shellTerminal: vscode.Terminal | undefined;
 let savedDataViewerState: { varName: string } | undefined;
 let savedHelpState: any | undefined;
+let savedViewerState: any | undefined;
 let statusBarItem: vscode.StatusBarItem;
 let extensionContext: vscode.ExtensionContext;
 let currentAnchorUri: string | undefined;
@@ -322,6 +323,7 @@ export function registerLayoutCommand(
                 rConsoleTerminal = undefined;
                 savedDataViewerState = undefined;
                 savedHelpState = undefined;
+                savedViewerState = undefined;
                 PlotsPanel.resetSessionState();
 
                 // Delete .R-layout directory to prevent left-over files
@@ -947,6 +949,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     plotsPanel.syncPlots(); // catch up on any plots created while layout was closed
     const dataPanel = DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three, !restoreCustom);
     const viewerPanel = ViewerPanel.createOrShow(context.extensionUri, undefined, vscode.ViewColumn.Three, !restoreCustom);
+    if (savedViewerState) { viewerPanel.loadState(savedViewerState); }
     
     if (!restoreCustom) {
         workspacePanel.reveal(); // restore Workspace as the focused tab in Group 3
@@ -1257,6 +1260,12 @@ async function deactivateLayout(): Promise<void> {
         savedDataViewerState = DataViewerPanel.currentPanel.saveState();
         // Clear workspaceState in case it was used previously
         await extensionContext.workspaceState.update('r-layout.dataViewerState', undefined);
+    }
+
+    // Save Viewer state to in-memory variable before disposing
+    if (ViewerPanel.currentPanel) {
+        savedViewerState = ViewerPanel.currentPanel.saveState();
+        await extensionContext.workspaceState.update('r-layout.viewerState', undefined);
     }
 
     // 4. Dispose panel singletons (closes our Webview tabs)

@@ -180,6 +180,26 @@ export class ViewerPanel {
         await this._navigate(url);
     }
 
+    public saveState(): any {
+        return {
+            history: [...this._history],
+            currentIndex: this._currentIndex
+        };
+    }
+
+    public async loadState(state: any): Promise<void> {
+        if (!state) return;
+        this._history = state.history || [];
+        this._currentIndex = state.currentIndex !== undefined ? state.currentIndex : -1;
+        
+        if (this._currentIndex >= 0 && this._currentIndex < this._history.length) {
+            await this._navigate(this._history[this._currentIndex]);
+        } else {
+            this._currentUrl = undefined;
+            this._updateWebviewState();
+        }
+    }
+
     private async _navigate(url: string): Promise<void> {
         this._currentUrl = url;
 
