@@ -1019,82 +1019,75 @@ tryCatch({
         .dir-dropdown {
             position: absolute;
             top: 32px;
-            right: 12px;
-            background: var(--vscode-editorHoverWidget-background, #252526);
-            border: 1px solid var(--vscode-editorHoverWidget-border, #454545);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            right: 8px;
+            background: var(--vscode-editorWidget-background);
+            border: 1px solid var(--vscode-widget-border);
             border-radius: 6px;
-            padding: 10px;
+            padding: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
             display: none;
+            flex-direction: row;
+            align-items: center;
+            gap: 6px;
             z-index: 1000;
-            flex-direction: column;
-            gap: 8px;
-            width: 300px;
+            width: 100%;
+            max-width: 400px;
+            min-width: 250px;
         }
         .dir-dropdown.open {
             display: flex;
         }
-        .dir-dropdown .input-row {
-            display: flex;
-            gap: 4px;
-        }
         .dir-dropdown input {
-            flex: 1;
+            flex: 1 1 0%;
+            min-width: 0;
             background: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border, transparent);
-            padding: 4px 6px;
+            padding: 4px 8px;
             border-radius: 6px;
-            font-size: 0.9em;
+            font-size: 12px;
             outline: none;
         }
         .dir-dropdown input::placeholder {
             color: var(--vscode-input-placeholderForeground);
-            opacity: 1;
         }
         .dir-dropdown input:focus {
             border-color: var(--vscode-focusBorder);
         }
         .dir-dropdown .btn-browse {
-            background: var(--vscode-button-secondaryBackground);
-            color: var(--vscode-button-secondaryForeground);
-            border: none;
-            padding: 4px 8px;
+            background: none;
+            color: var(--vscode-foreground);
+            border: 1px solid transparent;
+            padding: 5px;
             border-radius: 6px;
             cursor: pointer;
-            font-size: 0.9em;
-            opacity: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.7;
+            flex-shrink: 0;
         }
         .dir-dropdown .btn-browse:hover {
-            background: var(--vscode-button-secondaryHoverBackground);
+            background: var(--vscode-toolbar-hoverBackground);
+            opacity: 1;
         }
         .dir-dropdown .btn-browse svg {
             width: 14px;
             height: 14px;
-            display: block;
-            margin: auto;
         }
-        .dir-dropdown .action-row {
-            display: flex;
-            justify-content: flex-start;
-            gap: 6px;
-        }
-        .dir-dropdown .action-row button {
-            background: var(--vscode-toolbar-hoverBackground);
-            color: var(--vscode-foreground);
-            border: none;
-            padding: 4px 8px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.85em;
-            opacity: 0.9;
-            white-space: nowrap;
-        }
-        .dir-dropdown .action-row button:hover,
-        .dir-dropdown .action-row button.active {
+        .dir-dropdown .dir-btn {
             background: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
-            opacity: 1;
+            border: none;
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            font-weight: 500;
+            flex-shrink: 0;
+        }
+        .dir-dropdown .dir-btn:hover {
+            background: var(--vscode-button-hoverBackground);
         }
         .btn-custom-dir.active {
             color: var(--vscode-textLink-foreground) !important;
@@ -1385,15 +1378,10 @@ tryCatch({
         </div>
     </div>
     <div id="dir-dropdown" class="dir-dropdown">
-        <div class="input-row">
-            <input type="text" id="dir-input" placeholder="Custom plot directory (absolute or relative)..." value="" />
-            <button id="btn-browse" class="btn-browse" data-tooltip="Browse for Folder"><svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="m14 3h-6.5l-1.2-1.6c-0.0932-0.124-0.214-0.225-0.353-0.294-0.139-0.0694-0.292-0.106-0.447-0.106h-3.5c-0.53 0-1.04 0.211-1.41 0.586-0.375 0.375-0.586 0.884-0.586 1.41v10c0 0.53 0.211 1.04 0.586 1.41 0.375 0.375 0.884 0.586 1.41 0.586h12c0.53 0 1.04-0.211 1.41-0.586s0.586-0.884 0.586-1.41v-8c0-0.53-0.211-1.04-0.586-1.41-0.375-0.375-0.884-0.586-1.41-0.586zm-7.3 0.6c0.0932 0.124 0.214 0.225 0.353 0.294 0.139 0.0694 0.292 0.106 0.447 0.106h6.5c0.265 0 0.52 0.105 0.707 0.293 0.188 0.188 0.293 0.442 0.293 0.707v8c0 0.265-0.105 0.52-0.293 0.707s-0.442 0.293-0.707 0.293h-12c-0.265 0-0.52-0.105-0.707-0.293-0.188-0.188-0.293-0.442-0.293-0.707v-10c0-0.265 0.105-0.52 0.293-0.707 0.188-0.188 0.442-0.293 0.707-0.293h3.5l1.2 1.6z" fill="currentColor"/></svg></button>
-        </div>
-        <div class="action-row">
-            <button id="btn-clear-dir" class="btn-clear">Clear</button>
-            <button id="btn-set-view-dir" class="">Set View Dir</button>
-            <button id="btn-set-out-view-dir" class="">Set View/Out Dir</button>
-        </div>
+        <input type="text" id="dir-input" placeholder="Custom directory (absolute or relative)..." value="" />
+        <button id="btn-browse" class="btn-browse" data-tooltip="Browse for Folder"><svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="m14 3h-6.5l-1.2-1.6c-0.0932-0.124-0.214-0.225-0.353-0.294-0.139-0.0694-0.292-0.106-0.447-0.106h-3.5c-0.53 0-1.04 0.211-1.41 0.586-0.375 0.375-0.586 0.884-0.586 1.41v10c0 0.53 0.211 1.04 0.586 1.41 0.375 0.375 0.884 0.586 1.41 0.586h12c0.53 0 1.04-0.211 1.41-0.586s0.586-0.884 0.586-1.41v-8c0-0.53-0.211-1.04-0.586-1.41-0.375-0.375-0.884-0.586-1.41-0.586zm-7.3 0.6c0.0932 0.124 0.214 0.225 0.353 0.294 0.139 0.0694 0.292 0.106 0.447 0.106h6.5c0.265 0 0.52 0.105 0.707 0.293 0.188 0.188 0.293 0.442 0.293 0.707v8c0 0.265-0.105 0.52-0.293 0.707s-0.442 0.293-0.707 0.293h-12c-0.265 0-0.52-0.105-0.707-0.293-0.188-0.188-0.293-0.442-0.293-0.707v-10c0-0.265 0.105-0.52 0.293-0.707 0.188-0.188 0.442-0.293 0.707-0.293h3.5l1.2 1.6z" fill="currentColor"/></svg></button>
+        <button id="btn-set-out-view-dir" class="dir-btn">Set</button>
+        <button id="btn-clear-dir" class="dir-btn">Clear</button>
     </div>
     <div id="export-modal" class="export-modal">
         <div class="export-modal-content">
@@ -2259,7 +2247,6 @@ tryCatch({
 
             const btnCustomDir = document.getElementById('btn-custom-dir');
             const dropdown = document.getElementById('dir-dropdown');
-            const btnSetViewDir = document.getElementById('btn-set-view-dir');
             const btnSetOutViewDir = document.getElementById('btn-set-out-view-dir');
             const btnClearDir = document.getElementById('btn-clear-dir');
             const btnBrowse = document.getElementById('btn-browse');
@@ -2276,10 +2263,6 @@ tryCatch({
             document.addEventListener('click', () => {
                 dropdown?.classList.remove('open');
             });
-            btnSetViewDir?.addEventListener('click', () => {
-                dropdown?.classList.remove('open');
-                vscode.postMessage({ type: 'setCustomDir', path: dirInput?.value });
-            });
             btnSetOutViewDir?.addEventListener('click', () => {
                 dropdown?.classList.remove('open');
                 vscode.postMessage({ type: 'setOutViewDir', path: dirInput?.value });
@@ -2287,7 +2270,7 @@ tryCatch({
             dirInput?.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
                     dropdown?.classList.remove('open');
-                    vscode.postMessage({ type: 'setCustomDir', path: dirInput.value });
+                    vscode.postMessage({ type: 'setOutViewDir', path: dirInput.value });
                 }
             });
             btnClearDir?.addEventListener('click', () => {
