@@ -1100,6 +1100,15 @@ tryCatch({
         .dir-dropdown .dir-btn:hover {
             background: var(--vscode-button-hoverBackground) !important;
         }
+        #btn-clear-dir {
+            background: var(--vscode-button-secondaryHoverBackground) !important;
+            color: var(--vscode-button-secondaryForeground) !important;
+            transition: filter 0.2s;
+        }
+        #btn-clear-dir:hover {
+            background: var(--vscode-button-secondaryHoverBackground) !important;
+            filter: brightness(1.2);
+        }
         .btn-custom-dir.active {
             color: var(--vscode-textLink-foreground) !important;
             opacity: 1 !important;
@@ -1206,65 +1215,21 @@ tryCatch({
             max-height: 800px;
             overflow: hidden;
         }
-        .export-modal-header {
-            padding: 5px 5px 5px 8px;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
+        .export-modal-top-strip {
+            padding: 8px 12px;
             background: var(--vscode-editorWidget-background);
-        }
-        .export-controls-grid {
-            display: grid;
-            grid-template-columns: min-content min-content 1fr min-content;
-            row-gap: 6px;
-            column-gap: 16px;
-            align-items: center;
-        }
-        .control-group {
-            display: flex;
-            align-items: center;
-            white-space: nowrap;
-        }
-        .export-modal-header label {
-            font-size: 0.9em;
-            opacity: 0.8;
-            margin-right: 6px;
-            width: 45px;
-            text-align: left;
-        }
-        .export-modal-header select, .export-modal-header input {
-            background: var(--vscode-input-background);
-            color: var(--vscode-input-foreground);
-            border: 1px solid var(--vscode-input-border);
-            border-radius: 4px;
-            font-size: 0.9em;
-            outline: none;
-            width: 75px;
-            height: 26px;
-            box-sizing: border-box;
-        }
-        .export-modal-header select {
-            padding: 4px 8px;
-            cursor: pointer;
-        }
-        .export-modal-header input {
-            padding: 4px 8px 4px 12px;
-        }
-        .export-modal-header input[type="number"] {
-            -moz-appearance: textfield;
-        }
-        .export-modal-header input[type="number"]::-webkit-inner-spin-button,
-        .export-modal-header input[type="number"]::-webkit-outer-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-        .export-modal-header .btn-modal {
-            min-width: 100px;
+            border-bottom: 1px solid var(--vscode-widget-border);
         }
         .export-modal-instruction {
             font-size: 0.85em;
             opacity: 0.7;
             text-align: left;
+        }
+        .export-modal-main-area {
+            display: flex;
+            flex-direction: row;
+            flex: 1;
+            min-height: 0;
         }
         .export-modal-body {
             flex: 1;
@@ -1275,7 +1240,70 @@ tryCatch({
             background: var(--vscode-editor-background);
             position: relative;
             overflow: auto;
-            padding: 6px;
+            padding: 8px;
+        }
+        .export-modal-sidebar {
+            width: 90px;
+            background: var(--vscode-editorHoverWidget-background, #252526);
+            border-left: 1px solid var(--vscode-editorHoverWidget-border, #454545);
+            display: flex;
+            flex-direction: column;
+            padding: 8px 8px 16px 8px;
+            justify-content: space-between;
+        }
+        .export-controls-vertical {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 4px;
+        }
+        .export-modal-sidebar label {
+            font-size: 0.9em;
+            opacity: 0.8;
+            text-align: left;
+        }
+        .export-modal-sidebar select, .export-modal-sidebar input {
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 4px;
+            font-size: 0.9em;
+            outline: none;
+            width: 100%;
+            height: 26px;
+            box-sizing: border-box;
+        }
+        .export-modal-sidebar select {
+            padding: 4px 8px;
+            cursor: pointer;
+        }
+        .export-modal-sidebar input {
+            padding: 4px 8px 4px 12px;
+        }
+        .export-modal-sidebar input[type="number"] {
+            -moz-appearance: textfield;
+        }
+        .export-modal-sidebar input[type="number"]::-webkit-inner-spin-button,
+        .export-modal-sidebar input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .export-actions-vertical {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 16px;
+        }
+        .export-actions-vertical .btn-modal {
+            flex: 1;
+            padding: 6px 0;
+            text-align: center;
+            min-width: 0;
         }
         .preview-container {
             position: relative;
@@ -1348,11 +1376,11 @@ tryCatch({
             background: var(--vscode-button-hoverBackground);
         }
         .btn-modal.secondary {
-            background: var(--vscode-button-secondaryBackground);
+            background: var(--vscode-button-secondaryHoverBackground);
             color: var(--vscode-button-secondaryForeground);
         }
         .btn-modal.secondary:hover {
-            background: var(--vscode-button-secondaryHoverBackground);
+            filter: brightness(1.2);
         }
     </style>
 </head>
@@ -1407,46 +1435,49 @@ tryCatch({
     </div>
     <div id="export-modal" class="export-modal">
         <div class="export-modal-content">
-            <div class="export-modal-header">
-                <div class="export-controls-grid">
-                    <div class="control-group">
-                        <label>Format</label>
-                        <select id="export-format">
-                            <option value="pdf">PDF</option>
-                            <option value="svg">SVG</option>
-                            <option value="eps">EPS</option>
-                            <option value="png">PNG</option>
-                            <option value="jpg">JPG</option>
-                        </select>
-                    </div>
-                    <div class="control-group">
-                        <label>Unit</label>
-                        <select id="export-unit">
-                            <option value="in">in</option>
-                            <option value="px">px</option>
-                        </select>
-                    </div>
-                    <div></div>
-                    <button id="btn-export-cancel" class="btn-modal secondary">Cancel</button>
-
-                    <div class="control-group">
-                        <label>Width</label>
-                        <input type="number" step="any" id="export-width" value="8" />
-                    </div>
-                    <div class="control-group">
-                        <label>Height</label>
-                        <input type="number" step="any" id="export-height" value="6" />
-                    </div>
-                    <div></div>
-                    <button id="btn-export-confirm" class="btn-modal">Export Plot</button>
-                </div>
+            <div class="export-modal-top-strip">
                 <div class="export-modal-instruction">Drag the bottom-right corner of the plot below to find your best aspect ratio.</div>
             </div>
-            <div class="export-modal-body">
-                <div id="preview-container" class="preview-container">
-                    <img id="preview-img" src="" alt="Plot Preview" />
-                    <div id="preview-overlay" class="preview-overlay">Rendering...</div>
-                    <div id="custom-resizer" class="custom-resizer"></div>
+            <div class="export-modal-main-area">
+                <div class="export-modal-body">
+                    <div id="preview-container" class="preview-container">
+                        <img id="preview-img" src="" alt="Plot Preview" />
+                        <div id="preview-overlay" class="preview-overlay">Rendering...</div>
+                        <div id="custom-resizer" class="custom-resizer"></div>
+                    </div>
+                </div>
+                <div class="export-modal-sidebar">
+                    <div class="export-controls-vertical">
+                        <div class="control-group">
+                            <label>Format</label>
+                            <select id="export-format">
+                                <option value="pdf">PDF</option>
+                                <option value="svg">SVG</option>
+                                <option value="eps">EPS</option>
+                                <option value="png">PNG</option>
+                                <option value="jpg">JPG</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <label>Unit</label>
+                            <select id="export-unit">
+                                <option value="in">in</option>
+                                <option value="px">px</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <label>Width</label>
+                            <input type="number" step="any" id="export-width" value="8" />
+                        </div>
+                        <div class="control-group">
+                            <label>Height</label>
+                            <input type="number" step="any" id="export-height" value="6" />
+                        </div>
+                    </div>
+                    <div class="export-actions-vertical">
+                        <button id="btn-export-cancel" class="btn-modal secondary">Cancel</button>
+                        <button id="btn-export-confirm" class="btn-modal">Export</button>
+                    </div>
                 </div>
             </div>
         </div>

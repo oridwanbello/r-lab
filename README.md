@@ -47,7 +47,7 @@ Host R `viewer()` outputs (Shiny apps, `htmlwidgets`, package vignettes) inside 
 A professional documentation viewer and intelligent execution routing.
 
 - **Docs**: KaTeX math rendering, cross-reference linking, and embedded "Run" buttons for examples.
-- **Smart Execution**: The "Source File" button dynamically switches to "Run Selection" when text is highlighted. Natively supports `.Rmd`/`.qmd` context execution.
+- **Smart Execution**: The "Run Source / Selection" button dynamically runs only the highlighted code when text is highlighted. Natively supports `.Rmd`/`.qmd` context execution.
 - **Diagnostics**: A native Codicon-integrated problems panel with collapsible file groups.
 
 ## Getting Started
