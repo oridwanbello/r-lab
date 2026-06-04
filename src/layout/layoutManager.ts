@@ -38,6 +38,18 @@ import { getRPath, getRArgs } from '../utils/rPathResolver';
 
 let isLayoutActive = false;
 let activationInProgress = false;
+let panelMoveInProgress = false;
+
+/**
+ * Temporarily suppress the layout guard while a panel is being
+ * popped-out or restored. Each panel calls this before reveal()
+ * and the guard ignores all tab events while the flag is set.
+ * The flag auto-clears after a short delay.
+ */
+export function suppressGuardForPanelMove(): void {
+    panelMoveInProgress = true;
+    setTimeout(() => { panelMoveInProgress = false; }, 500);
+}
 let rConsoleTerminal: vscode.Terminal | undefined;
 let shellTerminal: vscode.Terminal | undefined;
 let savedDataViewerState: { varName: string } | undefined;
@@ -312,7 +324,7 @@ export function registerLayoutCommand(
                 savedHelpState = undefined;
                 PlotsPanel.resetSessionState();
 
-                // Delete .r_layout directory to prevent left-over files
+                // Delete .R-layout directory to prevent left-over files
                 deleteRLayoutDir();
 
                 // If the layout is active, closing the R Console should trigger an exit
@@ -489,7 +501,7 @@ export async function resetStaleLayout(
  * our activation code can collapse it.
  */
 export async function collapseLayoutForShutdown(): Promise<void> {
-    // Always clean up the .r_layout temp directory on shutdown.
+    // Always clean up the .R-layout temp directory on shutdown.
     deleteRLayoutDir();
 
     if (!isLayoutActive) {
@@ -562,7 +574,23 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     // 1. Load saved positions, and Save references to all currently open TEXT files
     //    so we can reopen them after setting the layout.
     const textFilePositions = context.workspaceState.get<Record<string, number>>('r-layout.textFilePositions', {});
-    const panelPositions = context.workspaceState.get<Record<string, number>>('r-layout.panelPositions', {});
+    let panelPositions = context.workspaceState.get<Record<string, number>>('r-layout.panelPositions', {});
+
+    // --- Layout Integrity Check ---
+    // If the layout was closed prematurely or tabs were deleted in a previous session,
+    // the saved panelPositions might be broken (e.g. missing core panels, or panels stuck in Group 1).
+    let missingCorePanels = 0;
+    const corePanels = ['workspace', 'plots', 'viewer', 'problems'];
+    for (const p of corePanels) {
+        if (!panelPositions[p]) missingCorePanels++;
+    }
+    
+    // If layout state is severely broken (panels in Group 1, or missing too many panels), ignore custom positions
+    const hasPanelsInMainEditor = Object.values(panelPositions).some(col => col === vscode.ViewColumn.One);
+    if (hasPanelsInMainEditor || missingCorePanels >= 2) {
+        panelPositions = {}; // Force reset to defaults
+    }
+    // ------------------------------
 
     const openFiles: vscode.Uri[] = [];
     for (const group of vscode.window.tabGroups.all) {
@@ -745,7 +773,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         // running and its variables are still live - do NOT wipe the data file.
         const wf = getEffectiveWorkspaceRoot();
         if (!wasRConsoleReused) {
-            const staleFile = path.join(wf, '.r_layout', '.workspace_data.json');
+            const staleFile = path.join(wf, '.R-layout', '.workspace_data.json');
             try { fs.unlinkSync(staleFile); } catch {}
 
             // NEW: Clear R Help state for brand-new R sessions
@@ -932,13 +960,13 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     if (!viewerWatcher) {
         const wf = getEffectiveWorkspaceRoot();
-        const pattern = new vscode.RelativePattern(vscode.Uri.file(path.join(wf, '.r_layout')), 'viewer_url.txt');
+        const pattern = new vscode.RelativePattern(vscode.Uri.file(path.join(wf, '.R-layout')), 'viewer_url.txt');
         viewerWatcher = vscode.workspace.createFileSystemWatcher(pattern);
         let lastViewerLineCount = 0;
         
         const viewerHandler = async () => {
             if (!isLayoutActive) return;
-            const urlPath = path.join(wf, '.r_layout', 'viewer_url.txt');
+            const urlPath = path.join(wf, '.R-layout', 'viewer_url.txt');
             try {
                 let content = '';
                 // Wait for file creation + flush
@@ -982,11 +1010,11 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     if (!dvWatcher) {
         const wf = getEffectiveWorkspaceRoot();
-        const pattern = new vscode.RelativePattern(vscode.Uri.file(path.join(wf, '.r_layout')), 'dv-meta.txt');
+        const pattern = new vscode.RelativePattern(vscode.Uri.file(path.join(wf, '.R-layout')), 'dv-meta.txt');
         dvWatcher = vscode.workspace.createFileSystemWatcher(pattern);
         const dvHandler = async () => {
             if (!isLayoutActive) return;
-            const metaPath = path.join(wf, '.r_layout', 'dv-meta.txt');
+            const metaPath = path.join(wf, '.R-layout', 'dv-meta.txt');
             try {
                 let raw = '';
                 // Windows watchers often fire on file creation before content is fully flushed.
@@ -1377,10 +1405,11 @@ function registerLayoutGuards(context: vscode.ExtensionContext): void {
         'r-layout.workspacePanel',
         'r-layout.plotsPanel',
         'r-layout.dataViewerPanel',
+        'r-layout.viewerPanel',
     ]);
 
     const tabAndTermGuard = vscode.window.tabGroups.onDidChangeTabs(async (e) => {
-        if (!isLayoutActive || activationInProgress) { return; }
+        if (!isLayoutActive || activationInProgress || panelMoveInProgress) { return; }
         for (const tab of e.opened) {
             const group = vscode.window.tabGroups.all.find((g) => g.tabs.includes(tab));
             if (!group) {
@@ -1604,7 +1633,7 @@ function _buildWatcherRprofile(): string | undefined {
     const wf = getEffectiveWorkspaceRoot();
     console.log(`[R Layout] _buildWatcherRprofile: wf=${wf}, workspaceFolders=${JSON.stringify(vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath))}`);
 
-    const outDir = path.join(wf, '.r_layout');
+    const outDir = path.join(wf, '.R-layout');
     if (!fs.existsSync(outDir)) {
         fs.mkdirSync(outDir, { recursive: true });
     }
@@ -1754,7 +1783,7 @@ function _buildWatcherRprofile(): string | undefined {
               if (.unit == "cm") { .w_in <- .w / 2.54; .h_in <- .h / 2.54 }
               else if (.unit == "mm") { .w_in <- .w / 25.4; .h_in <- .h / 25.4 }
               else if (.unit == "px") {
-                .base_res <- 150
+                .base_res <- 300
                 .w_in <- .w / .base_res
                 .h_in <- .h / .base_res
                 if (.w_in < 5 || .h_in < 5) {
@@ -1894,16 +1923,21 @@ options(browser = function(url) {
   }
 }
 
-.rlayout_update_plot_id <- function() {
+.rlayout_update_plot_id_base <- function() {
+  if (dev.cur() > 1 && !isTRUE(par("page"))) return()
   # Force save the PREVIOUS plot before we clear the device
   tryCatch(.rlayout_force_save_plot(), error = function(e) {})
   .rlayout_advance_next_plot <<- TRUE
 }
-setHook("before.plot.new", .rlayout_update_plot_id)
-setHook("before.grid.newpage", .rlayout_update_plot_id)
+.rlayout_update_plot_id_grid <- function() {
+  tryCatch(.rlayout_force_save_plot(), error = function(e) {})
+  .rlayout_advance_next_plot <<- TRUE
+}
+setHook("before.plot.new", .rlayout_update_plot_id_base)
+setHook("before.grid.newpage", .rlayout_update_plot_id_grid)
 
-# 4. Wipe stale R Layout data at startup so previous sessions don't bleed over.
-#    We hook into .First which runs immediately when the R session begins.
+# 4. Wipe stale R Layout data at startup and shutdown so previous sessions don't bleed over.
+#    We hook into .First and .Last.
 if (exists(".First", envir = .GlobalEnv)) {
   .rlayout_orig_First <- get(".First", envir = .GlobalEnv)
   .First <- function() {
@@ -1917,6 +1951,30 @@ if (exists(".First", envir = .GlobalEnv)) {
     unlink("${absVarsTsv}")
     unlink(file.path("${absPlotsDir}", "*"))
     ${snapshotCode}
+  }
+}
+
+if (exists(".Last", envir = .GlobalEnv)) {
+  .rlayout_orig_Last <- get(".Last", envir = .GlobalEnv)
+  .Last <- function() {
+    unlink("${absVarsTsv}")
+    unlink(file.path("${absPlotsDir}", "*"))
+    .out_dir <- getOption(".rlayout_plot_dir")
+    if (!is.null(.out_dir) && .out_dir != "${absPlotsDir}") {
+      .rds_files <- list.files(.out_dir, pattern = "^plot_[0-9]{5}\\\\.rds$", full.names = TRUE)
+      if (length(.rds_files) > 0) unlink(.rds_files)
+    }
+    tryCatch(.rlayout_orig_Last(), error = function(e) {})
+  }
+} else {
+  .Last <- function() {
+    unlink("${absVarsTsv}")
+    unlink(file.path("${absPlotsDir}", "*"))
+    .out_dir <- getOption(".rlayout_plot_dir")
+    if (!is.null(.out_dir) && .out_dir != "${absPlotsDir}") {
+      .rds_files <- list.files(.out_dir, pattern = "^plot_[0-9]{5}\\\\.rds$", full.names = TRUE)
+      if (length(.rds_files) > 0) unlink(.rds_files)
+    }
   }
 }
 
@@ -2101,7 +2159,7 @@ function getConfigTarget(): vscode.ConfigurationTarget {
 /**
  * Returns the effective workspace root: the first workspace folder if available,
  * otherwise falls back to the user's home directory. This ensures all features
- * (R watcher, .r_layout directory, plots, workspace panel) work in no-workspace mode.
+ * (R watcher, .R-layout directory, plots, workspace panel) work in no-workspace mode.
  */
 function getEffectiveWorkspaceRoot(): string {
     return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
@@ -2120,7 +2178,7 @@ function getWorkspaceRootsForCleanup(): string[] {
 }
 
 /**
- * Deletes the .r_layout temporary directory in the current workspace.
+ * Deletes the .R-layout temporary directory in the current workspace.
  */
 function deleteRLayoutDir() {
     // Collect all roots: workspace folders (current + cached) AND home directory fallback
@@ -2128,7 +2186,7 @@ function deleteRLayoutDir() {
     roots.add(os.homedir());
 
     for (const root of roots) {
-        const rLayoutDir = path.join(root, '.r_layout');
+        const rLayoutDir = path.join(root, '.R-layout');
         try {
             if (fs.existsSync(rLayoutDir)) {
                 fs.rmSync(rLayoutDir, {
@@ -2139,7 +2197,7 @@ function deleteRLayoutDir() {
                 });
             }
         } catch (e) {
-            console.error('[R Layout] Failed to delete .r_layout directory', e);
+            console.error('[R Layout] Failed to delete .R-layout directory', e);
         }
     }
 }

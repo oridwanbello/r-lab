@@ -429,6 +429,15 @@ export class HelpPanel {
             background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             flex-shrink: 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
+        }
+        .toolbar::-webkit-scrollbar {
+            display: none;
+        }
+        .toolbar > * {
+            flex-shrink: 0;
         }
         .pane-title { font-weight: 600; opacity: 0.7; }
         .search-bar {

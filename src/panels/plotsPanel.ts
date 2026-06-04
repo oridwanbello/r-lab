@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
 import { getNonce } from '../utils/webviewUtils';
+import { suppressGuardForPanelMove } from '../layout/layoutManager';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { enforceGroup3TabOrder } from '../utils/webviewUtils';
 import * as child_process from 'child_process';
 import { getRConsoleTerminal } from '../layout/layoutManager';
 import { getRscriptPath } from '../utils/rPathResolver';
@@ -28,8 +30,9 @@ export class PlotsPanel {
     private _isNightMode: boolean = false;
     private _isMinimized: boolean = false;
     private _lastRenderedDims: Map<string, { w: number, h: number }> = new Map();
-    private _customPlotDir?: string;
-    private _lastDirAction: 'view' | 'outview' | undefined = undefined;
+    private _customPlotDir: string | undefined;
+    private _lastDirAction: 'outview' | 'view' | undefined;
+    private _focusPending: boolean = false;
     private _extensionUri: vscode.Uri;
 
     // Factory
@@ -116,9 +119,26 @@ export class PlotsPanel {
 
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
+        this._panel.onDidChangeViewState(
+            (e) => { this._postState(); },
+            null,
+            this._disposables
+        );
+
         this._panel.webview.onDidReceiveMessage(
             (msg: { type: string }) => {
                 switch (msg.type) {
+                    case 'ready':
+                        this._postState();
+                        if (this._focusPending) {
+                            this._focusPending = false;
+                            enforceGroup3TabOrder('Plots').then(() => {
+                                setTimeout(() => {
+                                    vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+                                }, 150);
+                            });
+                        }
+                        break;
                     case 'navigatePrev':
                         if (this._currentIndex > 0) {
                             this._currentIndex--;
@@ -140,6 +160,9 @@ export class PlotsPanel {
                         break;
                     case 'saveAs':
                         this._handleSaveAs((msg as any).format, (msg as any).width, (msg as any).height, (msg as any).unit);
+                        break;
+                    case 'requestPreviewRender':
+                        this._handleRequestPreviewRender((msg as any).format, (msg as any).width, (msg as any).height, (msg as any).unit);
                         break;
                     case 'deleteCurrent':
                         this._handleDeleteCurrent();
@@ -167,18 +190,25 @@ export class PlotsPanel {
                         this._handleBrowseCustomDir();
                         break;
                     case 'popout':
+                        this._focusPending = true;
+                        suppressGuardForPanelMove();
                         this._panel.reveal(vscode.ViewColumn.One, false);
-                        setTimeout(() => vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'), 150);
-                        this._postState();
+                        vscode.commands.executeCommand('workbench.action.keepEditor');
+                        setTimeout(async () => {
+                            await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+                        }, 150);
+                        this._postState(true);
                         break;
                     case 'restore':
+                        this._focusPending = true;
+                        suppressGuardForPanelMove();
                         this._panel.reveal(vscode.ViewColumn.Three, false);
-                        setTimeout(() => {
-                            vscode.commands.executeCommand('moveActiveEditor', { to: 'position', value: 2 }).then(() => {
-                                setTimeout(() => vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'), 150);
-                            });
-                        }, 100);
-                        this._postState();
+                        vscode.commands.executeCommand('workbench.action.keepEditor');
+                        setTimeout(async () => {
+                            await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+                        }, 150);
+                        enforceGroup3TabOrder('Plots');
+                        this._postState(false);
                         break;
                 }
             },
@@ -207,7 +237,7 @@ export class PlotsPanel {
         };
 
         // If setOutput is true, redirect R's plot output to this directory via options().
-        // If clearing (resolved is undefined), reset back to the default .r_layout/plots.
+        // If clearing (resolved is undefined), reset back to the default .R-layout/plots.
         if (setOutput) {
             const term = getRConsoleTerminal();
             if (term) {
@@ -259,15 +289,15 @@ export class PlotsPanel {
             return;
         }
 
-        // Only allow physical deletion for files inside the .r_layout directory.
+        // Only allow physical deletion for files inside the .R-layout directory.
         // User-specified directories must not be modified - we only display them.
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
-        const rLayoutDir = path.join(wf, '.r_layout');
+        const rLayoutDir = path.join(wf, '.R-layout');
         const relative = path.relative(rLayoutDir, uri.fsPath);
         const isInside = relative && !relative.startsWith('..') && !path.isAbsolute(relative);
         if (!isInside) {
             vscode.window.showWarningMessage(
-                'Deletion is only permitted for plots in the .r_layout directory. ' +
+                'Deletion is only permitted for plots in the .R-layout directory. ' +
                 'To remove plots from a custom folder, delete them manually.'
             );
             return;
@@ -345,6 +375,71 @@ tryCatch({
                 console.error('[R Layout] Dynamic resize re-rendering failed:', error);
             }
             // If successful, the file watcher picks up the modified PNG and automatically calls _render().
+        });
+    }
+
+    private async _handleRequestPreviewRender(format: string, widthStr: string, heightStr: string, unit: string): Promise<void> {
+        if (this._currentIndex < 0) return;
+        const sourceUri = this._plots[this._currentIndex];
+        
+        // Interactive SVG doesn't need R rendering
+        if (sourceUri.fsPath.includes('_interactive.svg')) return;
+
+        const rdsPath = sourceUri.fsPath.replace(/\.png$/, '.rds');
+        if (!fs.existsSync(rdsPath)) return;
+
+        const effectiveRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
+        const tmpDir = path.join(effectiveRoot, '.tmp');
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+
+        const previewPath = path.join(tmpDir, 'export_preview.png');
+        const safeRdsPath = rdsPath.replace(/\\/g, '/');
+        const safePngPath = previewPath.replace(/\\/g, '/');
+
+        // We calculate standard dimensions exactly like export to show true aspect ratio
+        let w = parseFloat(widthStr);
+        let h = parseFloat(heightStr);
+        let res = 300;
+        
+        if (unit === 'px') {
+            res = 300;
+        } else if (unit === 'in') {
+            w = w * res;
+            h = h * res;
+        } else if (unit === 'cm') {
+            w = (w / 2.54) * res;
+            h = (h / 2.54) * res;
+        } else if (unit === 'mm') {
+            w = (w / 25.4) * res;
+            h = (h / 25.4) * res;
+        }
+
+        w = Math.round(w);
+        h = Math.round(h);
+
+        // Enforce minimum dimension
+        const minPixels = 5 * res;
+        if (w < minPixels || h < minPixels) {
+            const scale = Math.max(minPixels / w, minPixels / h);
+            w = Math.round(w * scale);
+            h = Math.round(h * scale);
+        }
+
+        const rscriptPath = getRscriptPath();
+        const script = `
+tryCatch({
+    p <- readRDS('${safeRdsPath}')
+    png('${safePngPath}', width=${w}, height=${h}, res=${res}, bg='white')
+    replayPlot(p)
+    dev.off()
+}, error = function(e) {})
+`;
+
+        child_process.execFile(rscriptPath, ['-e', script], (error) => {
+            if (!error && fs.existsSync(previewPath)) {
+                const webviewUri = this._panel.webview.asWebviewUri(vscode.Uri.file(previewPath)).toString();
+                this._panel.webview.postMessage({ type: 'previewRendered', src: webviewUri });
+            }
         });
     }
 
@@ -451,7 +546,7 @@ tryCatch({
                 : path.join(effectiveRoot, this._customPlotDir);
         } else {
             const config = vscode.workspace.getConfiguration('r-layout');
-            const plotDir = '.r_layout/plots';
+            const plotDir = '.R-layout/plots';
             watchDirFsPath = path.join(effectiveRoot, plotDir);
         }
 
@@ -507,29 +602,6 @@ tryCatch({
     // Public API
 
     public clear(): void {
-        const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
-        const rLayoutDir = path.join(wf, '.r_layout');
-
-        // Physically delete files only if they are inside the .r_layout directory
-        for (const uri of this._plots) {
-            if (uri.fsPath.includes('_interactive.svg')) continue; // Skip widget placeholders
-            
-            const relative = path.relative(rLayoutDir, uri.fsPath);
-            const isInside = relative && !relative.startsWith('..') && !path.isAbsolute(relative);
-            if (isInside) {
-                try {
-                    if (fs.existsSync(uri.fsPath)) {
-                        fs.unlinkSync(uri.fsPath);
-                        // Delete the corresponding .rds file if it exists
-                        const rdsPath = uri.fsPath.replace(/\.(png|jpg|jpeg|svg|gif|bmp|webp|ico)$/i, '.rds');
-                        if (fs.existsSync(rdsPath)) {
-                            fs.unlinkSync(rdsPath);
-                        }
-                    }
-                } catch (e) {}
-            }
-        }
-
         // Retain widget placeholders, clear everything else
         this._plots = this._plots.filter(p => p.fsPath.includes('_interactive.svg'));
         this._currentIndex = this._plots.length > 0 ? this._plots.length - 1 : -1;
@@ -556,7 +628,7 @@ tryCatch({
                 : path.join(effectiveRoot, this._customPlotDir);
         } else {
             const config = vscode.workspace.getConfiguration('r-layout');
-            const plotDir = '.r_layout/plots';
+            const plotDir = '.R-layout/plots';
             dir = path.join(effectiveRoot, plotDir);
         }
 
@@ -607,17 +679,13 @@ tryCatch({
         }
     }
 
-    private _postState(): void {
+    private _postState(overrideIsPoppedOut?: boolean): void {
         const plots = this._plots.map(uri => this._panel.webview.asWebviewUri(uri).toString() + `?t=${Date.now()}`);
 
-        const effectiveRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
-        const homedir = os.homedir();
-        let defaultDir = effectiveRoot;
-        if (defaultDir.startsWith(homedir)) {
-            defaultDir = defaultDir.replace(homedir, '~');
-        }
+        const inWorkspace = !!vscode.workspace.workspaceFolders?.[0];
+        const defaultDir = inWorkspace ? './.R-layout/plots' : '~/.R-layout/plots';
 
-        const isPoppedOut = this._panel.viewColumn !== vscode.ViewColumn.Three && this._panel.viewColumn !== undefined;
+        const isPoppedOut = overrideIsPoppedOut !== undefined ? overrideIsPoppedOut : (this._panel.viewColumn !== vscode.ViewColumn.Three && this._panel.viewColumn !== undefined);
 
         this._panel.webview.postMessage({
             type: 'updateState',
@@ -638,12 +706,8 @@ tryCatch({
         const nonce = getNonce();
         const isPoppedOut = this._panel.viewColumn !== vscode.ViewColumn.Three && this._panel.viewColumn !== undefined;
 
-        const effectiveRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
-        const homedir = os.homedir();
-        let defaultDir = effectiveRoot;
-        if (defaultDir.startsWith(homedir)) {
-            defaultDir = defaultDir.replace(homedir, '~');
-        }
+        const inWorkspace = !!vscode.workspace.workspaceFolders?.[0];
+        const defaultDir = inWorkspace ? './.R-layout/plots' : '~/.R-layout/plots';
 
         const moonIcon = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786z"/></svg>';
         const sunIcon = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2A.5.5 0 018 0zm0 13a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2A.5.5 0 018 13zm8-5a.5.5 0 01-.5.5h-2a.5.5 0 010-1h2a.5.5 0 01.5.5zM3 8a.5.5 0 01-.5.5h-2a.5.5 0 010-1h2A.5.5 0 013 8zm10.657-5.657a.5.5 0 010 .707l-1.414 1.415a.5.5 0 11-.707-.708l1.414-1.414a.5.5 0 01.707 0zm-9.193 9.193a.5.5 0 010 .707L3.05 13.657a.5.5 0 01-.707-.707l1.414-1.414a.5.5 0 01.707 0zm9.193 2.121a.5.5 0 01-.707 0l-1.414-1.414a.5.5 0 01.707-.707l1.414 1.414a.5.5 0 010 .707zM4.464 2.343a.5.5 0 01-.707 0L2.343 3.757a.5.5 0 11.707.707l1.414-1.414a.5.5 0 010-.707z"/></svg>';
@@ -682,6 +746,15 @@ tryCatch({
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             z-index: 100;
             position: relative;
+            flex-shrink: 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
+        }
+        .toolbar::-webkit-scrollbar {
+            display: none;
+        }
+        .toolbar > * {
             flex-shrink: 0;
         }
         .nav-controls {
@@ -821,7 +894,7 @@ tryCatch({
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 8px;
+            padding: 0 8px 0 8px;
             cursor: default;
             user-select: none;
         }
@@ -1101,36 +1174,172 @@ tryCatch({
             width: 100%;
             box-sizing: border-box;
         }
-        .export-dropdown input {
-            padding-left: 10px;
+        .export-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 9999;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
-        .export-dropdown select {
-            padding-right: 32px;
-        }
-        .export-dropdown select:focus, .export-dropdown input:focus {
-            border-color: var(--vscode-focusBorder);
-        }
-        .export-dropdown .row {
+        .export-modal.active {
             display: flex;
-            gap: 8px;
+        }
+        .export-modal-content {
+            background: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-widget-border);
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            width: 90%;
+            height: 90%;
+            max-width: 1200px;
+            max-height: 800px;
+            overflow: hidden;
+        }
+        .export-modal-header {
+            padding: 5px 5px 5px 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            background: var(--vscode-editorWidget-background);
+        }
+        .export-controls-grid {
+            display: grid;
+            grid-template-columns: min-content min-content 1fr min-content;
+            row-gap: 6px;
+            column-gap: 16px;
             align-items: center;
         }
-        .export-dropdown .row > div {
-            flex: 1;
+        .control-group {
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
         }
-        .export-dropdown .btn-export {
+        .export-modal-header label {
+            font-size: 0.9em;
+            opacity: 0.8;
+            margin-right: 6px;
+            width: 45px;
+            text-align: left;
+        }
+        .export-modal-header select, .export-modal-header input {
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            outline: none;
+            width: 75px;
+            box-sizing: border-box;
+        }
+        .export-modal-header input[type="number"] {
+            -moz-appearance: textfield;
+        }
+        .export-modal-header input[type="number"]::-webkit-inner-spin-button,
+        .export-modal-header input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .export-modal-header .btn-modal {
+            min-width: 100px;
+        }
+        .export-modal-instruction {
+            font-size: 0.85em;
+            opacity: 0.7;
+            text-align: left;
+        }
+        .export-modal-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: var(--vscode-editor-background);
+            position: relative;
+            overflow: auto;
+            padding: 6px;
+        }
+        .preview-container {
+            position: relative;
+            overflow: visible;
+            border: 1px dashed var(--vscode-focusBorder);
+            border-radius: 6px;
+            min-width: 20px;
+            min-height: 20px;
+            max-width: 100%;
+            max-height: 100%;
+            background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        .custom-resizer {
+            position: absolute;
+            bottom: -14px;
+            right: -14px;
+            width: 24px;
+            height: 24px;
+            cursor: se-resize;
+            z-index: 10;
+        }
+        .custom-resizer::after {
+            content: '';
+            position: absolute;
+            bottom: 6px;
+            right: 6px;
+            width: 8px;
+            height: 8px;
+            border-right: 3px solid var(--vscode-textLink-foreground);
+            border-bottom: 3px solid var(--vscode-textLink-foreground);
+            border-bottom-right-radius: 2px;
+            opacity: 1;
+        }
+        .preview-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: fill;
+            display: block;
+            pointer-events: none;
+            border-radius: 6px;
+        }
+        .preview-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: #111;
+            font-weight: bold;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+        .preview-overlay.loading {
+            opacity: 1;
+        }
+        .btn-modal {
             background: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
             border: none;
-            padding: 6px;
+            padding: 6px 12px;
             border-radius: 4px;
             cursor: pointer;
-            margin-top: 4px;
-            text-align: center;
             font-size: 0.9em;
         }
-        .export-dropdown .btn-export:hover {
+        .btn-modal:hover {
             background: var(--vscode-button-hoverBackground);
+        }
+        .btn-modal.secondary {
+            background: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+        }
+        .btn-modal.secondary:hover {
+            background: var(--vscode-button-secondaryHoverBackground);
         }
     </style>
 </head>
@@ -1163,7 +1372,7 @@ tryCatch({
                 </svg>
             </button>
             <button id="btn-copy" disabled data-tooltip="Copy Plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M10,13.33H3.33V4.67c0-0.37-0.3-0.67-0.67-0.67h0C2.3,4,2,4.3,2,4.67v8.67c0,0.73,0.6,1.33,1.33,1.33h6.67c0.37,0,0.67-0.3,0.67-0.67v0C10.67,13.63,10.37,13.33,10,13.33z M13.33,10.67V2.67c0-0.73-0.6-1.33-1.33-1.33H6c-0.73,0-1.33,0.6-1.33,1.33v8c0,0.73,0.6,1.33,1.33,1.33h6c0.73,0,1.33-0.6,1.33-1.33z M12,10.67H6V2.67h6V10.67z"/></svg></button>
-            <button id="btn-save" disabled data-tooltip="Save Plot As..."><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12,10v2H4v-2H2.67v2c0,0.73,0.6,1.33,1.33,1.33h8c0.73,0,1.33-0.6,1.33-1.33v-2H12z M11.33,7.33l-0.94-0.94L8.67,8.11V2.67h-1.33v5.45L5.61,6.39L4.67,7.33l3.33,3.33 L11.33,7.33z"/></svg></button>
+            <button id="btn-save" disabled data-tooltip="Preview & Export Plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12,10v2H4v-2H2.67v2c0,0.73,0.6,1.33,1.33,1.33h8c0.73,0,1.33-0.6,1.33-1.33v-2H12z M11.33,7.33l-0.94-0.94L8.67,8.11V2.67h-1.33v5.45L5.61,6.39L4.67,7.33l3.33,3.33 L11.33,7.33z"/></svg></button>
             <button id="btn-night-mode" disabled data-tooltip="Switch to Night Mode">${moonIcon}</button>
             <button id="btn-delete" disabled data-tooltip="Delete Current Plot"><svg viewBox="0 0 16 16"><path fill="none" d="M9.25,2H6.75a0.25,0.25,0,0,0-0.25,0.25V3h3V2.25A0.25,0.25,0,0,0,9.25,2Z"/><path fill="currentColor" d="M13.5,3H10.5V2.25A1.25,1.25,0,0,0,9.25,1H6.75A1.25,1.25,0,0,0,5.5,2.25V3H2.5a0.5,0.5,0,0,0,0,1H3L3.63,13.53C3.67,14.37,4.31,15,5.13,15h5.75c0.82,0,1.45-.62,1.5-1.47L13,4h0.5a0.5,0.5,0,0,0,0-1ZM6,13H6a0.5,0.5,0,0,1-.5-.48l-0.25-7a0.5,0.5,0,1,1,1-.04l0.25,7A0.5,0.5,0,0,1,6,13ZM8.5,12.5a0.5,0.5,0,0,1-1,0V5.5a0.5,0.5,0,0,1,1,0ZM9.5,3H6.5V2.25a0.25,0.25,0,0,1,.25-.25h2.5a0.25,0.25,0,0,1,.25.25Zm1,9.55a0.5,0.5,0,0,1-.5.45H10a0.5,0.5,0,0,1-.5-.52l0.25-7a0.5,0.5,0,1,1,1,.04Z"/></svg></button>
             <button id="btn-clear" disabled data-tooltip="Clear All Plots"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.91,1.81L13.85,2.76L10.04,6.57C10.75,7.59 10.85,8.83 10.25,9.63L6.04,5.41C6.84,4.81 8.07,4.91 9.1,5.63L12.91,1.81M3.95,11.71C2.61,10.37 1.79,8.77 1.57,7.28L4.82,5.89L9.78,10.85L8.39,14.1C6.89,13.87 5.29,13.05 3.95,11.71Z"/></svg></button>
@@ -1186,37 +1395,51 @@ tryCatch({
             <button id="btn-set-out-view-dir" class="">Set View/Out Dir</button>
         </div>
     </div>
-    <div id="export-dropdown" class="export-dropdown">
-        <div class="row">
-            <div>
-                <label>Format</label>
-                <select id="export-format">
-                    <option value="pdf">PDF</option>
-                    <option value="svg">SVG</option>
-                    <option value="eps">EPS</option>
-                    <option value="png">PNG</option>
-                    <option value="jpg">JPG</option>
-                </select>
+    <div id="export-modal" class="export-modal">
+        <div class="export-modal-content">
+            <div class="export-modal-header">
+                <div class="export-controls-grid">
+                    <div class="control-group">
+                        <label>Format</label>
+                        <select id="export-format">
+                            <option value="pdf">PDF</option>
+                            <option value="svg">SVG</option>
+                            <option value="eps">EPS</option>
+                            <option value="png">PNG</option>
+                            <option value="jpg">JPG</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>Units</label>
+                        <select id="export-unit">
+                            <option value="in">in</option>
+                            <option value="px">px</option>
+                        </select>
+                    </div>
+                    <div></div>
+                    <button id="btn-export-cancel" class="btn-modal secondary">Cancel</button>
+
+                    <div class="control-group">
+                        <label>Width</label>
+                        <input type="number" step="any" id="export-width" value="8" />
+                    </div>
+                    <div class="control-group">
+                        <label>Height</label>
+                        <input type="number" step="any" id="export-height" value="6" />
+                    </div>
+                    <div></div>
+                    <button id="btn-export-confirm" class="btn-modal">Export Plot</button>
+                </div>
+                <div class="export-modal-instruction">Drag the bottom-right corner of the plot below to find your best aspect ratio.</div>
             </div>
-            <div>
-                <label>Units</label>
-                <select id="export-unit">
-                    <option value="in">in</option>
-                    <option value="px">px</option>
-                </select>
+            <div class="export-modal-body">
+                <div id="preview-container" class="preview-container">
+                    <img id="preview-img" src="" alt="Plot Preview" />
+                    <div id="preview-overlay" class="preview-overlay">Rendering...</div>
+                    <div id="custom-resizer" class="custom-resizer"></div>
+                </div>
             </div>
         </div>
-        <div class="row">
-            <div>
-                <label>Width</label>
-                <input type="text" id="export-width" value="8" />
-            </div>
-            <div>
-                <label>Height</label>
-                <input type="text" id="export-height" value="6" />
-            </div>
-        </div>
-        <button id="btn-export-confirm" class="btn-export">Export Plot</button>
     </div>
     <div id="compare-dropdown" class="export-dropdown compare-dropdown">
         <label id="sync-zoom-label" for="chk-sync-zoom" class="sync-zoom-label">
@@ -1264,6 +1487,13 @@ tryCatch({
                 renderState(message.state);
             } else if (message.command === 'setMinimized') {
                 document.body.classList.toggle('minimized', message.minimized);
+            } else if (message.type === 'previewRendered') {
+                const previewImg = document.getElementById('preview-img');
+                const previewOverlay = document.getElementById('preview-overlay');
+                if (previewImg && message.src) {
+                    previewImg.src = message.src + '?t=' + Date.now();
+                }
+                if (previewOverlay) previewOverlay.classList.remove('loading');
             }
         });
 
@@ -1342,14 +1572,24 @@ tryCatch({
                 const linkColor = getComputedStyle(document.documentElement).getPropertyValue('--vscode-textLink-foreground').trim() || '#007acc';
                 const bgColor = '#151515';
                 const dotColor = '#2d2d2d';
+                
                 const fontSize = isThumbnail ? "65" : "36";
-                const y1 = "325";
-                const y2 = "384";
+                const iconTransform = isThumbnail 
+                    ? "translate(352, 120) scale(6)"
+                    : "translate(352, 170) scale(6)";
+                const y1 = isThumbnail ? "350" : "325";
+                const y2 = isThumbnail ? "450" : "384";
+
+                const tPatch = isThumbnail ? '' : 
+                    '<rect x="320" y="140" width="160" height="170" fill="' + bgColor + '"/>' +
+                    '<rect x="180" y="290" width="440" height="150" fill="' + bgColor + '"/>';
+
                 const svgStr = '<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">' +
                     '<defs><pattern id="dot-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="10" cy="10" r="1.5" fill="' + dotColor + '"/></pattern></defs>' +
                     '<rect width="800" height="600" fill="' + bgColor + '"/>' +
                     '<rect x="40" y="40" width="720" height="520" fill="url(#dot-grid)"/>' +
-                    '<g fill="' + linkColor + '" transform="translate(352, 170) scale(6)">' +
+                    tPatch +
+                    '<g fill="' + linkColor + '" transform="' + iconTransform + '">' +
                         '<path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/><path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/>' +
                     '</g>' +
                     '<text x="400" y="' + y1 + '" fill="' + linkColor + '" font-family="sans-serif" font-weight="normal" font-size="' + fontSize + '" text-anchor="middle">Open</text>' +
@@ -1402,10 +1642,12 @@ tryCatch({
                             mainImg.setAttribute('data-tooltip', 'Open in Viewer Tab');
                             mainImg.style.cursor = 'pointer';
                             mainImg.style.pointerEvents = 'auto'; 
+                            mainImg.classList.add('is-interactive');
                         } else {
                             mainImg.removeAttribute('data-tooltip');
                             mainImg.style.cursor = '';
                             mainImg.style.pointerEvents = 'none'; 
+                            mainImg.classList.remove('is-interactive');
                         }
                     }
                 } else {
@@ -1417,8 +1659,17 @@ tryCatch({
                     const imgLeft = document.getElementById('img-left');
                     const imgRight = document.getElementById('img-right');
                     
-                    if (imgLeft.getAttribute('src') !== lSrc) imgLeft.src = lSrc;
-                    if (imgRight.getAttribute('src') !== rSrc) imgRight.src = rSrc;
+                    if (imgLeft.getAttribute('src') !== lSrc) {
+                        imgLeft.src = lSrc;
+                    }
+                    if (lUrl.includes('_interactive.svg')) imgLeft.classList.add('is-interactive');
+                    else imgLeft.classList.remove('is-interactive');
+
+                    if (imgRight.getAttribute('src') !== rSrc) {
+                        imgRight.src = rSrc;
+                    }
+                    if (rUrl.includes('_interactive.svg')) imgRight.classList.add('is-interactive');
+                    else imgRight.classList.remove('is-interactive');
                     
                     document.getElementById('compare-left').classList.toggle('active', activeCompareSide === 'left');
                     document.getElementById('compare-right').classList.toggle('active', activeCompareSide === 'right');
@@ -1654,21 +1905,148 @@ tryCatch({
             });
 
             const btnSave = document.getElementById('btn-save');
-            const exportDropdown = document.getElementById('export-dropdown');
+            const exportModal = document.getElementById('export-modal');
+            const btnExportCancel = document.getElementById('btn-export-cancel');
             const formatSelect = document.getElementById('export-format');
             const unitSelect = document.getElementById('export-unit');
             const widthInput = document.getElementById('export-width');
             const heightInput = document.getElementById('export-height');
+            const previewContainer = document.getElementById('preview-container');
+            const previewOverlay = document.getElementById('preview-overlay');
+
+            let previewDebounceTimer;
+            let currentUnit = unitSelect ? unitSelect.value : 'in';
+            let isSyncingUI = false;
+            let currentPreviewScale = 1;
 
             btnSave?.addEventListener('click', (e) => {
                 if (!btnSave.hasAttribute('disabled')) {
                     e.stopPropagation();
-                    exportDropdown.classList.toggle('open');
-                    document.getElementById('dir-dropdown')?.classList.remove('open');
+                    exportModal.classList.add('active');
+                    isSyncingUI = true;
+                    // Always reset to safe default dimensions when opening
+                    if (currentUnit === 'px') {
+                        widthInput.value = '2400';
+                        heightInput.value = '1800';
+                    } else {
+                        widthInput.value = '8';
+                        heightInput.value = '6';
+                    }
+                    syncPreviewContainer();
+                    isSyncingUI = false;
                 }
             });
 
-            let currentUnit = unitSelect ? unitSelect.value : 'in';
+            btnExportCancel?.addEventListener('click', () => {
+                exportModal.classList.remove('active');
+            });
+
+            window.addEventListener('resize', () => {
+                if (exportModal.classList.contains('active')) {
+                    isSyncingUI = true;
+                    syncPreviewContainer();
+                    setTimeout(() => isSyncingUI = false, 50);
+                }
+            });
+
+            function syncPreviewContainer() {
+                let w = parseFloat(widthInput.value) || 8;
+                let h = parseFloat(heightInput.value) || 6;
+
+                // Enforce minimum bounds for image fidelity and R rendering stability
+                let minW = 5, minH = 5;
+                if (currentUnit === 'px') { minW = 500; minH = 500; }
+
+                if (w < minW) { w = minW; widthInput.value = w.toString(); }
+                if (h < minH) { h = minH; heightInput.value = h.toString(); }
+
+                let uiW, uiH;
+                if (currentUnit === 'px') {
+                    uiW = w * 0.5;
+                    uiH = h * 0.5;
+                } else {
+                    uiW = w * 100;
+                    uiH = h * 100;
+                }
+                const maxW = window.innerWidth * 0.8;
+                const maxH = window.innerHeight * 0.6;
+                if (uiW > maxW || uiH > maxH) {
+                    currentPreviewScale = Math.min(maxW / uiW, maxH / uiH);
+                    uiW *= currentPreviewScale;
+                    uiH *= currentPreviewScale;
+                } else {
+                    currentPreviewScale = 1;
+                }
+                previewContainer.style.width = uiW + 'px';
+                previewContainer.style.height = uiH + 'px';
+                requestPreview();
+            }
+
+            function requestPreview() {
+                clearTimeout(previewDebounceTimer);
+                if (previewOverlay) previewOverlay.classList.add('loading');
+                previewDebounceTimer = setTimeout(() => {
+                    vscode.postMessage({
+                        type: 'requestPreviewRender',
+                        format: formatSelect.value,
+                        unit: unitSelect.value,
+                        width: widthInput.value,
+                        height: heightInput.value
+                    });
+                }, 400);
+            }
+
+            const customResizer = document.getElementById('custom-resizer');
+            let isDraggingResizer = false;
+            let startMouseX = 0, startMouseY = 0;
+            let startW = 0, startH = 0;
+
+            customResizer?.addEventListener('mousedown', (e) => {
+                isDraggingResizer = true;
+                startMouseX = e.clientX;
+                startMouseY = e.clientY;
+                startW = previewContainer.offsetWidth;
+                startH = previewContainer.offsetHeight;
+                document.body.style.userSelect = 'none';
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isDraggingResizer) return;
+                const dx = e.clientX - startMouseX;
+                const dy = e.clientY - startMouseY;
+                let newW = startW + (dx * 2);
+                let newH = startH + (dy * 2);
+                newW = Math.max(20, newW);
+                newH = Math.max(20, newH);
+                const modalBody = document.querySelector('.export-modal-body');
+                if (modalBody) {
+                    newW = Math.min(newW, modalBody.clientWidth - 12);
+                    newH = Math.min(newH, modalBody.clientHeight - 12);
+                }
+                previewContainer.style.width = newW + 'px';
+                previewContainer.style.height = newH + 'px';
+
+                // Synchronize input fields immediately with the exact drag dimensions
+                const actualW = newW / currentPreviewScale;
+                const actualH = newH / currentPreviewScale;
+                if (currentUnit === 'px') {
+                    widthInput.value = Math.round(actualW * 2).toString();
+                    heightInput.value = Math.round(actualH * 2).toString();
+                } else {
+                    widthInput.value = Number((actualW / 100).toFixed(2)).toString();
+                    heightInput.value = Number((actualH / 100).toFixed(2)).toString();
+                }
+                requestPreview();
+            });
+
+            window.addEventListener('mouseup', () => {
+                if (isDraggingResizer) {
+                    isDraggingResizer = false;
+                    document.body.style.userSelect = '';
+                }
+            });
+
+
 
             formatSelect?.addEventListener('change', () => {
                 const isRaster = formatSelect.value === 'png' || formatSelect.value === 'jpg';
@@ -1682,6 +2060,9 @@ tryCatch({
                     heightInput.value = '6';
                 }
                 currentUnit = unitSelect.value;
+                isSyncingUI = true;
+                syncPreviewContainer();
+                setTimeout(() => isSyncingUI = false, 50);
             });
 
             unitSelect?.addEventListener('change', () => {
@@ -1699,7 +2080,18 @@ tryCatch({
                     if (isRaster) formatSelect.value = 'pdf';
                 }
                 currentUnit = unitSelect.value;
+                isSyncingUI = true;
+                syncPreviewContainer();
+                setTimeout(() => isSyncingUI = false, 50);
             });
+
+            const onInputManualChange = () => {
+                isSyncingUI = true;
+                syncPreviewContainer();
+                setTimeout(() => isSyncingUI = false, 50);
+            };
+            widthInput?.addEventListener('change', onInputManualChange);
+            heightInput?.addEventListener('change', onInputManualChange);
 
             document.getElementById('main-image')?.addEventListener('click', (e) => {
                 if (currentImageSrc && currentImageSrc.includes('_interactive.svg')) {
@@ -1708,7 +2100,7 @@ tryCatch({
             });
 
             document.getElementById('btn-export-confirm')?.addEventListener('click', () => {
-                exportDropdown.classList.remove('open');
+                exportModal.classList.remove('active');
                 vscode.postMessage({
                     type: 'saveAs',
                     format: formatSelect.value,
@@ -1719,9 +2111,6 @@ tryCatch({
             });
 
             document.addEventListener('click', (e) => {
-                if (exportDropdown && !exportDropdown.contains(e.target) && e.target !== btnSave && !btnSave?.contains(e.target)) {
-                    exportDropdown.classList.remove('open');
-                }
                 if (compareDropdown && !compareDropdown.contains(e.target) && e.target !== btnCompareOptions && !btnCompareOptions?.contains(e.target)) {
                     compareDropdown.classList.remove('open');
                 }
@@ -1767,6 +2156,7 @@ tryCatch({
                     else img = document.getElementById('img-right');
 
                     if (!img || img.style.display === 'none') return;
+                    if (img.classList.contains('is-interactive')) return;
 
                     const rect = img.getBoundingClientRect();
                     
@@ -1976,7 +2366,7 @@ tryCatch({
                 if (plotArea && !isCompareMode) {
                     vscode.postMessage({ 
                         type: 'resize', 
-                        width: plotArea.clientWidth, 
+                        width: plotArea.clientWidth - 16, 
                         height: plotArea.clientHeight 
                     });
                 }
@@ -1991,7 +2381,7 @@ tryCatch({
                 }, 400); // 400ms debounce
             });
 
-
+            vscode.postMessage({ type: 'ready' });
 </script>
 </body>
 </html>`;

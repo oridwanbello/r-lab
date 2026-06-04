@@ -3,7 +3,9 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { enforceGroup3TabOrder } from '../utils/webviewUtils';
 import { getNonce } from '../utils/webviewUtils';
+import { suppressGuardForPanelMove } from '../layout/layoutManager';
 
 /**
  * Viewer Panel - a WebviewPanel (editor tab) that intercepts and displays
@@ -20,6 +22,7 @@ export class ViewerPanel {
     private _disposables: vscode.Disposable[] = [];
     private _isMinimized: boolean = false;
     private _isPoppedOut: boolean = false;
+    private _focusPending: boolean = false;
     private _isNightMode: boolean = false;
     private _extensionUri: vscode.Uri;
     
@@ -90,9 +93,26 @@ export class ViewerPanel {
 
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
+        this._panel.onDidChangeViewState(
+            (e) => { this._updateWebviewState(); },
+            null,
+            this._disposables
+        );
+
         this._panel.webview.onDidReceiveMessage(
             (msg: { type: string }) => {
                 switch (msg.type) {
+                    case 'ready':
+                        this._updateWebviewState();
+                        if (this._focusPending) {
+                            this._focusPending = false;
+                            enforceGroup3TabOrder('Viewer').then(() => {
+                                setTimeout(() => {
+                                    vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+                                }, 150);
+                            });
+                        }
+                        break;
                     case 'openExternal':
                         this._handleOpenExternal();
                         break;
@@ -124,18 +144,25 @@ export class ViewerPanel {
                         break;
                     case 'popout':
                         this._isPoppedOut = true;
+                        this._focusPending = true;
+                        suppressGuardForPanelMove();
                         this._panel.reveal(vscode.ViewColumn.One, false);
-                        setTimeout(() => vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'), 150);
+                        vscode.commands.executeCommand('workbench.action.keepEditor');
+                        setTimeout(async () => {
+                            await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+                        }, 150);
                         this._updateWebviewState();
                         break;
                     case 'restore':
                         this._isPoppedOut = false;
+                        this._focusPending = true;
+                        suppressGuardForPanelMove();
                         this._panel.reveal(vscode.ViewColumn.Three, false);
-                        setTimeout(() => {
-                            vscode.commands.executeCommand('moveActiveEditor', { to: 'position', value: 2 }).then(() => {
-                                setTimeout(() => vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'), 150);
-                            });
-                        }, 100);
+                        vscode.commands.executeCommand('workbench.action.keepEditor');
+                        setTimeout(async () => {
+                            await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+                        }, 150);
+                        enforceGroup3TabOrder('Viewer');
                         this._updateWebviewState();
                         break;
                 }
@@ -146,10 +173,7 @@ export class ViewerPanel {
     }
 
     public async loadUrl(url: string): Promise<void> {
-        // Truncate forward history and push new URL
-        if (this._currentIndex < this._history.length - 1) {
-            this._history = this._history.slice(0, this._currentIndex + 1);
-        }
+        // Append to history without truncating, just like PlotsPanel
         this._history.push(url);
         this._currentIndex = this._history.length - 1;
 
@@ -324,7 +348,7 @@ export class ViewerPanel {
     private _cleanupWidgetPlaceholders(): void {
         // Find and delete all _interactive.svg files in the plots directory
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
-        const plotsDir = path.join(wf, '.r_layout', 'plots');
+        const plotsDir = path.join(wf, '.R-layout', 'plots');
         try {
             if (fs.existsSync(plotsDir)) {
                 const files = fs.readdirSync(plotsDir);
@@ -338,6 +362,9 @@ export class ViewerPanel {
     }
 
     private _updateWebviewState(): void {
+        if (this._panel.viewColumn !== undefined) {
+            this._isPoppedOut = this._panel.viewColumn !== vscode.ViewColumn.Three;
+        }
         this._panel.webview.postMessage({
             type: 'updateState',
             state: {
@@ -360,7 +387,7 @@ export class ViewerPanel {
         const prevIcon = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M11.354 1.646L12.061 2.354 6.414 8l5.647 5.646-.707.708L5 8l6.354-6.354z"/></svg>';
         const nextIcon = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.646 1.646L3.939 2.354 9.586 8l-5.647 5.646.707.708L11 8 4.646 1.646z"/></svg>';
         const refreshIcon = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M13.29 8.69a5.33 5.33 0 1 1 -6.62 -5.86c2.6-.67 5.29.67 6.28 3.16" /><path d="M13.33 2.67v3.33h-3.33" /></svg>';
-        const externalIcon = '<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/><path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/></svg>';
+        const externalIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>';
         const moonIcon = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786z"/></svg>';
         const sunIcon = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2A.5.5 0 018 0zm0 13a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2A.5.5 0 018 13zm8-5a.5.5 0 01-.5.5h-2a.5.5 0 010-1h2a.5.5 0 01.5.5zM3 8a.5.5 0 01-.5.5h-2a.5.5 0 010-1h2A.5.5 0 013 8zm10.657-5.657a.5.5 0 010 .707l-1.414 1.415a.5.5 0 11-.707-.708l1.414-1.414a.5.5 0 01.707 0zm-9.193 9.193a.5.5 0 010 .707L3.05 13.657a.5.5 0 01-.707-.707l1.414-1.414a.5.5 0 01.707 0zm9.193 2.121a.5.5 0 01-.707 0l-1.414-1.414a.5.5 0 01.707-.707l1.414 1.414a.5.5 0 010 .707zM4.464 2.343a.5.5 0 01-.707 0L2.343 3.757a.5.5 0 11.707.707l1.414-1.414a.5.5 0 010-.707z"/></svg>';
         const deleteIcon = '<svg viewBox="0 0 16 16"><path fill="none" d="M9.25,2H6.75a0.25,0.25,0,0,0-0.25,0.25V3h3V2.25A0.25,0.25,0,0,0,9.25,2Z"/><path fill="currentColor" d="M13.5,3H10.5V2.25A1.25,1.25,0,0,0,9.25,1H6.75A1.25,1.25,0,0,0,5.5,2.25V3H2.5a0.5,0.5,0,0,0,0,1H3L3.63,13.53C3.67,14.37,4.31,15,5.13,15h5.75c0.82,0,1.45-.62,1.5-1.47L13,4h0.5a0.5,0.5,0,0,0,0-1ZM6,13H6a0.5,0.5,0,0,1-.5-.48l-0.25-7a0.5,0.5,0,1,1,1-.04l0.25,7A0.5,0.5,0,0,1,6,13ZM8.5,12.5a0.5,0.5,0,0,1-1,0V5.5a0.5,0.5,0,0,1,1,0ZM9.5,3H6.5V2.25a0.25,0.25,0,0,1,.25-.25h2.5a0.25,0.25,0,0,1,.25.25Zm1,9.55a0.5,0.5,0,0,1-.5.45H10a0.5,0.5,0,0,1-.5-.52l0.25-7a0.5,0.5,0,1,1,1,.04Z"/></svg>';
@@ -400,6 +427,15 @@ export class ViewerPanel {
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             flex-shrink: 0;
             gap: 6px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
+        }
+        .toolbar::-webkit-scrollbar {
+            display: none;
+        }
+        .toolbar > * {
+            flex-shrink: 0;
         }
         .nav-controls {
             display: flex;
@@ -441,7 +477,7 @@ export class ViewerPanel {
             align-items: center;
             justify-content: center;
             position: relative;
-            padding: 8px;
+            padding: 0 8px 0 8px;
             background: var(--vscode-editor-background);
         }
         
@@ -687,6 +723,8 @@ export class ViewerPanel {
                 tooltip.style.display = 'none';
             });
         });
+        
+        vscode.postMessage({ type: 'ready' });
     </script>
 </body>
 </html>`;

@@ -5,3 +5,4 @@ node_modules
 *.vsix
 .r_layout/
 .DS_Store
+.tmp/

@@ -5,6 +5,8 @@ import * as nodeFs from 'fs';
 import { execFile } from 'child_process';
 import { getRscriptPath } from '../utils/rPathResolver';
 import { getNonce, escapeHtml } from '../utils/webviewUtils';
+import { enforceGroup3TabOrder } from '../utils/webviewUtils';
+import { suppressGuardForPanelMove } from '../layout/layoutManager';
 
 /**
  * Data Viewer Panel - displays R data.frames in a sortable HTML table.
@@ -26,6 +28,8 @@ export class DataViewerPanel {
     private _isLoading = false;
     private _errorMessage = '';
     private _isMinimized = false;
+    private _isPoppedOut: boolean = false;
+    private _focusPending: boolean = false;
     private _lastRenderHash = '';
     private _disposables: vscode.Disposable[] = [];
 
@@ -85,9 +89,29 @@ export class DataViewerPanel {
 
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
+        this._panel.onDidChangeViewState(
+            (e) => {
+                this._render();
+                this._postPoppedState();
+            },
+            null,
+            this._disposables
+        );
+
         this._panel.webview.onDidReceiveMessage(
             async (msg: { type: string; varName?: string; slice?: number }) => {
                 switch (msg.type) {
+                    case 'ready':
+                        this._render();
+                        if (this._focusPending) {
+                            this._focusPending = false;
+                            enforceGroup3TabOrder('Data Viewer').then(() => {
+                                setTimeout(() => {
+                                    vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+                                }, 150);
+                            });
+                        }
+                        break;
                     case 'refresh':
                         if (this._varName) {
                             // Manual refresh triggers a full R re-export.
@@ -99,11 +123,48 @@ export class DataViewerPanel {
                             await this.loadVariable(this._varName, false, msg.slice);
                         }
                         break;
+                    case 'popout':
+                        this._isPoppedOut = true;
+                        this._focusPending = true;
+                        suppressGuardForPanelMove();
+                        this._panel.reveal(vscode.ViewColumn.One, false);
+                        vscode.commands.executeCommand('workbench.action.keepEditor');
+                        setTimeout(async () => {
+                            await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+                        }, 150);
+                        this._postPoppedState();
+                        break;
+                    case 'restore':
+                        this._isPoppedOut = false;
+                        this._focusPending = true;
+                        suppressGuardForPanelMove();
+                        this._panel.reveal(vscode.ViewColumn.Three, false);
+                        vscode.commands.executeCommand('workbench.action.keepEditor');
+                        setTimeout(async () => {
+                            await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+                        }, 150);
+                        enforceGroup3TabOrder('Data Viewer');
+                        this._postPoppedState();
+                        break;
                 }
             },
             null,
             this._disposables
         );
+    }
+
+    /**
+     * Send the popped-out state to the webview so it can dynamically
+     * update the tooltip and click handler without a full HTML re-render.
+     */
+    private _postPoppedState(): void {
+        if (this._panel.viewColumn !== undefined) {
+            this._isPoppedOut = this._panel.viewColumn !== vscode.ViewColumn.Three;
+        }
+        this._panel.webview.postMessage({
+            type: 'updatePoppedState',
+            isPoppedOut: this._isPoppedOut
+        });
     }
 
     // Public API
@@ -139,7 +200,7 @@ export class DataViewerPanel {
         this._panel.title = 'Data Viewer';
 
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
-        const outDir = nodePath.join(wf, '.r_layout');
+        const outDir = nodePath.join(wf, '.R-layout');
         const tmpMeta = nodePath.join(outDir, 'dv-meta.txt');
 
         // If sliceIndex is provided and we are already viewing a 3D matrix,
@@ -400,6 +461,11 @@ export class DataViewerPanel {
         const cleanLabel = activeLabel.toLowerCase().replace(/\s+/g, '');
         const isRedundant = cleanLabel === 'page' + this._currentSlice || cleanLabel === 'slice' + this._currentSlice || cleanLabel === '';
 
+        if (this._panel.viewColumn !== undefined) {
+            this._isPoppedOut = this._panel.viewColumn !== vscode.ViewColumn.Three;
+        }
+        const isPoppedOut = this._isPoppedOut;
+
         let mainContent: string;
         if (this._isLoading) {
             mainContent = `<div class="status-msg">⏳ Loading "${escapeHtml(this._varName)}"…</div>`;
@@ -467,11 +533,20 @@ export class DataViewerPanel {
             position: relative;
             display: flex;
             align-items: center;
-            justify-content: space-between; /* Meta left, Actions right */
+            justify-content: space-between;
             padding: 0 12px;
             height: 32px;
-            background: var(--vscode-editor-background); /* Matches active tab */
+            background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
+            flex-shrink: 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
+        }
+        .toolbar::-webkit-scrollbar {
+            display: none;
+        }
+        .toolbar > * {
             flex-shrink: 0;
         }
 
@@ -526,6 +601,7 @@ export class DataViewerPanel {
             background: var(--vscode-editorInfo-background, rgba(60, 130, 250, 0.1));
             color: var(--vscode-textLink-foreground, var(--vscode-foreground));
             border-bottom: 1px solid var(--vscode-editorGroup-border);
+            font-family: var(--vscode-editor-font-family, monospace);
         }
         .table-wrapper { flex: 1; overflow: auto; }
         table { width: 100%; border-collapse: collapse; }
@@ -654,6 +730,7 @@ export class DataViewerPanel {
                     <path d="M13.33 2.67v3.33h-3.33" />
                 </svg>
             </button>
+            <button id="btn-popout" data-tooltip="${isPoppedOut ? 'Restore to Side Panel' : 'Pop-out to Main Editor'}"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/><path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/></svg></button>
         </div>
     </div>
     <div id="tooltip" class="tooltip"></div>
@@ -756,6 +833,28 @@ export class DataViewerPanel {
 
             // Instant Tooltip Controller
             const tooltip = document.getElementById('tooltip');
+            const btnPopout = document.getElementById('btn-popout');
+            let isPoppedOut = ${isPoppedOut};
+
+            // Listen for dynamic isPoppedOut state updates from the extension
+            window.addEventListener('message', event => {
+                const msg = event.data;
+                if (msg.type === 'updatePoppedState' && msg.isPoppedOut !== undefined) {
+                    isPoppedOut = msg.isPoppedOut;
+                    if (btnPopout) {
+                        btnPopout.setAttribute('data-tooltip', isPoppedOut ? 'Restore to Side Panel' : 'Pop-out to Main Editor');
+                        // Force update tooltip if currently hovering
+                        if (tooltip && tooltip.style.display === 'block' && btnPopout.matches(':hover')) {
+                            tooltip.textContent = btnPopout.getAttribute('data-tooltip');
+                        }
+                    }
+                }
+            });
+
+            btnPopout?.addEventListener('click', () => {
+                vscode.postMessage({ type: isPoppedOut ? 'restore' : 'popout' });
+            });
+
             document.querySelectorAll('[data-tooltip]').forEach(el => {
                 el.addEventListener('mouseenter', (e) => {
                     const text = el.getAttribute('data-tooltip');
@@ -777,6 +876,8 @@ export class DataViewerPanel {
                     tooltip.style.display = 'none';
                 });
             });
+
+            vscode.postMessage({ type: 'ready' });
         })();
     </script>
 </body>

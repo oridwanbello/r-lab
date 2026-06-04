@@ -392,7 +392,7 @@ tryCatch({
     } | null {
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
 
-        const outDir = path.join(wf, '.r_layout');
+        const outDir = path.join(wf, '.R-layout');
         const metaFile = path.join(outDir, '.workspace_meta.txt');
         const varsFile = path.join(outDir, '.workspace_vars.tsv');
         const loadedFile = path.join(outDir, '.workspace_loaded.tsv');
@@ -651,8 +651,9 @@ tryCatch({
         body.minimized > * { display: none !important; }
 
         /* ── Tab Bar ── */
-        .tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--vscode-editorGroup-border); background: var(--vscode-editor-background); flex-shrink: 0; }
-        .tab { padding: 8px 12px; cursor: pointer; opacity: 0.6; font-weight: 600; white-space: nowrap; }
+        .tabs { display: flex; align-items: center; border-bottom: 1px solid var(--vscode-editorGroup-border); background: var(--vscode-editor-background); flex-shrink: 0; }
+        .tab { padding: 8px 16px; cursor: pointer; opacity: 0.6; font-weight: 600; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+        .tab:not(:last-child) { border-right: 1px solid var(--vscode-editorGroup-border); }
         .tab:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
         .tab.active { opacity: 1; color: var(--vscode-textLink-foreground); }
 
@@ -799,6 +800,15 @@ tryCatch({
             position: sticky;
             top: 0;
             z-index: 5;
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
+        }
+        .pkg-toolbar::-webkit-scrollbar {
+            display: none;
+        }
+        .pkg-toolbar > * {
+            flex-shrink: 0;
         }
         .pkg-search {
             flex: 1;
