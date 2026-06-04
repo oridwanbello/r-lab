@@ -420,7 +420,7 @@ export class ViewerPanel {
         .toolbar {
             display: flex;
             align-items: center;
-            justify-content: flex-end;
+            justify-content: flex-start;
             padding: 0 12px;
             height: 32px;
             background: var(--vscode-editor-background);
@@ -432,7 +432,21 @@ export class ViewerPanel {
             white-space: nowrap;
         }
         .toolbar::-webkit-scrollbar {
-            display: none;
+            width: 2px;
+            height: 2px;
+        }
+        .toolbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .toolbar::-webkit-scrollbar-thumb {
+            background-color: var(--vscode-scrollbarSlider-background);
+            border-radius: 2px;
+        }
+        .toolbar:hover::-webkit-scrollbar-thumb {
+            background-color: var(--vscode-scrollbarSlider-hoverBackground);
+        }
+        .toolbar::-webkit-scrollbar-thumb:active {
+            background-color: var(--vscode-scrollbarSlider-activeBackground);
         }
         .toolbar > * {
             flex-shrink: 0;
@@ -441,6 +455,7 @@ export class ViewerPanel {
             display: flex;
             align-items: center;
             gap: 6px;
+            margin-left: auto;
         }
         .counter {
             font-size: 0.9em;
@@ -533,26 +548,25 @@ export class ViewerPanel {
             <button id="btn-next" data-tooltip="Next Item" disabled>
                 ${nextIcon}
             </button>
+            <button id="btn-nightmode" data-tooltip="Switch to Night Mode" disabled>
+                ${moonIcon}
+            </button>
+            <button id="btn-delete" data-tooltip="Delete Current Item" disabled>
+                ${deleteIcon}
+            </button>
+            <button id="btn-clear" data-tooltip="Clear All Items" disabled>
+                ${clearIcon}
+            </button>
+            <button id="btn-refresh" data-tooltip="Refresh Viewer" disabled>
+                ${refreshIcon}
+            </button>
+            <button id="btn-external" data-tooltip="Open in Browser" disabled>
+                ${externalIcon}
+            </button>
+            <button id="btn-popout" data-tooltip="Pop-out to Main Editor">
+                <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/><path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/></svg>
+            </button>
         </div>
-        <div style="flex: 1;"></div>
-        <button id="btn-nightmode" data-tooltip="Switch to Night Mode" disabled>
-            ${moonIcon}
-        </button>
-        <button id="btn-delete" data-tooltip="Delete Current Item" disabled>
-            ${deleteIcon}
-        </button>
-        <button id="btn-clear" data-tooltip="Clear All Items" disabled>
-            ${clearIcon}
-        </button>
-        <button id="btn-refresh" data-tooltip="Refresh Viewer" disabled>
-            ${refreshIcon}
-        </button>
-        <button id="btn-external" data-tooltip="Open in Browser" disabled>
-            ${externalIcon}
-        </button>
-        <button id="btn-popout" data-tooltip="Pop-out to Main Editor">
-            <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/><path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/></svg>
-        </button>
     </div>
 
     <div class="viewer-area">

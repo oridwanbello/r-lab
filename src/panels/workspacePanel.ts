@@ -651,8 +651,29 @@ tryCatch({
         body.minimized > * { display: none !important; }
 
         /* ── Tab Bar ── */
-        .tabs { display: flex; align-items: center; border-bottom: 1px solid var(--vscode-editorGroup-border); background: var(--vscode-editor-background); flex-shrink: 0; }
-        .tab { padding: 8px 16px; cursor: pointer; opacity: 0.6; font-weight: 600; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+        .tabs { 
+            display: flex; align-items: center; border-bottom: 1px solid var(--vscode-editorGroup-border); 
+            background: var(--vscode-editor-background); flex-shrink: 0; 
+            overflow-x: auto; overflow-y: hidden; 
+        }
+        .tabs::-webkit-scrollbar {
+            width: 2px;
+            height: 2px;
+        }
+        .tabs::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .tabs::-webkit-scrollbar-thumb {
+            background-color: var(--vscode-scrollbarSlider-background);
+            border-radius: 2px;
+        }
+        .tabs:hover::-webkit-scrollbar-thumb {
+            background-color: var(--vscode-scrollbarSlider-hoverBackground);
+        }
+        .tabs::-webkit-scrollbar-thumb:active {
+            background-color: var(--vscode-scrollbarSlider-activeBackground);
+        }
+        .tab { padding: 8px 16px; cursor: pointer; opacity: 0.6; font-weight: 600; white-space: nowrap; display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
         .tab:not(:last-child) { border-right: 1px solid var(--vscode-editorGroup-border); }
         .tab:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
         .tab.active { opacity: 1; color: var(--vscode-textLink-foreground); }
@@ -805,7 +826,21 @@ tryCatch({
             white-space: nowrap;
         }
         .pkg-toolbar::-webkit-scrollbar {
-            display: none;
+            width: 2px;
+            height: 2px;
+        }
+        .pkg-toolbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .pkg-toolbar::-webkit-scrollbar-thumb {
+            background-color: var(--vscode-scrollbarSlider-background);
+            border-radius: 2px;
+        }
+        .pkg-toolbar:hover::-webkit-scrollbar-thumb {
+            background-color: var(--vscode-scrollbarSlider-hoverBackground);
+        }
+        .pkg-toolbar::-webkit-scrollbar-thumb:active {
+            background-color: var(--vscode-scrollbarSlider-activeBackground);
         }
         .pkg-toolbar > * {
             flex-shrink: 0;

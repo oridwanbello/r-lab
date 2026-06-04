@@ -739,7 +739,7 @@ tryCatch({
         .toolbar {
             display: flex;
             align-items: center;
-            justify-content: flex-end; /* Right align tools */
+            justify-content: flex-start;
             padding: 0 12px;
             height: 32px; /* Fixed height to prevent shrinking */
             background: var(--vscode-editor-background); /* Matches active tab */
@@ -752,7 +752,21 @@ tryCatch({
             white-space: nowrap;
         }
         .toolbar::-webkit-scrollbar {
-            display: none;
+            width: 2px;
+            height: 2px;
+        }
+        .toolbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .toolbar::-webkit-scrollbar-thumb {
+            background-color: var(--vscode-scrollbarSlider-background);
+            border-radius: 2px;
+        }
+        .toolbar:hover::-webkit-scrollbar-thumb {
+            background-color: var(--vscode-scrollbarSlider-hoverBackground);
+        }
+        .toolbar::-webkit-scrollbar-thumb:active {
+            background-color: var(--vscode-scrollbarSlider-activeBackground);
         }
         .toolbar > * {
             flex-shrink: 0;
@@ -761,6 +775,7 @@ tryCatch({
             display: flex;
             align-items: center;
             gap: 6px;
+            margin-left: auto;
         }
         .separator {
             width: 1px;
@@ -1250,6 +1265,7 @@ tryCatch({
             flex-direction: column;
             padding: 8px 8px 16px 8px;
             justify-content: space-between;
+            overflow-y: auto;
         }
         .export-controls-vertical {
             display: flex;

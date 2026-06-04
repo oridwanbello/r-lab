@@ -544,7 +544,21 @@ export class DataViewerPanel {
             white-space: nowrap;
         }
         .toolbar::-webkit-scrollbar {
-            display: none;
+            width: 2px;
+            height: 2px;
+        }
+        .toolbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .toolbar::-webkit-scrollbar-thumb {
+            background-color: var(--vscode-scrollbarSlider-background);
+            border-radius: 2px;
+        }
+        .toolbar:hover::-webkit-scrollbar-thumb {
+            background-color: var(--vscode-scrollbarSlider-hoverBackground);
+        }
+        .toolbar::-webkit-scrollbar-thumb:active {
+            background-color: var(--vscode-scrollbarSlider-activeBackground);
         }
         .toolbar > * {
             flex-shrink: 0;
