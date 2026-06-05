@@ -29,7 +29,9 @@ Transform your editor into an RStudio-inspired 3-pane grid with a single click. 
 
 | Feature | Description |
 | ------- | ----------- |
+| `r-layout.rConsoleType` | Select console type (`Auto Detect`, `Standard R`, `Radian`) to enforce bracketed paste. |
 | `r-layout.rConsolePath` | Path or command for the R Console terminal (default: `"R"`). |
+| `r-layout.restoreCustomPanelPositions` | If true, restores panels to custom dragged locations instead of strict 3-pane. |
 | `r-layout.plotOutputDir` | Custom directory for R Layout plot images. |
 | `Toggle R Layout` | Snap the editor into or out of the 3-pane grid. |
 | `Maximize Top Pane` | Expand the top-right pane; minimizes bottom panes. |
@@ -41,6 +43,7 @@ Interested in building the layout, fixing bugs, or reviewing our architecture? S
 ## Trademarks & License
 
 - R Logo: © The R Foundation (CC-BY-SA 4.0)
-- Tidyverse / Bioconductor: Respective trademarks of Posit Software, PBC and the Bioconductor Project.
+- Tidyverse: Trademark of Posit Software, PBC.
+- Bioconductor: Trademark of the Bioconductor Project.
 - RDocumentation: © DataCamp, Inc.
 - License: [MIT License](LICENSE.txt)

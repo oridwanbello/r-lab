@@ -34,6 +34,12 @@
     "configuration": {
       "title": "R Layout",
       "properties": {
+        "r-layout.rConsoleType": {
+          "type": "string",
+          "enum": ["Auto Detect", "Standard R", "Radian"],
+          "default": "Auto Detect",
+          "description": "Select the type of R console you are using. 'Auto Detect' will guess based on the path. Set explicitly to 'Radian' to enforce bracketed paste (required if you use shell aliases)."
+        },
         "r-layout.rConsolePath": {
           "type": "string",
           "default": "R",

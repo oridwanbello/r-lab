@@ -199,16 +199,22 @@ export function registerLayoutCommand(
 
         rConsoleTerminal.show(false); // bring it into view without stealing keyboard focus
         
-        // Bracketed paste is strictly required for radian to process multiline selections,
-        // but it causes garbage output in standard R. 
-        // We detect radian if the path explicitly contains it. If it doesn't (e.g. the user uses an alias like `R="radian"`),
-        // we fallback to the user's `r.bracketedPaste` setting, which they must have enabled for vscode-R anyway.
-        const rConfig = vscode.workspace.getConfiguration('r');
+        // Bracketed paste is strictly required for radian to process multiline selections.
+        // We determine if we should use bracketed paste based on the user's explicit Console Type setting,
+        // or auto-detect it from the path if set to Auto Detect.
         const layoutConfig = vscode.workspace.getConfiguration('r-layout');
+        const rConsoleType = layoutConfig.get<string>('rConsoleType', 'Auto Detect');
         const rConsolePath = layoutConfig.get<string>('rConsolePath', 'R');
-        const isRadianPath = rConsolePath.toLowerCase().includes('radian');
         
-        const useBracketedPaste = isRadianPath || rConfig.get<boolean>('bracketedPaste', false);
+        let useBracketedPaste = false;
+        if (rConsoleType === 'Radian') {
+            useBracketedPaste = true;
+        } else if (rConsoleType === 'Standard R') {
+            useBracketedPaste = false;
+        } else {
+            // Auto Detect
+            useBracketedPaste = rConsolePath.toLowerCase().includes('radian');
+        }
         
         if (useBracketedPaste) {
             // \x1b[200~ and \x1b[201~ are the ANSI escape codes for bracketed paste mode
