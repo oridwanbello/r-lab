@@ -434,8 +434,9 @@ export class HelpPanel {
             white-space: nowrap;
         }
         .toolbar::-webkit-scrollbar {
-            width: 2px;
-            height: 2px;
+            height: 3px;
+            
+            
         }
         .toolbar::-webkit-scrollbar-track {
             background: transparent;

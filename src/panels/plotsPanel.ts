@@ -161,7 +161,7 @@ export class PlotsPanel {
                     case 'saveAs':
                         this._handleSaveAs((msg as any).format, (msg as any).width, (msg as any).height, (msg as any).unit);
                         break;
-                    case 'requestPreviewRender':
+                    case 'previewRender':
                         this._handleRequestPreviewRender((msg as any).format, (msg as any).width, (msg as any).height, (msg as any).unit);
                         break;
                     case 'deleteCurrent':
@@ -393,52 +393,87 @@ tryCatch({
         if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
         const previewPath = path.join(tmpDir, 'export_preview.png');
+        const targetExt = format.toLowerCase();
+        const targetTempPath = path.join(tmpDir, `export_size_test.${targetExt}`);
+        
         const safeRdsPath = rdsPath.replace(/\\/g, '/');
         const safePngPath = previewPath.replace(/\\/g, '/');
-
-        // We calculate standard dimensions exactly like export to show true aspect ratio
-        let w = parseFloat(widthStr);
-        let h = parseFloat(heightStr);
-        let res = 300;
-        
-        if (unit === 'px') {
-            res = 300;
-        } else if (unit === 'in') {
-            w = w * res;
-            h = h * res;
-        } else if (unit === 'cm') {
-            w = (w / 2.54) * res;
-            h = (h / 2.54) * res;
-        } else if (unit === 'mm') {
-            w = (w / 25.4) * res;
-            h = (h / 25.4) * res;
-        }
-
-        w = Math.round(w);
-        h = Math.round(h);
-
-        // Enforce minimum dimension
-        const minPixels = 5 * res;
-        if (w < minPixels || h < minPixels) {
-            const scale = Math.max(minPixels / w, minPixels / h);
-            w = Math.round(w * scale);
-            h = Math.round(h * scale);
-        }
+        const safeTargetTempPath = targetTempPath.replace(/\\/g, '/');
 
         const rscriptPath = getRscriptPath();
         const script = `
 tryCatch({
     p <- readRDS('${safeRdsPath}')
-    png('${safePngPath}', width=${w}, height=${h}, res=${res}, bg='white')
+    
+    .w <- as.numeric('${widthStr}')
+    .h <- as.numeric('${heightStr}')
+    .unit <- '${unit}'
+    
+    .res <- 300
+    if (.unit == "cm") { .w_in <- .w / 2.54; .h_in <- .h / 2.54 }
+    else if (.unit == "mm") { .w_in <- .w / 25.4; .h_in <- .h / 25.4 }
+    else if (.unit == "px") {
+      .base_res <- 300
+      .w_in <- .w / .base_res
+      .h_in <- .h / .base_res
+      if (.w_in < 5 || .h_in < 5) {
+        .scale <- max(5 / .w_in, 5 / .h_in)
+        .w_in <- .w_in * .scale
+        .h_in <- .h_in * .scale
+      }
+      .res <- .w / .w_in
+    } else {
+      .w_in <- .w; .h_in <- .h
+    }
+
+    png('${safePngPath}', width=.w, height=.h, units=.unit, res=.res, bg='white')
     replayPlot(p)
     dev.off()
+    
+    if ('${targetExt}' == 'pdf') {
+        pdf(file='${safeTargetTempPath}', width=.w_in, height=.h_in, onefile=FALSE)
+        replayPlot(p)
+        dev.off()
+    } else if ('${targetExt}' == 'svg') {
+        svg(filename='${safeTargetTempPath}', width=.w_in, height=.h_in, onefile=FALSE)
+        replayPlot(p)
+        dev.off()
+    } else if ('${targetExt}' == 'eps') {
+        if (capabilities("cairo")) {
+            cairo_ps(filename='${safeTargetTempPath}', width=.w_in, height=.h_in, onefile=FALSE, fallback_resolution=300)
+        } else {
+            postscript(file='${safeTargetTempPath}', width=.w_in, height=.h_in, horizontal=FALSE, onefile=FALSE, paper="special")
+        }
+    } else if ('${targetExt}' == 'jpeg' || '${targetExt}' == 'jpg') {
+        jpeg(filename='${safeTargetTempPath}', width=.w, height=.h, units=.unit, res=.res, bg='white', quality=90)
+        replayPlot(p)
+        dev.off()
+    }
 }, error = function(e) {})
 `;
 
         child_process.execFile(rscriptPath, ['-e', script], (error) => {
             if (!error && fs.existsSync(previewPath)) {
+                let fileSizeInBytes = 0;
+                if (targetExt === 'png') {
+                    fileSizeInBytes = fs.statSync(previewPath).size;
+                } else if (fs.existsSync(targetTempPath)) {
+                    fileSizeInBytes = fs.statSync(targetTempPath).size;
+                }
+                
+                let fileSizeStr = '';
+                if (fileSizeInBytes > 0) {
+                    if (fileSizeInBytes < 1000) fileSizeStr = `${fileSizeInBytes} B`;
+                    else if (fileSizeInBytes < 1000 * 1000) fileSizeStr = `${(fileSizeInBytes / 1000).toFixed(1)} kB`;
+                    else fileSizeStr = `${(fileSizeInBytes / (1000 * 1000)).toFixed(2)} MB`;
+                }
+
                 const webviewUri = this._panel.webview.asWebviewUri(vscode.Uri.file(previewPath)).toString();
-                this._panel.webview.postMessage({ type: 'previewRendered', src: webviewUri });
+                this._panel.webview.postMessage({ 
+                    type: 'previewRendered', 
+                    src: webviewUri,
+                    fileSize: fileSizeStr
+                });
             }
         });
     }
@@ -491,7 +526,7 @@ tryCatch({
                     await new Promise(r => setTimeout(r, 500));
                     
                     if (fs.existsSync(saveUri.fsPath)) {
-                        vscode.window.showInformationMessage(`Export completed: ${path.basename(saveUri.fsPath)}`);
+                        vscode.window.setStatusBarMessage(`Export completed: ${path.basename(saveUri.fsPath)}`, 5000);
                     } else {
                         vscode.window.showErrorMessage(`Failed to export plot to ${path.basename(saveUri.fsPath)}. Please check directory permissions.`);
                     }
@@ -518,7 +553,7 @@ tryCatch({
                 // Linux: requires xclip
                 child_process.execSync(`xclip -selection clipboard -t image/png -i "${currentPlotPath}"`);
             }
-            vscode.window.showInformationMessage('Plot copied to clipboard');
+            vscode.window.setStatusBarMessage('Plot copied to clipboard', 4000);
         } catch (e: any) {
             vscode.window.showErrorMessage(`Failed to copy plot to clipboard: ${e.message || e}`);
         }
@@ -752,8 +787,9 @@ tryCatch({
             white-space: nowrap;
         }
         .toolbar::-webkit-scrollbar {
-            width: 2px;
-            height: 2px;
+            height: 3px;
+            
+            
         }
         .toolbar::-webkit-scrollbar-track {
             background: transparent;
@@ -1237,8 +1273,11 @@ tryCatch({
         }
         .export-modal-instruction {
             font-size: 0.85em;
-            opacity: 0.7;
+            opacity: 0.9;
             text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
         .export-modal-main-area {
             display: flex;
@@ -1263,20 +1302,20 @@ tryCatch({
             border-left: 1px solid var(--vscode-editorHoverWidget-border, #454545);
             display: flex;
             flex-direction: column;
-            padding: 8px 8px 16px 8px;
+            padding: 8px;
             justify-content: space-between;
             overflow-y: auto;
         }
         .export-controls-vertical {
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: clamp(6px, 2.5vh, 16px);
         }
         .control-group {
             display: flex;
             flex-direction: column;
             align-items: flex-start;
-            gap: 4px;
+            gap: clamp(2px, 0.8vh, 4px);
         }
         .export-modal-sidebar label {
             font-size: 0.9em;
@@ -1312,8 +1351,8 @@ tryCatch({
         .export-actions-vertical {
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            margin-top: 16px;
+            gap: clamp(4px, 1.5vh, 8px);
+            margin-top: clamp(8px, 2vh, 16px);
         }
         .export-actions-vertical .btn-modal {
             flex: 1;
@@ -1452,7 +1491,10 @@ tryCatch({
     <div id="export-modal" class="export-modal">
         <div class="export-modal-content">
             <div class="export-modal-top-strip">
-                <div class="export-modal-instruction">Drag the bottom-right corner of the plot below to find your best aspect ratio.</div>
+                <div class="export-modal-instruction">
+                    <svg viewBox="0 0 16 16" width="14" height="14" fill="var(--vscode-textLink-foreground)"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8z" fill-rule="evenodd"/><path d="M7.25 11.5v-4h1.5v4h-1.5zm.75-6a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>
+                    Drag the bottom-right corner of the plot below to find your best aspect ratio.
+                </div>
             </div>
             <div class="export-modal-main-area">
                 <div class="export-modal-body">
@@ -1491,6 +1533,7 @@ tryCatch({
                         </div>
                     </div>
                     <div class="export-actions-vertical">
+                        <div id="export-filesize" style="margin-bottom: 8px; font-size: 0.9em; opacity: 0.8; text-align: center;">...</div>
                         <button id="btn-export-cancel" class="btn-modal secondary">Cancel</button>
                         <button id="btn-export-confirm" class="btn-modal">Export</button>
                     </div>
@@ -1547,8 +1590,12 @@ tryCatch({
             } else if (message.type === 'previewRendered') {
                 const previewImg = document.getElementById('preview-img');
                 const previewOverlay = document.getElementById('preview-overlay');
+                const fileSizeDiv = document.getElementById('export-filesize');
                 if (previewImg && message.src) {
                     previewImg.src = message.src + '?t=' + Date.now();
+                }
+                if (fileSizeDiv && message.fileSize) {
+                    fileSizeDiv.textContent = '~ ' + message.fileSize;
                 }
                 if (previewOverlay) previewOverlay.classList.remove('loading');
             }
@@ -1864,8 +1911,6 @@ tryCatch({
                 dirInput.placeholder = state.defaultDir || 'Custom plot directory...';
             }
 
-            const btnSetViewDir = document.getElementById('btn-set-view-dir');
-            if (btnSetViewDir) btnSetViewDir.className = state.lastDirAction === 'view' ? 'active' : '';
             const btnSetOutViewDir = document.getElementById('btn-set-out-view-dir');
             if (btnSetOutViewDir) btnSetOutViewDir.classList.toggle('active', state.lastDirAction === 'outview' || !state.lastDirAction);
 
@@ -1976,6 +2021,7 @@ tryCatch({
             const unitSelect = document.getElementById('export-unit');
             const widthInput = document.getElementById('export-width');
             const heightInput = document.getElementById('export-height');
+            const fileSizeDiv = document.getElementById('export-filesize');
             const previewContainer = document.getElementById('preview-container');
             const previewOverlay = document.getElementById('preview-overlay');
 
@@ -2044,22 +2090,26 @@ tryCatch({
                 }
                 previewContainer.style.width = uiW + 'px';
                 previewContainer.style.height = uiH + 'px';
-                requestPreview();
+                triggerPreviewUpdate();
             }
 
-            function requestPreview() {
+            const triggerPreviewUpdate = () => {
+                if (!exportModal.classList.contains('active')) return;
+                
+                if (fileSizeDiv) fileSizeDiv.textContent = 'calculating...';
+                
                 clearTimeout(previewDebounceTimer);
                 if (previewOverlay) previewOverlay.classList.add('loading');
                 previewDebounceTimer = setTimeout(() => {
                     vscode.postMessage({
-                        type: 'requestPreviewRender',
+                        type: 'previewRender',
                         format: formatSelect.value,
-                        unit: unitSelect.value,
                         width: widthInput.value,
-                        height: heightInput.value
+                        height: heightInput.value,
+                        unit: unitSelect.value
                     });
                 }, 400);
-            }
+            };
 
             const customResizer = document.getElementById('custom-resizer');
             let isDraggingResizer = false;
@@ -2101,7 +2151,7 @@ tryCatch({
                     widthInput.value = Number((actualW / 100).toFixed(2)).toString();
                     heightInput.value = Number((actualH / 100).toFixed(2)).toString();
                 }
-                requestPreview();
+                triggerPreviewUpdate();
             });
 
             window.addEventListener('mouseup', () => {
@@ -2152,7 +2202,7 @@ tryCatch({
 
             const onInputManualChange = () => {
                 isSyncingUI = true;
-                syncPreviewContainer();
+                triggerPreviewUpdate();
                 setTimeout(() => isSyncingUI = false, 50);
             };
             widthInput?.addEventListener('change', onInputManualChange);
@@ -2165,7 +2215,6 @@ tryCatch({
             });
 
             document.getElementById('btn-export-confirm')?.addEventListener('click', () => {
-                exportModal.classList.remove('active');
                 vscode.postMessage({
                     type: 'saveAs',
                     format: formatSelect.value,
@@ -2173,6 +2222,7 @@ tryCatch({
                     width: widthInput.value,
                     height: heightInput.value
                 });
+                exportModal.classList.remove('active');
             });
 
             document.addEventListener('click', (e) => {
@@ -2439,6 +2489,8 @@ tryCatch({
                 resizeTimeout = setTimeout(() => {
                     if (typeof triggerRerender === 'function') {
                         triggerRerender();
+                    } else {
+                        triggerPreviewUpdate();
                     }
                 }, 400); // 400ms debounce
             });

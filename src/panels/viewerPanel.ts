@@ -25,11 +25,11 @@ export class ViewerPanel {
     private _focusPending: boolean = false;
     private _isNightMode: boolean = false;
     private _extensionUri: vscode.Uri;
-    
+
     private _currentUrl: string | undefined;
     private _history: string[] = [];
     private _currentIndex: number = -1;
-    
+
     private _server: http.Server | undefined;
     private _currentServeDir: string | undefined;
     private _currentPort: number | undefined;
@@ -100,7 +100,7 @@ export class ViewerPanel {
         );
 
         this._panel.webview.onDidReceiveMessage(
-            (msg: { type: string }) => {
+            (msg: any) => {
                 switch (msg.type) {
                     case 'ready':
                         this._updateWebviewState();
@@ -115,6 +115,12 @@ export class ViewerPanel {
                         break;
                     case 'openExternal':
                         this._handleOpenExternal();
+                        break;
+                    case 'savePng':
+                        this._handleSavePng(msg.dataUrl);
+                        break;
+                    case 'pngExportFailed':
+                        vscode.window.showErrorMessage(`Failed to export PNG: ${msg.error}`);
                         break;
                     case 'navigatePrev':
                         if (this._currentIndex > 0) {
@@ -191,7 +197,7 @@ export class ViewerPanel {
         if (!state) return;
         this._history = state.history || [];
         this._currentIndex = state.currentIndex !== undefined ? state.currentIndex : -1;
-        
+
         if (this._currentIndex >= 0 && this._currentIndex < this._history.length) {
             await this._navigate(this._history[this._currentIndex]);
         } else {
@@ -216,7 +222,7 @@ export class ViewerPanel {
                     filePath = filePath.substring(1);
                 }
             }
-            
+
             const dir = path.dirname(filePath);
             const filename = path.basename(filePath);
 
@@ -244,15 +250,32 @@ export class ViewerPanel {
 
             this._currentServeDir = dir;
             this._server = http.createServer((req, res) => {
-                if (!req.url) { 
-                    res.writeHead(404); 
-                    res.end(); 
-                    return; 
+                if (!req.url) {
+                    res.writeHead(404);
+                    res.end();
+                    return;
                 }
 
                 // Strip query parameters
                 const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
                 const requestPath = parsedUrl.pathname;
+
+                if (requestPath === '/__rlayout_html2canvas.min.js') {
+                    const h2cPath = path.join(this._extensionUri.fsPath, 'resources', 'html2canvas.min.js');
+                    fs.readFile(h2cPath, (err, data) => {
+                        if (err) {
+                            res.writeHead(404);
+                            res.end('File not found');
+                            return;
+                        }
+                        res.writeHead(200, {
+                            'Content-Type': 'text/javascript',
+                            'Cache-Control': 'public, max-age=31536000'
+                        });
+                        res.end(data);
+                    });
+                    return;
+                }
 
                 // Prevent directory traversal attacks
                 const safePath = path.normalize(requestPath).replace(/^(\.\.[\/\\])+/, '');
@@ -278,7 +301,7 @@ export class ViewerPanel {
                     else if (ext === '.woff2') contentType = 'font/woff2';
                     else if (ext === '.ttf') contentType = 'font/ttf';
 
-                    res.writeHead(200, { 
+                    res.writeHead(200, {
                         'Content-Type': contentType,
                         'Cache-Control': 'no-cache, no-store, must-revalidate'
                     });
@@ -286,8 +309,38 @@ export class ViewerPanel {
                     if (ext === '.html') {
                         let htmlContent = data.toString('utf8');
                         const styleInject = `
+                        <script>
+                            window.addEventListener('message', function(e) {
+                                if (e.data.command === 'exportPng') {
+                                    var plotlyDiv = document.querySelector('.js-plotly-plot');
+                                    if (window.Plotly && plotlyDiv) {
+                                        window.Plotly.toImage(plotlyDiv, {format: 'png', width: plotlyDiv.clientWidth, height: plotlyDiv.clientHeight}).then(function(dataUrl) {
+                                            window.parent.postMessage({ type: 'pngExported', dataUrl: dataUrl }, '*');
+                                        }).catch(function(err) {
+                                            window.parent.postMessage({ type: 'pngExportFailed', error: err.toString() }, '*');
+                                        });
+                                    } else {
+                                        var doHtml2Canvas = function() {
+                                            window.html2canvas(document.body, { useCORS: true, allowTaint: true }).then(function(canvas) {
+                                                window.parent.postMessage({ type: 'pngExported', dataUrl: canvas.toDataURL() }, '*');
+                                            }).catch(function(err) {
+                                                window.parent.postMessage({ type: 'pngExportFailed', error: err.toString() }, '*');
+                                            });
+                                        };
+                                        if (window.html2canvas) {
+                                            doHtml2Canvas();
+                                        } else {
+                                            var script = document.createElement('script');
+                                            script.src = '/__rlayout_html2canvas.min.js';
+                                            script.onload = doHtml2Canvas;
+                                            document.head.appendChild(script);
+                                        }
+                                    }
+                                }
+                            });
+                        </script>
                         <style>
-                            /* Make the modebar completely opaque ONLY when hovered, 
+                            /* Make the modebar completely opaque ONLY when hovered,
                                so it doesn't permanently obscure the plot title. */
                             .modebar {
                                 transition: background-color 0.2s ease !important;
@@ -334,6 +387,22 @@ export class ViewerPanel {
         }
     }
 
+    private async _handleSavePng(dataUrl: string): Promise<void> {
+        const uri = await vscode.window.showSaveDialog({
+            filters: { 'Images': ['png'] },
+            defaultUri: vscode.Uri.file(path.join(os.homedir(), 'widget_snapshot.png'))
+        });
+        if (uri) {
+            const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
+            try {
+                fs.writeFileSync(uri.fsPath, base64Data, 'base64');
+                vscode.window.showInformationMessage('Snapshot saved successfully!');
+            } catch (err: any) {
+                vscode.window.showErrorMessage(`Failed to save PNG: ${err.message}`);
+            }
+        }
+    }
+
     private _render(): void {
         this._panel.webview.html = this._getHtml();
     }
@@ -341,7 +410,7 @@ export class ViewerPanel {
     private _handleDeleteCurrent(): void {
         if (this._currentIndex < 0 || this._currentIndex >= this._history.length) return;
         this._history.splice(this._currentIndex, 1);
-        
+
         if (this._history.length === 0) {
             this._currentIndex = -1;
             this._currentUrl = undefined;
@@ -352,7 +421,7 @@ export class ViewerPanel {
             }
             // Navigate triggers updateWebviewState
             this._navigate(this._history[this._currentIndex]);
-            return; 
+            return;
         }
         this._updateWebviewState();
     }
@@ -395,7 +464,8 @@ export class ViewerPanel {
                 hasPrev: this._currentIndex > 0,
                 hasNext: this._currentIndex >= 0 && this._currentIndex < this._history.length - 1,
                 currentIndex: this._currentIndex,
-                totalHistory: this._history.length
+                totalHistory: this._history.length,
+                canSnapshot: !!(this._currentUrl && this._currentUrl.startsWith('http://127.0.0.1:') && !this._currentUrl.includes('/doc/') && !this._currentUrl.includes('/library/'))
             }
         });
     }
@@ -407,7 +477,8 @@ export class ViewerPanel {
         const prevIcon = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M11.354 1.646L12.061 2.354 6.414 8l5.647 5.646-.707.708L5 8l6.354-6.354z"/></svg>';
         const nextIcon = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.646 1.646L3.939 2.354 9.586 8l-5.647 5.646.707.708L11 8 4.646 1.646z"/></svg>';
         const refreshIcon = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M13.29 8.69a5.33 5.33 0 1 1 -6.62 -5.86c2.6-.67 5.29.67 6.28 3.16" /><path d="M13.33 2.67v3.33h-3.33" /></svg>';
-        const externalIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>';
+        const externalIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>';
+        const cameraIcon = '<svg viewBox="300 50 900 900"><defs><mask id="camera-mask"><rect width="1500" height="1000" fill="white"/><rect x="389" y="314" width="94" height="47" rx="24" fill="black"/><circle cx="750" cy="554" r="113" fill="black"/></mask></defs><g mask="url(#camera-mask)" fill="currentColor"><path d="M325 418v-79c0-40 32-72 72-72h146l19-70c6-21 25-36 48-36h280c23 0 43 15 49 37l18 69h51v-20c0-6 5-11 11-11h39c6 0 11 5 11 11v20h34c40 0 72 32 72 72v79H916c-39-49-98-80-166-80s-127 31-166 80H325Zm0 37h233c-15 30-23 63-23 98 0 119 96 216 215 216s215-97 215-216c0-35-8-68-23-98h233v311c0 40-32 73-72 73H397c-40 0-72-33-72-73V455Z"/><circle cx="750" cy="554" r="187"/></g></svg>';
         const moonIcon = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786z"/></svg>';
         const sunIcon = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2A.5.5 0 018 0zm0 13a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2A.5.5 0 018 13zm8-5a.5.5 0 01-.5.5h-2a.5.5 0 010-1h2a.5.5 0 01.5.5zM3 8a.5.5 0 01-.5.5h-2a.5.5 0 010-1h2A.5.5 0 013 8zm10.657-5.657a.5.5 0 010 .707l-1.414 1.415a.5.5 0 11-.707-.708l1.414-1.414a.5.5 0 01.707 0zm-9.193 9.193a.5.5 0 010 .707L3.05 13.657a.5.5 0 01-.707-.707l1.414-1.414a.5.5 0 01.707 0zm9.193 2.121a.5.5 0 01-.707 0l-1.414-1.414a.5.5 0 01.707-.707l1.414 1.414a.5.5 0 010 .707zM4.464 2.343a.5.5 0 01-.707 0L2.343 3.757a.5.5 0 11.707.707l1.414-1.414a.5.5 0 010-.707z"/></svg>';
         const deleteIcon = '<svg viewBox="0 0 16 16"><path fill="none" d="M9.25,2H6.75a0.25,0.25,0,0,0-0.25,0.25V3h3V2.25A0.25,0.25,0,0,0,9.25,2Z"/><path fill="currentColor" d="M13.5,3H10.5V2.25A1.25,1.25,0,0,0,9.25,1H6.75A1.25,1.25,0,0,0,5.5,2.25V3H2.5a0.5,0.5,0,0,0,0,1H3L3.63,13.53C3.67,14.37,4.31,15,5.13,15h5.75c0.82,0,1.45-.62,1.5-1.47L13,4h0.5a0.5,0.5,0,0,0,0-1ZM6,13H6a0.5,0.5,0,0,1-.5-.48l-0.25-7a0.5,0.5,0,1,1,1-.04l0.25,7A0.5,0.5,0,0,1,6,13ZM8.5,12.5a0.5,0.5,0,0,1-1,0V5.5a0.5,0.5,0,0,1,1,0ZM9.5,3H6.5V2.25a0.25,0.25,0,0,1,.25-.25h2.5a0.25,0.25,0,0,1,.25.25Zm1,9.55a0.5,0.5,0,0,1-.5.45H10a0.5,0.5,0,0,1-.5-.52l0.25-7a0.5,0.5,0,1,1,1,.04Z"/></svg>';
@@ -436,7 +507,7 @@ export class ViewerPanel {
             overflow: hidden;
         }
         body.minimized > * { display: none !important; }
-        
+
         .toolbar {
             display: flex;
             align-items: center;
@@ -452,8 +523,9 @@ export class ViewerPanel {
             white-space: nowrap;
         }
         .toolbar::-webkit-scrollbar {
-            width: 2px;
-            height: 2px;
+            height: 3px;
+
+
         }
         .toolbar::-webkit-scrollbar-track {
             background: transparent;
@@ -515,7 +587,7 @@ export class ViewerPanel {
             padding: 0 8px 0 8px;
             background: var(--vscode-editor-background);
         }
-        
+
         iframe {
             width: 100%;
             height: 100%;
@@ -540,7 +612,7 @@ export class ViewerPanel {
             filter: brightness(0.78);
         }
 
-        
+
         /* Tooltip styles */
         .tooltip {
             position: fixed;
@@ -580,6 +652,9 @@ export class ViewerPanel {
             <button id="btn-refresh" data-tooltip="Refresh Viewer" disabled>
                 ${refreshIcon}
             </button>
+            <button id="btn-snapshot" data-tooltip="Capture as PNG" disabled>
+                ${cameraIcon}
+            </button>
             <button id="btn-external" data-tooltip="Open in Browser" disabled>
                 ${externalIcon}
             </button>
@@ -608,6 +683,7 @@ export class ViewerPanel {
         const frame = document.getElementById('viewer-frame');
         const emptyState = document.getElementById('empty-state');
         const btnRefresh = document.getElementById('btn-refresh');
+        const btnSnapshot = document.getElementById('btn-snapshot');
         const btnExternal = document.getElementById('btn-external');
         const btnPrev = document.getElementById('btn-prev');
         const btnNext = document.getElementById('btn-next');
@@ -626,7 +702,7 @@ export class ViewerPanel {
             if (msg.type === 'updateState') {
                 const state = msg.state;
                 const newUrl = state.url || '';
-                
+
                 if (state.isPoppedOut !== undefined) {
                     isPoppedOut = state.isPoppedOut;
                     if (btnPopout) {
@@ -641,7 +717,7 @@ export class ViewerPanel {
 
                 document.body.classList.toggle('minimized', !!state.minimized);
                 document.body.classList.toggle('night-mode', state.isNightMode);
-                
+
                 btnNightMode.innerHTML = state.isNightMode ? \`${sunIcon}\` : \`${moonIcon}\`;
                 btnNightMode.setAttribute('data-tooltip', state.isNightMode ? 'Switch to Day Mode' : 'Switch to Night Mode');
 
@@ -653,6 +729,11 @@ export class ViewerPanel {
                         frame.style.display = 'block';
                         emptyState.style.display = 'none';
                         btnRefresh.removeAttribute('disabled');
+                        if (state.canSnapshot) {
+                            btnSnapshot.removeAttribute('disabled');
+                        } else {
+                            btnSnapshot.setAttribute('disabled', 'true');
+                        }
                         btnExternal.removeAttribute('disabled');
                         btnNightMode.removeAttribute('disabled');
                         btnDelete.removeAttribute('disabled');
@@ -662,6 +743,7 @@ export class ViewerPanel {
                         frame.style.display = 'none';
                         emptyState.style.display = 'block';
                         btnRefresh.setAttribute('disabled', 'true');
+                        btnSnapshot.setAttribute('disabled', 'true');
                         btnExternal.setAttribute('disabled', 'true');
                         btnNightMode.setAttribute('disabled', 'true');
                         btnDelete.setAttribute('disabled', 'true');
@@ -687,6 +769,10 @@ export class ViewerPanel {
                 } else {
                     counterEl.textContent = '-';
                 }
+            } else if (msg.type === 'pngExported') {
+                vscode.postMessage({ type: 'savePng', dataUrl: msg.dataUrl });
+            } else if (msg.type === 'pngExportFailed') {
+                vscode.postMessage({ type: 'pngExportFailed', error: msg.error });
             }
         });
 
@@ -705,6 +791,12 @@ export class ViewerPanel {
         btnNext.addEventListener('click', () => {
             if (!btnNext.hasAttribute('disabled')) {
                 vscode.postMessage({ type: 'navigateNext' });
+            }
+        });
+
+        btnSnapshot.addEventListener('click', () => {
+            if (!btnSnapshot.hasAttribute('disabled')) {
+                frame.contentWindow.postMessage({ command: 'exportPng' }, '*');
             }
         });
 
@@ -757,7 +849,7 @@ export class ViewerPanel {
                 tooltip.style.display = 'none';
             });
         });
-        
+
         vscode.postMessage({ type: 'ready' });
     </script>
 </body>
@@ -767,7 +859,7 @@ export class ViewerPanel {
     dispose(): void {
         ViewerPanel.currentPanel = undefined;
         this._panel.dispose();
-        
+
         if (this._server) {
             this._server.close();
             this._server = undefined;

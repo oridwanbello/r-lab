@@ -213,7 +213,7 @@ export function registerLayoutCommand(
             const visibleEditors = vscode.window.visibleTextEditors;
             editor = visibleEditors.find(e => e.viewColumn === vscode.ViewColumn.One) || visibleEditors[0];
         }
-        
+
         if (!editor) {return;}
         if (!editor.selection.isEmpty && editor.document.getText(editor.selection).trim()) {
             await doRunSelection();
@@ -586,7 +586,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     for (const p of corePanels) {
         if (!panelPositions[p]) missingCorePanels++;
     }
-    
+
     // If layout state is severely broken (panels in Group 1, or missing too many panels), ignore custom positions
     const hasPanelsInMainEditor = Object.values(panelPositions).some(col => col === vscode.ViewColumn.One);
     if (hasPanelsInMainEditor || missingCorePanels >= 2) {
@@ -654,7 +654,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     if (existingOrigClose === undefined) {
         const inspectionClose = wsConfig.inspect<boolean>('workbench.editor.closeEmptyGroups');
         const origClose = cfgTarget === vscode.ConfigurationTarget.Workspace ? inspectionClose?.workspaceValue : inspectionClose?.globalValue;
-        // If the workspace value is already exactly 'false' when we inspect it, but it's only there 
+        // If the workspace value is already exactly 'false' when we inspect it, but it's only there
         // because of a previous stuck state, we just save undefined. A genuine user setting would be fine to lose
         // in favor of default behavior (undefined) rather than permanently polluting settings.json.
         const safeOrigClose = (origClose === false) ? undefined : origClose;
@@ -734,43 +734,11 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     //         currently focused editor group (Group 2). ✓
     //
     //    For NEW terminals, createTerminal with location.viewColumn is reliable.
-    const useArk = config.get<boolean>('useArkInteractiveConsole', false);
-
     // 9a. Anchor Group 2 with ProblemsPanel before any terminal placement.
     ProblemsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
     await delay(150); // Ensure Group 2 is fully mounted in the UI before spawning PTYs
 
-    if (useArk) {
-        // Ark kernel mode - use Jupyter Interactive
-        try {
-            await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
-            await vscode.commands.executeCommand('jupyter.createnewinteractive');
-            setTimeout(async () => {
-                try {
-                    await vscode.commands.executeCommand('notebook.selectKernel');
-                } catch { /* ignore */ }
-            }, 800);
-        } catch {
-            // Fallback to standard terminal
-            if (rConsoleTerminal) {
-                rConsoleTerminal.show(false);
-                await delay(10);
-                await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
-                await delay(10);
-                await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
-            } else {
-                rConsoleTerminal = vscode.window.createTerminal({
-                    name: 'R Console',
-                    shellPath: getRPath(),
-                    shellArgs: getRArgs(),
-                    location: { viewColumn: vscode.ViewColumn.Two },
-                    iconPath: vscode.Uri.joinPath(context.extensionUri, 'resources', 'r_logo.svg'),
-                });
-                rConsoleTerminal.show(false);
-            }
-        }
-    } else {
-        // Only delete stale workspace data if we are creating a BRAND-NEW R session.
+    // Only delete stale workspace data if we are creating a BRAND-NEW R session.
         // If we found an existing R Console terminal (wasRConsoleReused), R is still
         // running and its variables are still live - do NOT wipe the data file.
         const wf = getEffectiveWorkspaceRoot();
@@ -842,10 +810,10 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                 cwd: cwdPath, // Prevents PTY hang in no-workspace mode
                 iconPath: vscode.Uri.joinPath(context.extensionUri, 'resources', 'r_logo.svg'),
             });
-            
+
             if (isWindows) {
                 // Show in the panel first to force PTY initialization
-                rConsoleTerminal.show(true); 
+                rConsoleTerminal.show(true);
                 await delay(500); // Give ConPTY time to fully spawn before moving
 
                 // Move to editor area (Group 2)
@@ -855,7 +823,6 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                 await delay(100);
             }
         }
-    }
 
     // Shell terminal
     await delay(10);
@@ -887,13 +854,13 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
         const terminalOptions: vscode.TerminalOptions = {
             name: 'Terminal',
-            // Do NOT use location: { viewColumn: ... } here on Windows. Creating a generic shell directly 
+            // Do NOT use location: { viewColumn: ... } here on Windows. Creating a generic shell directly
             // into an editor group causes intermittent blank ConPTY terminals on Windows.
             location: os.platform() === 'win32' ? undefined : { viewColumn: vscode.ViewColumn.Two },
             cwd: getEffectiveWorkspaceRoot(),
         };
 
-        // strictEnv crashes the default shell on Windows, but is required on Mac/Linux 
+        // strictEnv crashes the default shell on Windows, but is required on Mac/Linux
         // to prevent PTY crashes (warning icon) during layout deactivation.
         if (os.platform() !== 'win32') {
             terminalOptions.env = shellEnvArgs;
@@ -902,7 +869,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
         // Create in the panel first (for Windows)
         shellTerminal = vscode.window.createTerminal(terminalOptions);
-        
+
         if (os.platform() === 'win32') {
             shellTerminal.show(true); // Must show in panel to force PTY initialization
             await delay(500); // Give ConPTY time to fully spawn before moving
@@ -950,7 +917,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     const dataPanel = DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three, !restoreCustom);
     const viewerPanel = ViewerPanel.createOrShow(context.extensionUri, undefined, vscode.ViewColumn.Three, !restoreCustom);
     if (savedViewerState) { viewerPanel.loadState(savedViewerState); }
-    
+
     if (!restoreCustom) {
         workspacePanel.reveal(); // restore Workspace as the focused tab in Group 3
     }
@@ -966,7 +933,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         const pattern = new vscode.RelativePattern(vscode.Uri.file(path.join(wf, '.R-layout')), 'viewer_url.txt');
         viewerWatcher = vscode.workspace.createFileSystemWatcher(pattern);
         let lastViewerLineCount = 0;
-        
+
         const viewerHandler = async () => {
             if (!isLayoutActive) return;
             const urlPath = path.join(wf, '.R-layout', 'viewer_url.txt');
@@ -982,23 +949,23 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                     }
                     await new Promise(r => setTimeout(r, 100));
                 }
-                
+
                 const lines = content.split(/\r?\n/).filter(l => l.trim().length > 0);
-                
+
                 // Reset if file was truncated/cleared
                 if (lines.length < lastViewerLineCount) {
                     lastViewerLineCount = 0;
                 }
-                
+
                 if (lines.length > lastViewerLineCount) {
                     const newLines = lines.slice(lastViewerLineCount);
                     lastViewerLineCount = lines.length;
-                    
+
                     let vp = ViewerPanel.currentPanel;
                     if (!vp) {
                         vp = ViewerPanel.createOrShow(context.extensionUri, undefined, vscode.ViewColumn.Three);
                     }
-                    
+
                     for (const url of newLines) {
                         await vp.loadUrl(url.trim());
                     }
@@ -1031,15 +998,15 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                     }
                     await new Promise(r => setTimeout(r, 100));
                 }
-                
+
                 if (raw.trim().length === 0) return;
 
                 // Strip Windows \r\n line endings
                 raw = raw.replace(/\r/g, '');
-                
+
                 let varName = '';
                 if (raw.startsWith('ERROR:')) {
-                    // Do nothing in the background watcher on error! 
+                    // Do nothing in the background watcher on error!
                     // Let the error print to the R console instead of forcing the UI open.
                     return;
                 } else {
@@ -1688,11 +1655,7 @@ function _buildWatcherRprofile(): string | undefined {
         cls <- paste(cls_vec, collapse = ", ")
       }
       dims <- if (!is.null(dim(obj))) paste(dim(obj), collapse = " x ") else as.character(length(obj))
-      sz <- format(object.size(obj), units = "auto")
-      sz <- sub(" bytes|Bytes", " B", sz)
-      sz <- sub("Kb|KB", "kB", sz)
-      sz <- sub("Mb|MB", "MB", sz)
-      sz <- sub("Gb|GB", "GB", sz)
+      sz <- format(object.size(obj), units = "auto", standard = "SI")
       dims <- paste0(dims, " (", sz, ")")
       prev <- tryCatch({
         get_type <- function(x) {
@@ -1787,7 +1750,7 @@ function _buildWatcherRprofile(): string | undefined {
             .rds_file <- file.path(.out_dir, paste0(.pid, ".rds"))
             if (file.exists(.rds_file)) {
               .p_obj <- readRDS(.rds_file)
-              
+
               .res <- 300
               if (.unit == "cm") { .w_in <- .w / 2.54; .h_in <- .h / 2.54 }
               else if (.unit == "mm") { .w_in <- .w / 25.4; .h_in <- .h / 25.4 }
@@ -1804,7 +1767,7 @@ function _buildWatcherRprofile(): string | undefined {
               } else {
                 .w_in <- .w; .h_in <- .h
               }
-              
+
               if (.fmt == "pdf") {
                 pdf(file = .dest, width = .w_in, height = .h_in, onefile = FALSE)
               } else if (.fmt == "svg") {
@@ -1818,7 +1781,7 @@ function _buildWatcherRprofile(): string | undefined {
               } else if (.fmt == "png") {
                 png(filename = .dest, width = .w, height = .h, units = .unit, res = .res, bg = "white")
               } else if (.fmt == "jpeg" || .fmt == "jpg") {
-                jpeg(filename = .dest, width = .w, height = .h, units = .unit, res = .res, bg = "white")
+                jpeg(filename = .dest, width = .w, height = .h, units = .unit, res = .res, bg = "white", quality = 90)
               }
               try(replayPlot(.p_obj), silent = TRUE)
               dev.off()
@@ -1865,13 +1828,13 @@ options(device = function(...) { pdf(file=null_dev, ...); dev.control("enable") 
 # Function to emit an SVG placeholder for interactive widgets
 .rlayout_emit_interactive_placeholder <- function() {
   tryCatch(.rlayout_force_save_plot(), error = function(e) {})
-  
+
   .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
   if (!dir.exists(.out_dir)) dir.create(.out_dir, recursive = TRUE, showWarnings = FALSE)
-  
+
   # We only ever use ONE widget placeholder file so it doesn't consume or skip plot numbers
   plot_name <- file.path(.out_dir, "widget_interactive.svg")
-  
+
   # Write a minimal SVG to trigger the filesystem watcher and update modified time.
   # The VS Code UI dynamically injects the true visual design.
   svg_content <- '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'
@@ -1882,7 +1845,7 @@ options(device = function(...) { pdf(file=null_dev, ...); dev.control("enable") 
 options(viewer = function(url, height = NULL) {
   .viewer_req_path <- file.path("${absOutDir}", "viewer_url.txt")
   cat(url, "\n", file = .viewer_req_path, append = TRUE)
-  
+
   # Only emit placeholder for htmlwidgets (which print to tempdir/viewhtml.../index.html)
   if (grepl("viewhtml.*(/|\\\\\\\\)index\\\\.html$", url)) {
     .rlayout_emit_interactive_placeholder()
@@ -1906,10 +1869,10 @@ options(browser = function(url) {
       .hash <- sum(as.numeric(serialize(.p, NULL)))
       if (!identical(.hash, .rlayout_last_plot_hash)) {
         .rlayout_last_plot_hash <<- .hash
-        
+
         .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
         dir.create(.out_dir, showWarnings = FALSE, recursive = TRUE)
-        
+
         if (.rlayout_advance_next_plot || .rlayout_current_plot_id == 0) {
           files <- list.files(.out_dir, pattern = "^plot_[0-9]{5}.*\\\\.(png|svg)$")
           if (length(files) == 0) {
@@ -1920,7 +1883,7 @@ options(browser = function(url) {
           }
           .rlayout_advance_next_plot <<- FALSE
         }
-        
+
         .file <- file.path(.out_dir, sprintf("plot_%05d.png", .rlayout_current_plot_id))
         .rds_file <- file.path(.out_dir, sprintf("plot_%05d.rds", .rlayout_current_plot_id))
         try(saveRDS(.p, .rds_file), silent = TRUE)
@@ -1995,7 +1958,7 @@ if (exists(".Last", envir = .GlobalEnv)) {
     unlink(.rlayout_meta)
     unlink(.rlayout_csv)
     obj <- get(varName, envir = .GlobalEnv)
-    
+
     is3D <- is.array(obj) && length(dim(obj)) == 3
     if (!is3D && !is.data.frame(obj) && !is.matrix(obj)) {
       if (is.list(obj) && is.null(dim(obj))) {
@@ -2026,14 +1989,14 @@ if (exists(".Last", envir = .GlobalEnv)) {
     if (is3D) {
       nslices <- dim(obj)[3]
       unlink(file.path(dirname(.rlayout_csv), "dv_slice_*.csv"))
-      
+
       slice_labels <- dimnames(obj)[[3]]
       if (is.null(slice_labels)) {
         slice_labels <- paste0("Slice ", 1:nslices)
       }
-      
 
-      
+
+
       for (i in 1:nslices) {
         slice_obj <- obj[, , i]
         if (!is.data.frame(slice_obj)) {
@@ -2041,7 +2004,7 @@ if (exists(".Last", envir = .GlobalEnv)) {
         }
         write.csv(head(slice_obj, 1000), file.path(dirname(.rlayout_csv), sprintf("dv_slice_%d.csv", i)), row.names = TRUE, na = "NA")
       }
-      
+
       writeLines(c(
         as.character(nrow(obj)),
         as.character(ncol(obj)),
@@ -2050,7 +2013,7 @@ if (exists(".Last", envir = .GlobalEnv)) {
         slice_labels,
         varName
       ), .rlayout_meta)
-      
+
     } else {
       if (!is.data.frame(obj)) {
 
@@ -2071,7 +2034,7 @@ if (exists(".Last", envir = .GlobalEnv)) {
 View <- function(x, title) {
   var_name <- deparse(substitute(x))
   if (length(var_name) > 1) var_name <- paste(var_name, collapse = "")
-  
+
   if (exists(var_name, envir = .GlobalEnv)) {
     .r_layout_view_data(var_name)
   } else {
@@ -2136,7 +2099,7 @@ invisible(local({
           unlink(.view_req_path)
         }, silent = TRUE)
       }
-      
+
       ${plotExportCode}
       if ("later" %in% loadedNamespaces()) {
         try(later::later(.rlayout_loop, 0.2), silent = TRUE)
