@@ -434,18 +434,19 @@ export class HelpPanel {
             white-space: nowrap;
         }
         .toolbar::-webkit-scrollbar {
-            height: 3px;
-            
-            
+            height: 2px;
         }
         .toolbar::-webkit-scrollbar-track {
             background: transparent;
         }
         .toolbar::-webkit-scrollbar-thumb {
-            background-color: var(--vscode-scrollbarSlider-background);
+            background-color: transparent;
             border-radius: 2px;
         }
         .toolbar:hover::-webkit-scrollbar-thumb {
+            background-color: var(--vscode-scrollbarSlider-background);
+        }
+        .toolbar::-webkit-scrollbar-thumb:hover {
             background-color: var(--vscode-scrollbarSlider-hoverBackground);
         }
         .toolbar::-webkit-scrollbar-thumb:active {

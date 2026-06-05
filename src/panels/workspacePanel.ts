@@ -657,17 +657,19 @@ tryCatch({
             overflow-x: auto; overflow-y: hidden; 
         }
         .tabs::-webkit-scrollbar {
-            width: 2px;
             height: 2px;
         }
         .tabs::-webkit-scrollbar-track {
             background: transparent;
         }
         .tabs::-webkit-scrollbar-thumb {
-            background-color: var(--vscode-scrollbarSlider-background);
+            background-color: transparent;
             border-radius: 2px;
         }
         .tabs:hover::-webkit-scrollbar-thumb {
+            background-color: var(--vscode-scrollbarSlider-background);
+        }
+        .tabs::-webkit-scrollbar-thumb:hover {
             background-color: var(--vscode-scrollbarSlider-hoverBackground);
         }
         .tabs::-webkit-scrollbar-thumb:active {
@@ -826,17 +828,19 @@ tryCatch({
             white-space: nowrap;
         }
         .pkg-toolbar::-webkit-scrollbar {
-            width: 2px;
             height: 2px;
         }
         .pkg-toolbar::-webkit-scrollbar-track {
             background: transparent;
         }
         .pkg-toolbar::-webkit-scrollbar-thumb {
-            background-color: var(--vscode-scrollbarSlider-background);
+            background-color: transparent;
             border-radius: 2px;
         }
         .pkg-toolbar:hover::-webkit-scrollbar-thumb {
+            background-color: var(--vscode-scrollbarSlider-background);
+        }
+        .pkg-toolbar::-webkit-scrollbar-thumb:hover {
             background-color: var(--vscode-scrollbarSlider-hoverBackground);
         }
         .pkg-toolbar::-webkit-scrollbar-thumb:active {

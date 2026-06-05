@@ -477,7 +477,7 @@ export class ViewerPanel {
         const prevIcon = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M11.354 1.646L12.061 2.354 6.414 8l5.647 5.646-.707.708L5 8l6.354-6.354z"/></svg>';
         const nextIcon = '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.646 1.646L3.939 2.354 9.586 8l-5.647 5.646.707.708L11 8 4.646 1.646z"/></svg>';
         const refreshIcon = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M13.29 8.69a5.33 5.33 0 1 1 -6.62 -5.86c2.6-.67 5.29.67 6.28 3.16" /><path d="M13.33 2.67v3.33h-3.33" /></svg>';
-        const externalIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>';
+        const externalIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>';
         const cameraIcon = '<svg viewBox="300 50 900 900"><defs><mask id="camera-mask"><rect width="1500" height="1000" fill="white"/><rect x="389" y="314" width="94" height="47" rx="24" fill="black"/><circle cx="750" cy="554" r="113" fill="black"/></mask></defs><g mask="url(#camera-mask)" fill="currentColor"><path d="M325 418v-79c0-40 32-72 72-72h146l19-70c6-21 25-36 48-36h280c23 0 43 15 49 37l18 69h51v-20c0-6 5-11 11-11h39c6 0 11 5 11 11v20h34c40 0 72 32 72 72v79H916c-39-49-98-80-166-80s-127 31-166 80H325Zm0 37h233c-15 30-23 63-23 98 0 119 96 216 215 216s215-97 215-216c0-35-8-68-23-98h233v311c0 40-32 73-72 73H397c-40 0-72-33-72-73V455Z"/><circle cx="750" cy="554" r="187"/></g></svg>';
         const moonIcon = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786z"/></svg>';
         const sunIcon = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2A.5.5 0 018 0zm0 13a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2A.5.5 0 018 13zm8-5a.5.5 0 01-.5.5h-2a.5.5 0 010-1h2a.5.5 0 01.5.5zM3 8a.5.5 0 01-.5.5h-2a.5.5 0 010-1h2A.5.5 0 013 8zm10.657-5.657a.5.5 0 010 .707l-1.414 1.415a.5.5 0 11-.707-.708l1.414-1.414a.5.5 0 01.707 0zm-9.193 9.193a.5.5 0 010 .707L3.05 13.657a.5.5 0 01-.707-.707l1.414-1.414a.5.5 0 01.707 0zm9.193 2.121a.5.5 0 01-.707 0l-1.414-1.414a.5.5 0 01.707-.707l1.414 1.414a.5.5 0 010 .707zM4.464 2.343a.5.5 0 01-.707 0L2.343 3.757a.5.5 0 11.707.707l1.414-1.414a.5.5 0 010-.707z"/></svg>';
@@ -523,18 +523,19 @@ export class ViewerPanel {
             white-space: nowrap;
         }
         .toolbar::-webkit-scrollbar {
-            height: 3px;
-
-
+            height: 2px;
         }
         .toolbar::-webkit-scrollbar-track {
             background: transparent;
         }
         .toolbar::-webkit-scrollbar-thumb {
-            background-color: var(--vscode-scrollbarSlider-background);
+            background-color: transparent;
             border-radius: 2px;
         }
         .toolbar:hover::-webkit-scrollbar-thumb {
+            background-color: var(--vscode-scrollbarSlider-background);
+        }
+        .toolbar::-webkit-scrollbar-thumb:hover {
             background-color: var(--vscode-scrollbarSlider-hoverBackground);
         }
         .toolbar::-webkit-scrollbar-thumb:active {
