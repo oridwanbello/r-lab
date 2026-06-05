@@ -100,9 +100,11 @@ export class ViewerPanel {
         );
 
         this._panel.webview.onDidReceiveMessage(
-            (msg: any) => {
+            (msg: { type: string; dataUrl?: string; error?: string }) => {
+                let requiresFocusRestore = true;
                 switch (msg.type) {
                     case 'ready':
+                        requiresFocusRestore = false;
                         this._updateWebviewState();
                         if (this._focusPending) {
                             this._focusPending = false;
@@ -117,7 +119,7 @@ export class ViewerPanel {
                         this._handleOpenExternal();
                         break;
                     case 'savePng':
-                        this._handleSavePng(msg.dataUrl);
+                        if (msg.dataUrl) this._handleSavePng(msg.dataUrl);
                         break;
                     case 'pngExportFailed':
                         vscode.window.showErrorMessage(`Failed to export PNG: ${msg.error}`);
@@ -149,6 +151,7 @@ export class ViewerPanel {
                         this._handleClearAll();
                         break;
                     case 'popout':
+                        requiresFocusRestore = false;
                         this._isPoppedOut = true;
                         this._focusPending = true;
                         suppressGuardForPanelMove();
@@ -160,6 +163,7 @@ export class ViewerPanel {
                         this._updateWebviewState();
                         break;
                     case 'restore':
+                        requiresFocusRestore = false;
                         this._isPoppedOut = false;
                         this._focusPending = true;
                         suppressGuardForPanelMove();
@@ -171,6 +175,12 @@ export class ViewerPanel {
                         enforceGroup3TabOrder('Viewer');
                         this._updateWebviewState();
                         break;
+                }
+                
+                if (requiresFocusRestore) {
+                    setTimeout(() => {
+                        vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+                    }, 150);
                 }
             },
             null,

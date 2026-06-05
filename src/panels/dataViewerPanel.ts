@@ -100,6 +100,7 @@ export class DataViewerPanel {
 
         this._panel.webview.onDidReceiveMessage(
             async (msg: { type: string; varName?: string; slice?: number }) => {
+                let requiresFocusRestore = false;
                 switch (msg.type) {
                     case 'ready':
                         this._render();
@@ -113,12 +114,14 @@ export class DataViewerPanel {
                         }
                         break;
                     case 'refresh':
+                        requiresFocusRestore = true;
                         if (this._varName) {
                             // Manual refresh triggers a full R re-export.
                             await this.loadVariable(this._varName, false);
                         }
                         break;
                     case 'setSlice':
+                        requiresFocusRestore = true;
                         if (this._varName && msg.slice !== undefined) {
                             await this.loadVariable(this._varName, false, msg.slice);
                         }
@@ -129,9 +132,7 @@ export class DataViewerPanel {
                         suppressGuardForPanelMove();
                         this._panel.reveal(vscode.ViewColumn.One, false);
                         vscode.commands.executeCommand('workbench.action.keepEditor');
-                        setTimeout(async () => {
-                            await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
-                        }, 150);
+                        requiresFocusRestore = true;
                         this._postPoppedState();
                         break;
                     case 'restore':
@@ -140,12 +141,16 @@ export class DataViewerPanel {
                         suppressGuardForPanelMove();
                         this._panel.reveal(vscode.ViewColumn.Three, false);
                         vscode.commands.executeCommand('workbench.action.keepEditor');
-                        setTimeout(async () => {
-                            await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
-                        }, 150);
+                        requiresFocusRestore = true;
                         enforceGroup3TabOrder('Data Viewer');
                         this._postPoppedState();
                         break;
+                }
+                
+                if (requiresFocusRestore) {
+                    setTimeout(() => {
+                        vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+                    }, 150);
                 }
             },
             null,

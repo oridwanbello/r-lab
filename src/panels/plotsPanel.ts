@@ -127,8 +127,10 @@ export class PlotsPanel {
 
         this._panel.webview.onDidReceiveMessage(
             (msg: { type: string }) => {
+                let requiresFocusRestore = true;
                 switch (msg.type) {
                     case 'ready':
+                        requiresFocusRestore = false;
                         this._postState();
                         if (this._focusPending) {
                             this._focusPending = false;
@@ -172,6 +174,7 @@ export class PlotsPanel {
                         this._render();
                         break;
                     case 'resize':
+                        requiresFocusRestore = false;
                         this._handleResize((msg as any).width, (msg as any).height);
                         break;
                     case 'setCustomDir':
@@ -190,6 +193,7 @@ export class PlotsPanel {
                         this._handleBrowseCustomDir();
                         break;
                     case 'popout':
+                        requiresFocusRestore = false;
                         this._focusPending = true;
                         suppressGuardForPanelMove();
                         this._panel.reveal(vscode.ViewColumn.One, false);
@@ -200,6 +204,7 @@ export class PlotsPanel {
                         this._postState(true);
                         break;
                     case 'restore':
+                        requiresFocusRestore = false;
                         this._focusPending = true;
                         suppressGuardForPanelMove();
                         this._panel.reveal(vscode.ViewColumn.Three, false);
@@ -210,6 +215,12 @@ export class PlotsPanel {
                         enforceGroup3TabOrder('Plots');
                         this._postState(false);
                         break;
+                }
+                
+                if (requiresFocusRestore) {
+                    setTimeout(() => {
+                        vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+                    }, 150);
                 }
             },
             null,

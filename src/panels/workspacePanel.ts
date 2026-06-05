@@ -80,6 +80,7 @@ export class WorkspacePanel {
 
         this._panel.webview.onDidReceiveMessage(
             async (msg: { type: string; varName?: string; pkgName?: string }) => {
+                let requiresFocusRestore = false;
                 switch (msg.type) {
                     case 'ready':
                         await this._refreshWorkspace();
@@ -88,17 +89,21 @@ export class WorkspacePanel {
                         }
                         break;
                     case 'refresh':
+                        requiresFocusRestore = true;
                         await this._refreshWorkspace();
                         break;
                     case 'viewData':
+                        requiresFocusRestore = true;
                         if (msg.varName && this._onRequestDataView) {
                             this._onRequestDataView(msg.varName);
                         }
                         break;
                     case 'attachPackage':
+                        requiresFocusRestore = true;
                         if (msg.pkgName) { this._sendToRConsole(`library(${msg.pkgName})`); }
                         break;
                     case 'detachPackage':
+                        requiresFocusRestore = true;
                         if (msg.pkgName) {
                             if (msg.pkgName === 'later') {
                                 this._sendToRConsole(`detach("package:${msg.pkgName}")`);
@@ -108,8 +113,15 @@ export class WorkspacePanel {
                         }
                         break;
                     case 'refreshPackages':
+                        requiresFocusRestore = true;
                         await this._fetchInstalledPackages();
                         break;
+                }
+                
+                if (requiresFocusRestore) {
+                    setTimeout(() => {
+                        vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+                    }, 150);
                 }
             },
             null,
