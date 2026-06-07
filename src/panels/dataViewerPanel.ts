@@ -490,7 +490,7 @@ export class DataViewerPanel {
             const rowsJson = JSON.stringify(this._rows);
 
             const truncated = this._totalRows > 1000
-                ? `<div class="truncation-notice">Showing first 1,000 of ${this._totalRows.toLocaleString()} rows</div>`
+                ? `<div class="truncation-notice"><i class="codicon codicon-info icon-info"></i><span>Showing first 1,000 of ${this._totalRows.toLocaleString()} rows</span></div>`
                 : '';
 
             mainContent = `
@@ -509,9 +509,11 @@ export class DataViewerPanel {
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy"
           content="default-src 'none';
-                   style-src 'nonce-${nonce}';
+                   style-src 'nonce-${nonce}' https://cdn.jsdelivr.net;
+                   font-src https://cdn.jsdelivr.net;
                    script-src 'nonce-${nonce}';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/@vscode/codicons@0.0.36/dist/codicon.min.css" rel="stylesheet">
     <style nonce="${nonce}">
         * { margin: 0; padding: 0; box-sizing: border-box; }
         ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
@@ -611,11 +613,14 @@ export class DataViewerPanel {
         }
         .truncation-notice {
             padding: 4px 12px;
-            background: var(--vscode-editorInfo-background, rgba(60, 130, 250, 0.1));
-            color: var(--vscode-textLink-foreground, var(--vscode-foreground));
+            color: var(--vscode-descriptionForeground);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             font-family: var(--vscode-editor-font-family, monospace);
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
+        .icon-info { color: var(--vscode-textLink-foreground, var(--vscode-foreground)); }
         .table-wrapper { flex: 1; overflow: auto; }
         table { width: 100%; border-collapse: collapse; }
         th, td {
