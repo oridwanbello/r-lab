@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { enforceGroup3TabOrder } from '../utils/webviewUtils';
-import * as child_process from 'child_process';
+import * as childProcess from 'child_process';
 import { getRConsoleTerminal } from '../layout/layoutManager';
 import { getRscriptPath } from '../utils/rPathResolver';
 
@@ -319,16 +319,24 @@ export class PlotsPanel {
     }
 
     private async _handleResize(width: number, height: number): Promise<void> {
-        if (this._currentIndex < 0) return;
+        if (this._currentIndex < 0) {
+            return;
+        }
         const sourceUri = this._plots[this._currentIndex];
         // Only dynamically resize generated plots, not interactive SVG placeholders
-        if (sourceUri.fsPath.includes('_interactive.svg')) return;
+        if (sourceUri.fsPath.includes('_interactive.svg')) {
+            return;
+        }
 
         const ext = path.extname(sourceUri.fsPath);
-        if (ext !== '.png') return; // We only resize PNG plots saved via layoutManager.ts
+        if (ext !== '.png') {
+            return; // We only resize PNG plots saved via layoutManager.ts
+        }
 
         const rdsPath = sourceUri.fsPath.replace(/\.png$/, '.rds');
-        if (!fs.existsSync(rdsPath)) return;
+        if (!fs.existsSync(rdsPath)) {
+            return;
+        }
 
         const rscriptPath = getRscriptPath();
 
@@ -371,7 +379,7 @@ tryCatch({
 }, error = function(e) {})
 `;
 
-        child_process.execFile(rscriptPath, ['-e', script], (error) => {
+        childProcess.execFile(rscriptPath, ['-e', script], { encoding: 'utf8' }, (error) => {
             if (error) {
                 console.error('[R Layout] Dynamic resize re-rendering failed:', error);
             }
@@ -380,18 +388,26 @@ tryCatch({
     }
 
     private async _handleRequestPreviewRender(format: string, widthStr: string, heightStr: string, unit: string): Promise<void> {
-        if (this._currentIndex < 0) return;
+        if (this._currentIndex < 0) {
+            return;
+        }
         const sourceUri = this._plots[this._currentIndex];
 
         // Interactive SVG doesn't need R rendering
-        if (sourceUri.fsPath.includes('_interactive.svg')) return;
+        if (sourceUri.fsPath.includes('_interactive.svg')) {
+            return;
+        }
 
         const rdsPath = sourceUri.fsPath.replace(/\.png$/, '.rds');
-        if (!fs.existsSync(rdsPath)) return;
+        if (!fs.existsSync(rdsPath)) {
+            return;
+        }
 
         const effectiveRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
         const tmpDir = path.join(effectiveRoot, '.tmp');
-        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+        if (!fs.existsSync(tmpDir)) {
+            fs.mkdirSync(tmpDir, { recursive: true });
+        }
 
         const previewPath = path.join(tmpDir, 'export_preview.png');
         const targetExt = format.toLowerCase();
@@ -453,7 +469,7 @@ tryCatch({
 }, error = function(e) {})
 `;
 
-        child_process.execFile(rscriptPath, ['-e', script], (error) => {
+        childProcess.execFile(rscriptPath, ['-e', script], (error) => {
             if (!error && fs.existsSync(previewPath)) {
                 let fileSizeInBytes = 0;
                 if (targetExt === 'png') {
@@ -464,9 +480,13 @@ tryCatch({
 
                 let fileSizeStr = '';
                 if (fileSizeInBytes > 0) {
-                    if (fileSizeInBytes < 1000) fileSizeStr = `${fileSizeInBytes} B`;
-                    else if (fileSizeInBytes < 1000 * 1000) fileSizeStr = `${(fileSizeInBytes / 1000).toFixed(1)} kB`;
-                    else fileSizeStr = `${(fileSizeInBytes / (1000 * 1000)).toFixed(2)} MB`;
+                    if (fileSizeInBytes < 1000) {
+                        fileSizeStr = `${fileSizeInBytes} B`;
+                    } else if (fileSizeInBytes < 1000 * 1000) {
+                        fileSizeStr = `${(fileSizeInBytes / 1000).toFixed(1)} kB`;
+                    } else {
+                        fileSizeStr = `${(fileSizeInBytes / (1000 * 1000)).toFixed(2)} MB`;
+                    }
                 }
 
                 const webviewUri = this._panel.webview.asWebviewUri(vscode.Uri.file(previewPath)).toString();
@@ -547,20 +567,22 @@ tryCatch({
     }
 
     private async _handleCopyImage(): Promise<void> {
-        if (this._plots.length === 0 || this._currentIndex < 0 || this._currentIndex >= this._plots.length) return;
+        if (this._plots.length === 0 || this._currentIndex < 0 || this._currentIndex >= this._plots.length) {
+            return;
+        }
         const currentPlotPath = this._plots[this._currentIndex].fsPath;
 
         try {
             const platform = os.platform();
             if (platform === 'darwin') {
                 // macOS: copy as TIFF because JPEG/PNG sometimes loses transparency depending on the clipboard consumer
-                child_process.execSync(`osascript -e 'set the clipboard to (read (POSIX file "${currentPlotPath}") as TIFF picture)'`);
+                childProcess.execSync(`osascript -e 'set the clipboard to (read (POSIX file "${currentPlotPath}") as TIFF picture)'`);
             } else if (platform === 'win32') {
                 // Windows: use PowerShell
-                child_process.execSync(`powershell -command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::SetImage([System.Drawing.Image]::FromFile('${currentPlotPath}'))"`);
+                childProcess.execSync(`powershell -command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::SetImage([System.Drawing.Image]::FromFile('${currentPlotPath}'))"`);
             } else {
                 // Linux: requires xclip
-                child_process.execSync(`xclip -selection clipboard -t image/png -i "${currentPlotPath}"`);
+                childProcess.execSync(`xclip -selection clipboard -t image/png -i "${currentPlotPath}"`);
             }
             vscode.window.setStatusBarMessage('Plot copied to clipboard', 4000);
         } catch (e: any) {
@@ -609,7 +631,9 @@ tryCatch({
             for (let i = 0; i < 10; i++) {
                 try {
                     const stats = fs.statSync(uri.fsPath);
-                    if (stats.size > 0) break;
+                    if (stats.size > 0) {
+                        break;
+                    }
                 } catch (e) {
                     // ignore ENOENT if OS hasn't materialized it yet
                 }

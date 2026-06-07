@@ -198,14 +198,14 @@ export function registerLayoutCommand(
         }
 
         rConsoleTerminal.show(false); // bring it into view without stealing keyboard focus
-        
+
         // Bracketed paste is strictly required for radian to process multiline selections.
         // We determine if we should use bracketed paste based on the user's explicit Console Type setting,
         // or auto-detect it from the path if set to Auto Detect.
         const layoutConfig = vscode.workspace.getConfiguration('r-layout');
         const rConsoleType = layoutConfig.get<string>('rConsoleType', 'Auto Detect');
         const rConsolePath = layoutConfig.get<string>('rConsolePath', 'R');
-        
+
         let useBracketedPaste = false;
         if (rConsoleType === 'Radian') {
             useBracketedPaste = true;
@@ -215,7 +215,7 @@ export function registerLayoutCommand(
             // Auto Detect
             useBracketedPaste = rConsolePath.toLowerCase().includes('radian');
         }
-        
+
         if (useBracketedPaste) {
             // \x1b[200~ and \x1b[201~ are the ANSI escape codes for bracketed paste mode
             rConsoleTerminal.sendText(`\x1b[200~${text}\x1b[201~`, true);
@@ -606,7 +606,9 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     let missingCorePanels = 0;
     const corePanels = ['workspace', 'plots', 'viewer', 'problems'];
     for (const p of corePanels) {
-        if (!panelPositions[p]) missingCorePanels++;
+        if (!panelPositions[p]) {
+            missingCorePanels++;
+        }
     }
 
     // If layout state is severely broken (panels in Group 1, or missing too many panels), ignore custom positions
@@ -957,7 +959,9 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         let lastViewerLineCount = 0;
 
         const viewerHandler = async () => {
-            if (!isLayoutActive) return;
+            if (!isLayoutActive) {
+                return;
+            }
             const urlPath = path.join(wf, '.R-layout', 'viewer_url.txt');
             try {
                 let content = '';
@@ -965,7 +969,9 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                 for (let i = 0; i < 10; i++) {
                     try {
                         content = fs.readFileSync(urlPath, 'utf8');
-                        if (content.trim().length > 0) break;
+                        if (content.trim().length > 0) {
+                            break;
+                        }
                     } catch {
                         // ignore ENOENT
                     }
@@ -1005,7 +1011,9 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         const pattern = new vscode.RelativePattern(vscode.Uri.file(path.join(wf, '.R-layout')), 'dv-meta.txt');
         dvWatcher = vscode.workspace.createFileSystemWatcher(pattern);
         const dvHandler = async () => {
-            if (!isLayoutActive) return;
+            if (!isLayoutActive) {
+                return;
+            }
             const metaPath = path.join(wf, '.R-layout', 'dv-meta.txt');
             try {
                 let raw = '';
@@ -1014,14 +1022,18 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                 for (let i = 0; i < 10; i++) {
                     try {
                         raw = fs.readFileSync(metaPath, 'utf8');
-                        if (raw.trim().length > 0) break;
+                        if (raw.trim().length > 0) {
+                            break;
+                        }
                     } catch {
                         // ignore ENOENT during write
                     }
                     await new Promise(r => setTimeout(r, 100));
                 }
 
-                if (raw.trim().length === 0) return;
+                if (raw.trim().length === 0) {
+                    return;
+                }
 
                 // Strip Windows \r\n line endings
                 raw = raw.replace(/\r/g, '');

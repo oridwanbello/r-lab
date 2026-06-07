@@ -117,7 +117,9 @@ export class ViewerPanel {
                         this._handleOpenExternal();
                         break;
                     case 'savePng':
-                        if (msg.dataUrl) this._handleSavePng(msg.dataUrl);
+                        if (msg.dataUrl) {
+                            this._handleSavePng(msg.dataUrl);
+                        }
                         break;
                     case 'pngExportFailed':
                         vscode.window.showErrorMessage(`Failed to export PNG: ${msg.error}`);
@@ -194,7 +196,9 @@ export class ViewerPanel {
     }
 
     public async loadState(state: any): Promise<void> {
-        if (!state) return;
+        if (!state) {
+            return;
+        }
         this._history = state.history || [];
         this._currentIndex = state.currentIndex !== undefined ? state.currentIndex : -1;
 
@@ -290,16 +294,27 @@ export class ViewerPanel {
 
                     const ext = path.extname(filePath).toLowerCase();
                     let contentType = 'text/html';
-                    if (ext === '.js') contentType = 'text/javascript';
-                    else if (ext === '.css') contentType = 'text/css';
-                    else if (ext === '.json') contentType = 'application/json';
-                    else if (ext === '.png') contentType = 'image/png';
-                    else if (ext === '.jpg' || ext === '.jpeg') contentType = 'image/jpeg';
-                    else if (ext === '.svg') contentType = 'image/svg+xml';
-                    else if (ext === '.gif') contentType = 'image/gif';
-                    else if (ext === '.woff') contentType = 'font/woff';
-                    else if (ext === '.woff2') contentType = 'font/woff2';
-                    else if (ext === '.ttf') contentType = 'font/ttf';
+                    if (ext === '.js') {
+                        contentType = 'text/javascript';
+                    } else if (ext === '.css') {
+                        contentType = 'text/css';
+                    } else if (ext === '.json') {
+                        contentType = 'application/json';
+                    } else if (ext === '.png') {
+                        contentType = 'image/png';
+                    } else if (ext === '.jpg' || ext === '.jpeg') {
+                        contentType = 'image/jpeg';
+                    } else if (ext === '.svg') {
+                        contentType = 'image/svg+xml';
+                    } else if (ext === '.gif') {
+                        contentType = 'image/gif';
+                    } else if (ext === '.woff') {
+                        contentType = 'font/woff';
+                    } else if (ext === '.woff2') {
+                        contentType = 'font/woff2';
+                    } else if (ext === '.ttf') {
+                        contentType = 'font/ttf';
+                    }
 
                     res.writeHead(200, {
                         'Content-Type': contentType,
@@ -427,7 +442,9 @@ export class ViewerPanel {
     }
 
     private _handleDeleteCurrent(): void {
-        if (this._currentIndex < 0 || this._currentIndex >= this._history.length) return;
+        if (this._currentIndex < 0 || this._currentIndex >= this._history.length) {
+            return;
+        }
         this._history.splice(this._currentIndex, 1);
 
         if (this._history.length === 0) {
