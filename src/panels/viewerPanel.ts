@@ -612,7 +612,7 @@ export class ViewerPanel {
         }
         .toolbar button#btn-delete:hover:not([disabled]),
         .toolbar button#btn-clear:hover:not([disabled]) {
-            color: var(--vscode-errorForeground);
+            color: var(--vscode-editorWarning-foreground);
         }
         .toolbar button svg { width: 14px; height: 14px; display: block; }
         .toolbar button[disabled] {

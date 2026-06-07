@@ -821,7 +821,7 @@ tryCatch({
 
         .remove-btn:hover, .clear-all-btn:hover {
             opacity: 1;
-            color: var(--vscode-errorForeground);
+            color: var(--vscode-editorWarning-foreground);
         }
 
         .name-header-col { white-space: nowrap; }
