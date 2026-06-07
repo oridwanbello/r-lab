@@ -26,13 +26,14 @@ export class PlotsPanel {
     private _plots: vscode.Uri[] = [];
     private _currentIndex = -1;
     private _watcher?: vscode.FileSystemWatcher;
+    private _isMinimized = false;
+    private _isPoppedOut: boolean = false;
+    private _focusPending: boolean = false;
     private _disposables: vscode.Disposable[] = [];
-    private _isNightMode: boolean = false;
-    private _isMinimized: boolean = false;
+    private _isNightMode = false;
     private _lastRenderedDims: Map<string, { w: number, h: number }> = new Map();
     private _customPlotDir: string | undefined;
     private _lastDirAction: 'outview' | 'view' | undefined;
-    private _focusPending: boolean = false;
     private _extensionUri: vscode.Uri;
 
     // Factory
@@ -127,10 +128,8 @@ export class PlotsPanel {
 
         this._panel.webview.onDidReceiveMessage(
             (msg: { type: string }) => {
-                let requiresFocusRestore = true;
                 switch (msg.type) {
                     case 'ready':
-                        requiresFocusRestore = false;
                         this._postState();
                         if (this._focusPending) {
                             this._focusPending = false;
@@ -174,7 +173,6 @@ export class PlotsPanel {
                         this._render();
                         break;
                     case 'resize':
-                        requiresFocusRestore = false;
                         this._handleResize((msg as any).width, (msg as any).height);
                         break;
                     case 'setCustomDir':
@@ -193,7 +191,6 @@ export class PlotsPanel {
                         this._handleBrowseCustomDir();
                         break;
                     case 'popout':
-                        requiresFocusRestore = false;
                         this._focusPending = true;
                         suppressGuardForPanelMove();
                         this._panel.reveal(vscode.ViewColumn.One, false);
@@ -204,7 +201,6 @@ export class PlotsPanel {
                         this._postState(true);
                         break;
                     case 'restore':
-                        requiresFocusRestore = false;
                         this._focusPending = true;
                         suppressGuardForPanelMove();
                         this._panel.reveal(vscode.ViewColumn.Three, false);
@@ -215,12 +211,6 @@ export class PlotsPanel {
                         enforceGroup3TabOrder('Plots');
                         this._postState(false);
                         break;
-                }
-                
-                if (requiresFocusRestore) {
-                    setTimeout(() => {
-                        vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
-                    }, 150);
                 }
             },
             null,
@@ -341,7 +331,7 @@ export class PlotsPanel {
         if (!fs.existsSync(rdsPath)) return;
 
         const rscriptPath = getRscriptPath();
-        
+
         let w = width * 2;
         let h = height * 2;
         const res = 150; // Fixed baseline resolution for consistent text proportionality
@@ -364,7 +354,7 @@ export class PlotsPanel {
         if (lastDims && lastDims.w === w && lastDims.h === h) {
             return; // Already perfectly rendered for this size
         }
-        
+
         // Save these dimensions as the latest for this plot
         this._lastRenderedDims.set(cacheKey, { w, h });
 
@@ -392,7 +382,7 @@ tryCatch({
     private async _handleRequestPreviewRender(format: string, widthStr: string, heightStr: string, unit: string): Promise<void> {
         if (this._currentIndex < 0) return;
         const sourceUri = this._plots[this._currentIndex];
-        
+
         // Interactive SVG doesn't need R rendering
         if (sourceUri.fsPath.includes('_interactive.svg')) return;
 
@@ -406,7 +396,7 @@ tryCatch({
         const previewPath = path.join(tmpDir, 'export_preview.png');
         const targetExt = format.toLowerCase();
         const targetTempPath = path.join(tmpDir, `export_size_test.${targetExt}`);
-        
+
         const safeRdsPath = rdsPath.replace(/\\/g, '/');
         const safePngPath = previewPath.replace(/\\/g, '/');
         const safeTargetTempPath = targetTempPath.replace(/\\/g, '/');
@@ -415,11 +405,11 @@ tryCatch({
         const script = `
 tryCatch({
     p <- readRDS('${safeRdsPath}')
-    
+
     .w <- as.numeric('${widthStr}')
     .h <- as.numeric('${heightStr}')
     .unit <- '${unit}'
-    
+
     .res <- 300
     if (.unit == "cm") { .w_in <- .w / 2.54; .h_in <- .h / 2.54 }
     else if (.unit == "mm") { .w_in <- .w / 25.4; .h_in <- .h / 25.4 }
@@ -440,7 +430,7 @@ tryCatch({
     png('${safePngPath}', width=.w, height=.h, units=.unit, res=.res, bg='white')
     replayPlot(p)
     dev.off()
-    
+
     if ('${targetExt}' == 'pdf') {
         pdf(file='${safeTargetTempPath}', width=.w_in, height=.h_in, onefile=FALSE)
         replayPlot(p)
@@ -471,7 +461,7 @@ tryCatch({
                 } else if (fs.existsSync(targetTempPath)) {
                     fileSizeInBytes = fs.statSync(targetTempPath).size;
                 }
-                
+
                 let fileSizeStr = '';
                 if (fileSizeInBytes > 0) {
                     if (fileSizeInBytes < 1000) fileSizeStr = `${fileSizeInBytes} B`;
@@ -480,8 +470,8 @@ tryCatch({
                 }
 
                 const webviewUri = this._panel.webview.asWebviewUri(vscode.Uri.file(previewPath)).toString();
-                this._panel.webview.postMessage({ 
-                    type: 'previewRendered', 
+                this._panel.webview.postMessage({
+                    type: 'previewRendered',
                     src: webviewUri,
                     fileSize: fileSizeStr
                 });
@@ -495,10 +485,10 @@ tryCatch({
 
         const filterName = format.toUpperCase();
         const ext = format;
-        
+
         const effectiveRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
         const defaultFilename = path.basename(sourceUri.fsPath).replace('.png', `.${ext}`);
-        
+
         const saveUri = await vscode.window.showSaveDialog({
             defaultUri: vscode.Uri.file(path.join(effectiveRoot, defaultFilename)),
             filters: { [filterName]: [ext] }
@@ -520,7 +510,7 @@ tryCatch({
                 ].join('\n');
 
                 fs.writeFileSync(reqPath, reqContent, 'utf8');
-                
+
                 vscode.window.withProgress({
                     location: vscode.ProgressLocation.Notification,
                     title: `Exporting plot...`,
@@ -532,12 +522,20 @@ tryCatch({
                         await new Promise(r => setTimeout(r, 200));
                         attempts++;
                     }
-                    
+
                     // Allow a brief moment for OS flush
                     await new Promise(r => setTimeout(r, 500));
-                    
+
                     if (fs.existsSync(saveUri.fsPath)) {
                         vscode.window.setStatusBarMessage(`Export completed: ${path.basename(saveUri.fsPath)}`, 5000);
+                        // Show an auto-disappearing notification immediately after export
+                        vscode.window.withProgress({
+                            location: vscode.ProgressLocation.Notification,
+                            title: `Export completed: ${path.basename(saveUri.fsPath)}`,
+                            cancellable: false
+                        }, async () => {
+                            await new Promise(r => setTimeout(r, 2000));
+                        });
                     } else {
                         vscode.window.showErrorMessage(`Failed to export plot to ${path.basename(saveUri.fsPath)}. Please check directory permissions.`);
                     }
@@ -551,7 +549,7 @@ tryCatch({
     private async _handleCopyImage(): Promise<void> {
         if (this._plots.length === 0 || this._currentIndex < 0 || this._currentIndex >= this._plots.length) return;
         const currentPlotPath = this._plots[this._currentIndex].fsPath;
-        
+
         try {
             const platform = os.platform();
             if (platform === 'darwin') {
@@ -606,7 +604,7 @@ tryCatch({
             // Guard against duplicates
             if (this._plots.some(p => p.fsPath === uri.fsPath)) { return; }
 
-            // Windows race condition prevention (Rule #15): 
+            // Windows race condition prevention (Rule #15):
             // Wait for R to finish flushing the image file to disk before exposing it to the UI.
             for (let i = 0; i < 10; i++) {
                 try {
@@ -732,6 +730,7 @@ tryCatch({
         const defaultDir = inWorkspace ? './.R-layout/plots' : '~/.R-layout/plots';
 
         const isPoppedOut = overrideIsPoppedOut !== undefined ? overrideIsPoppedOut : (this._panel.viewColumn !== vscode.ViewColumn.Three && this._panel.viewColumn !== undefined);
+        const actualMinimized = isPoppedOut ? false : this._isMinimized;
 
         this._panel.webview.postMessage({
             type: 'updateState',
@@ -739,7 +738,7 @@ tryCatch({
                 plots: plots,
                 currentIndex: this._currentIndex,
                 isNightMode: this._isNightMode,
-                minimized: this._isMinimized,
+                minimized: actualMinimized,
                 customPlotDir: this._customPlotDir,
                 defaultDir: defaultDir,
                 lastDirAction: this._lastDirAction,
@@ -905,13 +904,13 @@ tryCatch({
         }
 
         .thumbnail-sidebar {
-            width: 120px;
+            width: 108px;
             background: var(--vscode-sideBar-background);
             border-left: 1px solid var(--vscode-editorGroup-border);
             display: flex;
             flex-direction: column;
-            gap: 12px;
-            padding: 12px;
+            gap: 6px;
+            padding: 6px;
             overflow-y: auto;
             flex-shrink: 0;
         }
@@ -930,7 +929,7 @@ tryCatch({
             height: auto;
             object-fit: contain;
             border: 4px solid transparent;
-            border-radius: 6px;
+            border-radius: 8px;
             cursor: pointer;
             transition: all 0.2s ease;
             background: white !important;
@@ -938,6 +937,10 @@ tryCatch({
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             opacity: 0.6;
             filter: var(--plot-filter, none) grayscale(20%);
+        }
+        .thumbnail.is-interactive {
+            background: transparent !important;
+            box-shadow: none;
         }
         .thumbnail.active {
             border-color: var(--vscode-focusBorder);
@@ -957,7 +960,7 @@ tryCatch({
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 0 8px 0 8px;
+            padding: 0;
             cursor: default;
             user-select: none;
         }
@@ -969,7 +972,7 @@ tryCatch({
             justify-content: center;
             position: relative;
             overflow: hidden;
-            border-radius: 6px;
+            border-radius: 8px;
             transform: translateZ(0); /* preserves rounded corners when panning */
         }
         .plot-area.zoomed {
@@ -979,15 +982,25 @@ tryCatch({
             cursor: grabbing;
         }
         .plot-area img {
-            max-width: 100%;
-            max-height: 100%;
+            width: 100%;
+            height: 100%;
             object-fit: contain;
             background: white !important;
-            border-radius: 6px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
             transition: filter 0.2s ease, background-color 0.2s ease;
             filter: var(--plot-filter, none);
             pointer-events: none; /* Let drag events fall through to the area */
+        }
+        .plot-area img.is-interactive {
+            background: transparent !important;
+            box-shadow: none;
+            object-fit: fill;
+        }
+        .compare-pane img.is-interactive {
+            background: transparent !important;
+            box-shadow: none !important;
+            object-fit: fill;
+            width: 100%;
+            height: 100%;
         }
         #overlay-slider {
             -webkit-appearance: none;
@@ -1033,7 +1046,7 @@ tryCatch({
             justify-content: center;
             position: relative;
             overflow: hidden;
-            border-radius: 6px;
+            border-radius: 8px;
             transform: translateZ(0); /* preserves rounded corners when panning */
             border: 4px solid transparent;
             transition: border-color 0.2s ease;
@@ -1046,7 +1059,7 @@ tryCatch({
             max-height: 100%;
             object-fit: contain;
             background: white !important;
-            border-radius: 6px;
+            border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
             pointer-events: none;
             transition: transform 0.1s ease-out, background-color 0.2s ease;
@@ -1247,6 +1260,7 @@ tryCatch({
             padding: 4px 6px;
             border-radius: 4px;
             font-size: 0.9em;
+            font-family: inherit;
             outline: none;
             width: 100%;
             box-sizing: border-box;
@@ -1317,6 +1331,7 @@ tryCatch({
             padding: 8px;
             justify-content: space-between;
             overflow-y: auto;
+            font-size: 0.9em;
         }
         .export-controls-vertical {
             display: flex;
@@ -1330,7 +1345,6 @@ tryCatch({
             gap: clamp(2px, 0.8vh, 4px);
         }
         .export-modal-sidebar label {
-            font-size: 0.9em;
             opacity: 0.8;
             text-align: left;
         }
@@ -1339,7 +1353,8 @@ tryCatch({
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border);
             border-radius: 4px;
-            font-size: 0.9em;
+            font-size: inherit;
+            font-family: inherit;
             outline: none;
             width: 100%;
             height: 26px;
@@ -1376,7 +1391,7 @@ tryCatch({
             position: relative;
             overflow: visible;
             border: 1px dashed var(--vscode-focusBorder);
-            border-radius: 6px;
+            border-radius: 8px;
             min-width: 20px;
             min-height: 20px;
             max-width: 100%;
@@ -1411,7 +1426,7 @@ tryCatch({
             object-fit: fill;
             display: block;
             pointer-events: none;
-            border-radius: 6px;
+            border-radius: 8px;
         }
         .preview-overlay {
             position: absolute;
@@ -1437,7 +1452,8 @@ tryCatch({
             padding: 6px 12px;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 0.9em;
+            font-size: inherit;
+            font-family: inherit;
         }
         .btn-modal:hover {
             background: var(--vscode-button-hoverBackground);
@@ -1512,7 +1528,7 @@ tryCatch({
                 <div class="export-modal-body">
                     <div id="preview-container" class="preview-container">
                         <img id="preview-img" src="" alt="Plot Preview" />
-                        <div id="preview-overlay" class="preview-overlay">Rendering...</div>
+                        <div id="preview-overlay" class="preview-overlay">Rendering&hellip;</div>
                         <div id="custom-resizer" class="custom-resizer"></div>
                     </div>
                 </div>
@@ -1545,7 +1561,7 @@ tryCatch({
                         </div>
                     </div>
                     <div class="export-actions-vertical">
-                        <div id="export-filesize" style="margin-bottom: 8px; font-size: 0.9em; opacity: 0.8; text-align: center;">...</div>
+                        <div id="export-filesize" style="margin-bottom: 8px; opacity: 0.8; text-align: center;">...</div>
                         <button id="btn-export-cancel" class="btn-modal secondary">Cancel</button>
                         <button id="btn-export-confirm" class="btn-modal">Export</button>
                     </div>
@@ -1627,6 +1643,7 @@ tryCatch({
             isPoppedOut: isPoppedOut
         };
 
+        let lastState = initialState;
         let currentPlots = [];
         let currentImageSrc = '';
 
@@ -1666,9 +1683,10 @@ tryCatch({
         }
 
         function renderState(state) {
+            lastState = state;
             document.body.classList.toggle('minimized', !!state.minimized);
             const hasPlots = state.plots.length > 0;
-            
+
             if (state.plots.length !== currentPlots.length || state.currentIndex !== lastBackendIndex) {
                 if (isCompareMode) {
                     if (activeCompareSide === 'left') compareLeftIndex = state.currentIndex;
@@ -1682,36 +1700,92 @@ tryCatch({
 
             const mainImg = document.getElementById('main-image');
             const emptyState = document.getElementById('empty-state');
+            const plotArea = document.getElementById('plot-area');
             document.body.classList.toggle('night-mode', state.isNightMode);
 
-            function getInteractiveSvgUri(isNightMode, isThumbnail = false) {
+            function getInteractiveSvgUri(isNightMode, isThumbnail = false, width = 800, height = 600) {
                 const linkColor = getComputedStyle(document.documentElement).getPropertyValue('--vscode-textLink-foreground').trim() || '#007acc';
                 const bgColor = '#151515';
                 const dotColor = '#2d2d2d';
-                
-                const fontSize = isThumbnail ? "65" : "36";
-                const iconTransform = isThumbnail 
-                    ? "translate(352, 120) scale(6)"
-                    : "translate(352, 170) scale(6)";
-                const y1 = isThumbnail ? "350" : "325";
-                const y2 = isThumbnail ? "450" : "384";
 
-                const tPatch = isThumbnail ? '' : 
-                    '<rect x="320" y="140" width="160" height="170" fill="' + bgColor + '"/>' +
-                    '<rect x="180" y="290" width="440" height="150" fill="' + bgColor + '"/>';
+                const w = Math.round(width) || 800;
+                const h = Math.round(height) || 600;
 
-                const svgStr = '<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">' +
-                    '<defs><pattern id="dot-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="10" cy="10" r="1.5" fill="' + dotColor + '"/></pattern></defs>' +
-                    '<rect width="800" height="600" fill="' + bgColor + '"/>' +
-                    '<rect x="40" y="40" width="720" height="520" fill="url(#dot-grid)"/>' +
-                    tPatch +
-                    '<g fill="' + linkColor + '" transform="' + iconTransform + '">' +
-                        '<path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/><path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/>' +
-                    '</g>' +
-                    '<text x="400" y="' + y1 + '" fill="' + linkColor + '" font-family="sans-serif" font-weight="normal" font-size="' + fontSize + '" text-anchor="middle">Open</text>' +
-                    '<text x="400" y="' + y2 + '" fill="' + linkColor + '" font-family="sans-serif" font-weight="normal" font-size="' + fontSize + '" text-anchor="middle">Interactive Widget(s)</text>' +
-                '</svg>';
-                return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)));
+                if (isThumbnail) {
+                    const fontSize = "65";
+                    const iconTransform = "translate(330.88, 124) scale(8.64)";
+                    const y1 = "356";
+                    const y2 = "469";
+                    const svgStr = '<svg viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">' +
+                        '<defs><pattern id="dot-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="10" cy="10" r="1.5" fill="' + dotColor + '"/></pattern></defs>' +
+                        '<rect width="800" height="600" rx="8" ry="8" fill="' + bgColor + '"/>' +
+                        '<rect x="20" y="20" width="760" height="560" rx="8" ry="8" fill="url(#dot-grid)"/>' +
+                        '<g fill="' + linkColor + '" transform="' + iconTransform + '">' +
+                            '<path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/><path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/>' +
+                        '</g>' +
+                        '<text x="400" y="' + y1 + '" fill="' + linkColor + '" font-family="sans-serif" font-weight="normal" font-size="' + fontSize + '" text-anchor="middle">Open</text>' +
+                        '<text x="400" y="' + y2 + '" fill="' + linkColor + '" font-family="sans-serif" font-weight="normal" font-size="' + fontSize + '" text-anchor="middle">Interactive Widget(s)</text>' +
+                    '</svg>';
+                    return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)));
+                } else {
+                    let scale = 0.8;
+                    let upperW = 120, upperH = 140, upperY = -100;
+                    let lowerW = 280, lowerH = 60, lowerY = 40;
+                    let padX = 20, padY = 20;
+
+                    if (w < 360) {
+                        scale = 0.48;
+                        upperW = 60; upperH = 80; upperY = -60;
+                        lowerW = 140; lowerH = 40; lowerY = 20;
+                        padX = 0; padY = 0;
+                    } else if (w < 450) {
+                        scale = 0.64;
+                        upperW = 60; upperH = 100; upperY = -60;
+                        lowerW = 180; lowerH = 40; lowerY = 40;
+                        padX = 0; padY = 0;
+                    } else if (w < 600) {
+                        scale = 0.72;
+                        upperW = 100; upperH = 120; upperY = -80;
+                        lowerW = 220; lowerH = 40; lowerY = 40;
+                        padX = 20; padY = 20;
+                    }
+
+                    let N = Math.floor((w - 2 * padX) / 20);
+                    if (scale === 0.8) {
+                        if (N % 2 !== 0) N -= 1;
+                    } else {
+                        if (N % 2 === 0) N -= 1;
+                    }
+                    const gridW = Math.max(0, N * 20);
+
+                    let M = Math.floor((h - 2 * padY) / 20);
+                    if (M % 2 !== 0) M -= 1;
+                    const gridH = Math.max(0, M * 20);
+
+                    const gridX = (w - gridW) / 2;
+                    const gridY = (h - gridH) / 2;
+
+                    const cx = gridX + gridW / 2;
+                    const cy = gridY + gridH / 2;
+
+                    const svgStr = '<svg viewBox="0 0 ' + w + ' ' + h + '" xmlns="http://www.w3.org/2000/svg">' +
+                        '<defs><pattern id="dot-grid" width="20" height="20" patternUnits="userSpaceOnUse" x="' + gridX + '" y="' + gridY + '"><circle cx="10" cy="10" r="1.5" fill="' + dotColor + '"/></pattern></defs>' +
+                        '<rect width="' + w + '" height="' + h + '" rx="8" ry="8" fill="' + bgColor + '"/>' +
+                        '<rect x="' + gridX + '" y="' + gridY + '" width="' + gridW + '" height="' + gridH + '" rx="8" ry="8" fill="url(#dot-grid)"/>' +
+                        '<rect x="' + (cx - upperW / 2) + '" y="' + (cy + upperY) + '" width="' + upperW + '" height="' + upperH + '" fill="' + bgColor + '"/>' +
+                        '<rect x="' + (cx - lowerW / 2) + '" y="' + (cy + lowerY) + '" width="' + lowerW + '" height="' + lowerH + '" fill="' + bgColor + '"/>' +
+                        '<g transform="translate(' + cx + ', ' + cy + ')">' +
+                            '<g transform="scale(' + scale + ')">' +
+                                '<g fill="' + linkColor + '" transform="translate(-48, -100) scale(6)">' +
+                                    '<path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/><path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/>' +
+                                '</g>' +
+                                '<text x="0" y="38" fill="' + linkColor + '" font-family="sans-serif" font-weight="normal" font-size="30" text-anchor="middle">Open</text>' +
+                                '<text x="0" y="90" fill="' + linkColor + '" font-family="sans-serif" font-weight="normal" font-size="30" text-anchor="middle">Interactive Widget(s)</text>' +
+                            '</g>' +
+                        '</g>' +
+                    '</svg>';
+                    return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgStr)));
+                }
             }
 
             if (isCompareMode) {
@@ -1737,14 +1811,14 @@ tryCatch({
                 if (!isCompareMode) {
                     const originalSrc = state.plots[state.currentIndex];
                     const isInteractive = originalSrc.includes('_interactive.svg');
-                    const newSrc = isInteractive ? getInteractiveSvgUri(state.isNightMode, false) : originalSrc;
-                    
+                    const newSrc = isInteractive ? getInteractiveSvgUri(state.isNightMode, false, plotArea.clientWidth, plotArea.clientHeight) : originalSrc;
+
                     let srcChanged = currentImageSrc !== originalSrc;
-                    if (srcChanged || (isInteractive && themeChanged)) {
+                    if (srcChanged || (isInteractive && themeChanged) || (isInteractive && mainImg.getAttribute('src') !== newSrc)) {
                         currentImageSrc = originalSrc;
                         mainImg.src = newSrc;
                         if (srcChanged) resetZoom();
-                        
+
                         // Dynamically request re-render for this specific plot if it's new
                         // to ensure it matches the current window dimensions.
                         if (srcChanged && typeof triggerRerender === 'function') {
@@ -1757,24 +1831,26 @@ tryCatch({
                         if (isInteractive) {
                             mainImg.removeAttribute('data-tooltip');
                             mainImg.style.cursor = 'pointer';
-                            mainImg.style.pointerEvents = 'auto'; 
+                            mainImg.style.pointerEvents = 'auto';
                             mainImg.classList.add('is-interactive');
                         } else {
                             mainImg.removeAttribute('data-tooltip');
                             mainImg.style.cursor = '';
-                            mainImg.style.pointerEvents = 'none'; 
+                            mainImg.style.pointerEvents = 'none';
                             mainImg.classList.remove('is-interactive');
                         }
                     }
                 } else {
                     const lUrl = state.plots[compareLeftIndex] || state.plots[0];
                     const rUrl = state.plots[compareRightIndex] || state.plots[0];
-                    const lSrc = lUrl.includes('_interactive.svg') ? getInteractiveSvgUri(state.isNightMode) : lUrl;
-                    const rSrc = rUrl.includes('_interactive.svg') ? getInteractiveSvgUri(state.isNightMode) : rUrl;
-                    
+                    const leftPane = document.getElementById('compare-left');
+                    const rightPane = document.getElementById('compare-right');
+                    const lSrc = lUrl.includes('_interactive.svg') ? getInteractiveSvgUri(state.isNightMode, false, leftPane.clientWidth, leftPane.clientHeight) : lUrl;
+                    const rSrc = rUrl.includes('_interactive.svg') ? getInteractiveSvgUri(state.isNightMode, false, rightPane.clientWidth, rightPane.clientHeight) : rUrl;
+
                     const imgLeft = document.getElementById('img-left');
                     const imgRight = document.getElementById('img-right');
-                    
+
                     if (imgLeft.getAttribute('src') !== lSrc) {
                         imgLeft.src = lSrc;
                     }
@@ -1786,11 +1862,11 @@ tryCatch({
                     }
                     if (rUrl.includes('_interactive.svg')) imgRight.classList.add('is-interactive');
                     else imgRight.classList.remove('is-interactive');
-                    
+
                     document.getElementById('compare-left').classList.toggle('active', activeCompareSide === 'left');
                     document.getElementById('compare-right').classList.toggle('active', activeCompareSide === 'right');
                 }
-                
+
                 window.__lastNightMode = state.isNightMode;
                 emptyState.style.display = 'none';
             } else {
@@ -1825,15 +1901,17 @@ tryCatch({
             thumbs.forEach((t, i) => {
                 const url = state.plots[i];
                 const thumbUrl = url.includes('_interactive.svg') ? getInteractiveSvgUri(state.isNightMode, true) : url;
-                
+
                 if (t.getAttribute('src') !== thumbUrl || (themeChangedThumb && url.includes('_interactive.svg'))) {
                     t.dataset.originalSrc = thumbUrl;
                     t.setAttribute('src', thumbUrl);
                     delete t.dataset.retried;
                 }
-                
+                if (url.includes('_interactive.svg')) t.classList.add('is-interactive');
+                else t.classList.remove('is-interactive');
+
                 t.dataset.index = i;
-                
+
                 if (isCompareMode) {
                     if (i === compareLeftIndex || i === compareRightIndex) {
                         t.classList.add('active');
@@ -1943,7 +2021,7 @@ tryCatch({
                     if (isCompareMode) {
                         if (activeCompareSide === 'left') compareLeftIndex = index;
                         else compareRightIndex = index;
-                        
+
                         renderState({ plots: currentPlots, currentIndex: lastBackendIndex, isNightMode: window.__lastNightMode });
                     } else {
                         vscode.postMessage({ type: 'navigateTo', index: index });
@@ -1992,7 +2070,7 @@ tryCatch({
                 const percentage = Math.round(val * 100);
                 const valLabel = document.getElementById('overlay-val');
                 if (valLabel) valLabel.textContent = percentage + '%';
-                
+
                 const rightPane = document.getElementById('compare-right');
                 if (val > 0) {
                     rightPane.classList.add('overlay-mode');
@@ -2107,9 +2185,9 @@ tryCatch({
 
             const triggerPreviewUpdate = () => {
                 if (!exportModal.classList.contains('active')) return;
-                
+
                 if (fileSizeDiv) fileSizeDiv.textContent = 'calculating...';
-                
+
                 clearTimeout(previewDebounceTimer);
                 if (previewOverlay) previewOverlay.classList.add('loading');
                 previewDebounceTimer = setTimeout(() => {
@@ -2276,7 +2354,7 @@ tryCatch({
                     if (newScale > 50) newScale = 50;
 
                     const actualZoomFactor = newScale / st.scale;
-                    
+
                     let img;
                     if (k === 'main') img = document.getElementById('main-image');
                     else if (k === 'left') img = document.getElementById('img-left');
@@ -2286,7 +2364,7 @@ tryCatch({
                     if (img.classList.contains('is-interactive')) return;
 
                     const rect = img.getBoundingClientRect();
-                    
+
                     let container;
                     if (k === 'main') container = plotArea;
                     else if (k === 'left') container = document.getElementById('compare-left');
@@ -2307,7 +2385,7 @@ tryCatch({
                     st.translateY += (cy - centerY) * (1 - actualZoomFactor);
                     st.scale = newScale;
                 });
-                
+
                 updateTransform();
             }
 
@@ -2338,7 +2416,7 @@ tryCatch({
             window.addEventListener('mousemove', (e) => {
                 if (!isDragging) return;
                 e.preventDefault();
-                
+
                 if (!isCompareMode) {
                     transformState.main.translateX = e.clientX - dragStart.main.x;
                     transformState.main.translateY = e.clientY - dragStart.main.y;
@@ -2436,7 +2514,7 @@ tryCatch({
                     tooltip.textContent = text;
                     tooltip.style.display = 'block';
                     const rect = el.getBoundingClientRect();
-                    
+
                     if (el.id === 'main-image') {
                         tooltip.style.top = (rect.top + 20) + 'px';
                     } else {
@@ -2445,11 +2523,11 @@ tryCatch({
 
                     const padding = 10;
                     let left = rect.left + (rect.width/2) - (tooltip.offsetWidth/2);
-                    
+
                     if (el.id === 'main-image') {
                         left = window.innerWidth / 2 - tooltip.offsetWidth / 2;
                     }
-                    
+
                     if (left < padding) left = padding;
                     if (left + tooltip.offsetWidth > window.innerWidth - padding) {
                         left = window.innerWidth - tooltip.offsetWidth - padding;
@@ -2466,7 +2544,7 @@ tryCatch({
 
             window.addEventListener('keydown', (e) => {
                 if (e.target && e.target.tagName === 'INPUT') return;
-                if (isCompareMode) return; 
+                if (isCompareMode) return;
 
                 if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
                     const btnPrev = document.getElementById('btn-prev');
@@ -2488,10 +2566,10 @@ tryCatch({
             window.triggerRerender = function() {
                 const plotArea = document.getElementById('plot-area');
                 if (plotArea && !isCompareMode) {
-                    vscode.postMessage({ 
-                        type: 'resize', 
-                        width: plotArea.clientWidth - 16, 
-                        height: plotArea.clientHeight 
+                    vscode.postMessage({
+                        type: 'resize',
+                        width: plotArea.clientWidth,
+                        height: plotArea.clientHeight
                     });
                 }
             };
@@ -2503,6 +2581,12 @@ tryCatch({
                         triggerRerender();
                     } else {
                         triggerPreviewUpdate();
+                    }
+                    const isWidget = lastState && lastState.plots && lastState.plots[lastState.currentIndex] && lastState.plots[lastState.currentIndex].includes('_interactive.svg');
+                    const isLeftWidget = lastState && lastState.plots && lastState.plots[compareLeftIndex] && lastState.plots[compareLeftIndex].includes('_interactive.svg');
+                    const isRightWidget = lastState && lastState.plots && lastState.plots[compareRightIndex] && lastState.plots[compareRightIndex].includes('_interactive.svg');
+                    if (isWidget || (isCompareMode && (isLeftWidget || isRightWidget))) {
+                        renderState(lastState);
                     }
                 }, 400); // 400ms debounce
             });

@@ -16,7 +16,7 @@ Transform your editor into an RStudio-inspired 3-pane grid with a single click. 
 - Instant Layout: Snaps your editor into a 3-pane grid (Source Editor, Terminal/Console, and Workspace/Plots).
 - Workspace & Package Manager: Live variable inspector, dictionary-style object previews, and a 1-click interactive dataframe viewer. Includes a dedicated tab to search, attach, and detach R packages.
 - Plot Gallery & Export: Interactive plot navigation (scroll/pinch zoom, pan) with advanced export settings (PDF, SVG, EPS, PNG, JPG) and smart file size estimation.
-- HTML Widget Viewer: Sandboxed layout tab for R `viewer()` outputs (Shiny apps, `htmlwidgets`, vignettes).
+- HTML Widget Viewer: Sandboxed layout tab for R `viewer()` outputs (Shiny apps, `htmlwidgets`, Quarto previews, vignettes).
 - Integrated R Help & Smart Execution: KaTeX math rendering, cross-reference linking, and dynamic code execution (Run Source / Run Selection).
 
 ## Getting Started

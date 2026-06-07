@@ -117,22 +117,22 @@
       {
         "command": "r-layout.runSmart",
         "key": "cmd+shift+s",
-        "when": "r-layout.layoutActive && (editorLangId =~ /^(r|rmd|quarto)$/ || activeWebviewPanelId =~ /^r-layout\\./)"
+        "when": "r-layout.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-layout\\./ || terminalFocus)"
       },
       {
         "command": "r-layout.runSmart",
         "key": "ctrl+shift+s",
-        "when": "r-layout.layoutActive && (editorLangId =~ /^(r|rmd|quarto)$/ || activeWebviewPanelId =~ /^r-layout\\./)"
+        "when": "r-layout.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-layout\\./ || terminalFocus)"
       },
       {
         "command": "r-layout.runSelection",
         "key": "cmd+enter",
-        "when": "r-layout.layoutActive && (editorLangId =~ /^(r|rmd|quarto)$/ || activeWebviewPanelId =~ /^r-layout\\./)"
+        "when": "r-layout.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-layout\\./ || terminalFocus)"
       },
       {
         "command": "r-layout.runSelection",
         "key": "ctrl+enter",
-        "when": "r-layout.layoutActive && (editorLangId =~ /^(r|rmd|quarto)$/ || activeWebviewPanelId =~ /^r-layout\\./)"
+        "when": "r-layout.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-layout\\./ || terminalFocus)"
       }
     ],
     "menus": {

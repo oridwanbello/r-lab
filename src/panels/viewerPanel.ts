@@ -101,10 +101,8 @@ export class ViewerPanel {
 
         this._panel.webview.onDidReceiveMessage(
             (msg: { type: string; dataUrl?: string; error?: string }) => {
-                let requiresFocusRestore = true;
                 switch (msg.type) {
                     case 'ready':
-                        requiresFocusRestore = false;
                         this._updateWebviewState();
                         if (this._focusPending) {
                             this._focusPending = false;
@@ -151,7 +149,6 @@ export class ViewerPanel {
                         this._handleClearAll();
                         break;
                     case 'popout':
-                        requiresFocusRestore = false;
                         this._isPoppedOut = true;
                         this._focusPending = true;
                         suppressGuardForPanelMove();
@@ -163,7 +160,6 @@ export class ViewerPanel {
                         this._updateWebviewState();
                         break;
                     case 'restore':
-                        requiresFocusRestore = false;
                         this._isPoppedOut = false;
                         this._focusPending = true;
                         suppressGuardForPanelMove();
@@ -175,12 +171,6 @@ export class ViewerPanel {
                         enforceGroup3TabOrder('Viewer');
                         this._updateWebviewState();
                         break;
-                }
-                
-                if (requiresFocusRestore) {
-                    setTimeout(() => {
-                        vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
-                    }, 150);
                 }
             },
             null,
@@ -324,14 +314,18 @@ export class ViewerPanel {
                                 if (e.data.command === 'exportPng') {
                                     var plotlyDiv = document.querySelector('.js-plotly-plot');
                                     if (window.Plotly && plotlyDiv) {
-                                        window.Plotly.toImage(plotlyDiv, {format: 'png', width: plotlyDiv.clientWidth, height: plotlyDiv.clientHeight}).then(function(dataUrl) {
+                                        window.Plotly.toImage(plotlyDiv, {format: 'png', width: plotlyDiv.clientWidth, height: plotlyDiv.clientHeight, scale: 3}).then(function(dataUrl) {
                                             window.parent.postMessage({ type: 'pngExported', dataUrl: dataUrl }, '*');
                                         }).catch(function(err) {
                                             window.parent.postMessage({ type: 'pngExportFailed', error: err.toString() }, '*');
                                         });
                                     } else {
                                         var doHtml2Canvas = function() {
-                                            window.html2canvas(document.body, { useCORS: true, allowTaint: true }).then(function(canvas) {
+                                            window.html2canvas(document.body, {
+                                                scale: 4,
+                                                useCORS: true,
+                                                allowTaint: true
+                                            }).then(function(canvas) {
                                                 window.parent.postMessage({ type: 'pngExported', dataUrl: canvas.toDataURL() }, '*');
                                             }).catch(function(err) {
                                                 window.parent.postMessage({ type: 'pngExportFailed', error: err.toString() }, '*');
@@ -366,6 +360,14 @@ export class ViewerPanel {
                             }
                             .modebar-btn:hover svg {
                                 fill: #000 !important;
+                            }
+                            /* Add scrollable breathing room to interactive tables ONLY in narrow panels.
+                               This preserves perfect margin centering when moved to the wide editor. */
+                            @media (max-width: 1024px) {
+                                .dataTables_wrapper table.dataTable,
+                                .reactable .rt-table {
+                                    border-right: 40px solid transparent !important;
+                                }
                             }
                         </style>`;
                         if (htmlContent.includes('</head>')) {
@@ -406,7 +408,14 @@ export class ViewerPanel {
             const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
             try {
                 fs.writeFileSync(uri.fsPath, base64Data, 'base64');
-                vscode.window.showInformationMessage('Snapshot saved successfully!');
+                vscode.window.setStatusBarMessage('Snapshot saved successfully!', 5000);
+                vscode.window.withProgress({
+                    location: vscode.ProgressLocation.Notification,
+                    title: 'Snapshot saved successfully!',
+                    cancellable: false
+                }, async () => {
+                    await new Promise(r => setTimeout(r, 2000));
+                });
             } catch (err: any) {
                 vscode.window.showErrorMessage(`Failed to save PNG: ${err.message}`);
             }
@@ -464,11 +473,12 @@ export class ViewerPanel {
         if (this._panel.viewColumn !== undefined) {
             this._isPoppedOut = this._panel.viewColumn !== vscode.ViewColumn.Three;
         }
+        const actualMinimized = this._isPoppedOut ? false : this._isMinimized;
         this._panel.webview.postMessage({
             type: 'updateState',
             state: {
                 url: this._currentUrl,
-                minimized: this._isMinimized,
+                minimized: actualMinimized,
                 isNightMode: this._isNightMode,
                 isPoppedOut: this._isPoppedOut,
                 hasPrev: this._currentIndex > 0,

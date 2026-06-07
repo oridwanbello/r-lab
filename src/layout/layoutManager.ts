@@ -1257,10 +1257,20 @@ async function deactivateLayout(): Promise<void> {
         await extensionContext.workspaceState.update('r-layout.viewerState', undefined);
     }
 
+    // Ensure focus is on a text editor before disposing panels to avoid "No active text editor" warnings from vscode-R
+    if (sourceFiles.length > 0) {
+        try {
+            await vscode.window.showTextDocument(sourceFiles[0], { preview: false, preserveFocus: false });
+        } catch {}
+    } else {
+        await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+    }
+
     // 4. Dispose panel singletons (closes our Webview tabs)
     //    We dispose HelpPanel here because we just serialized its state.
     HelpPanel.currentPanel?.dispose();
     PlotsPanel.currentPanel?.dispose();
+    ViewerPanel.currentPanel?.dispose();
     ProblemsPanel.currentPanel?.dispose();
     WorkspacePanel.currentPanel?.dispose();
     DataViewerPanel.currentPanel?.dispose();
@@ -1844,8 +1854,7 @@ local({
 options(.rlayout_plot_dir = "${absPlotsDir}")
 
 # Set default device to null pdf to enable invisible plot recording
-null_dev <- if (.Platform$OS.type == "windows") "NUL" else "/dev/null"
-options(device = function(...) { pdf(file=null_dev, ...); dev.control("enable") })
+options(device = function(...) { pdf(file=NULL, ...); dev.control("enable") })
 
 # Function to emit an SVG placeholder for interactive widgets
 .rlayout_emit_interactive_placeholder <- function() {

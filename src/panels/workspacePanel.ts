@@ -73,37 +73,36 @@ export class WorkspacePanel {
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
         this._panel.onDidChangeViewState(
-            (e) => { if (e.webviewPanel.visible) { this._refreshWorkspace(); } },
+            (e) => {
+                this._updateMinimizedState();
+                if (e.webviewPanel.visible) { this._refreshWorkspace(); }
+            },
             null,
             this._disposables
         );
 
         this._panel.webview.onDidReceiveMessage(
             async (msg: { type: string; varName?: string; pkgName?: string }) => {
-                let requiresFocusRestore = false;
                 switch (msg.type) {
                     case 'ready':
+                        this._updateMinimizedState();
                         await this._refreshWorkspace();
                         if (this._packages.length === 0) {
                             this._fetchInstalledPackages();
                         }
                         break;
                     case 'refresh':
-                        requiresFocusRestore = true;
                         await this._refreshWorkspace();
                         break;
                     case 'viewData':
-                        requiresFocusRestore = true;
                         if (msg.varName && this._onRequestDataView) {
                             this._onRequestDataView(msg.varName);
                         }
                         break;
                     case 'attachPackage':
-                        requiresFocusRestore = true;
                         if (msg.pkgName) { this._sendToRConsole(`library(${msg.pkgName})`); }
                         break;
                     case 'detachPackage':
-                        requiresFocusRestore = true;
                         if (msg.pkgName) {
                             if (msg.pkgName === 'later') {
                                 this._sendToRConsole(`detach("package:${msg.pkgName}")`);
@@ -113,15 +112,8 @@ export class WorkspacePanel {
                         }
                         break;
                     case 'refreshPackages':
-                        requiresFocusRestore = true;
                         await this._fetchInstalledPackages();
                         break;
-                }
-                
-                if (requiresFocusRestore) {
-                    setTimeout(() => {
-                        vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
-                    }, 150);
                 }
             },
             null,
@@ -148,8 +140,17 @@ export class WorkspacePanel {
         this._panel.reveal(undefined, true);
     }
 
+    private _isMinimized = false;
+
     public setMinimized(minimized: boolean): void {
-        this._panel.webview.postMessage({ command: 'setMinimized', minimized });
+        this._isMinimized = minimized;
+        this._updateMinimizedState();
+    }
+
+    private _updateMinimizedState(): void {
+        const isPoppedOut = this._panel.viewColumn !== vscode.ViewColumn.Three && this._panel.viewColumn !== undefined;
+        const actualMinimized = isPoppedOut ? false : this._isMinimized;
+        this._panel.webview.postMessage({ command: 'setMinimized', minimized: actualMinimized });
     }
 
     public forceRefresh(): void {
@@ -663,10 +664,10 @@ tryCatch({
         body.minimized > * { display: none !important; }
 
         /* ── Tab Bar ── */
-        .tabs { 
-            display: flex; align-items: center; border-bottom: 1px solid var(--vscode-editorGroup-border); 
-            background: var(--vscode-editor-background); flex-shrink: 0; 
-            overflow-x: auto; overflow-y: hidden; 
+        .tabs {
+            display: flex; align-items: center; border-bottom: 1px solid var(--vscode-editorGroup-border);
+            background: var(--vscode-editor-background); flex-shrink: 0;
+            overflow-x: auto; overflow-y: hidden;
         }
         .tabs::-webkit-scrollbar {
             height: 2px;
@@ -1095,7 +1096,7 @@ tryCatch({
                 cEnv.textContent = msg.variables && msg.variables.length > 0 ? '(' + msg.variables.length + ')' : '';
 
                 if (msg.isLoading && !msg.errorMessage && (!msg.variables || msg.variables.length === 0)) {
-                    el.innerHTML = '<div class="status-msg">⏳ Refreshing…</div>';
+                    el.innerHTML = '<div class="status-msg">Refreshing&hellip;</div>';
                     return;
                 }
 

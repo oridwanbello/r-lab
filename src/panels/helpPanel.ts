@@ -96,7 +96,6 @@ export class HelpPanel {
 
         this._panel.webview.onDidReceiveMessage(
             async (msg: { type: string; query?: string }) => {
-                let requiresFocusRestore = true;
                 switch (msg.type) {
                     case 'search':
                         if (msg.query) {
@@ -126,12 +125,6 @@ export class HelpPanel {
                             }
                         }
                         break;
-                }
-                
-                if (requiresFocusRestore) {
-                    setTimeout(() => {
-                        vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
-                    }, 150);
                 }
             },
             null,

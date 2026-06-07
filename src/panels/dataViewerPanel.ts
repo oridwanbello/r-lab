@@ -100,7 +100,6 @@ export class DataViewerPanel {
 
         this._panel.webview.onDidReceiveMessage(
             async (msg: { type: string; varName?: string; slice?: number }) => {
-                let requiresFocusRestore = false;
                 switch (msg.type) {
                     case 'ready':
                         this._render();
@@ -114,14 +113,12 @@ export class DataViewerPanel {
                         }
                         break;
                     case 'refresh':
-                        requiresFocusRestore = true;
                         if (this._varName) {
                             // Manual refresh triggers a full R re-export.
                             await this.loadVariable(this._varName, false);
                         }
                         break;
                     case 'setSlice':
-                        requiresFocusRestore = true;
                         if (this._varName && msg.slice !== undefined) {
                             await this.loadVariable(this._varName, false, msg.slice);
                         }
@@ -132,8 +129,8 @@ export class DataViewerPanel {
                         suppressGuardForPanelMove();
                         this._panel.reveal(vscode.ViewColumn.One, false);
                         vscode.commands.executeCommand('workbench.action.keepEditor');
-                        requiresFocusRestore = true;
                         this._postPoppedState();
+                        setTimeout(() => vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'), 150);
                         break;
                     case 'restore':
                         this._isPoppedOut = false;
@@ -141,16 +138,10 @@ export class DataViewerPanel {
                         suppressGuardForPanelMove();
                         this._panel.reveal(vscode.ViewColumn.Three, false);
                         vscode.commands.executeCommand('workbench.action.keepEditor');
-                        requiresFocusRestore = true;
                         enforceGroup3TabOrder('Data Viewer');
                         this._postPoppedState();
+                        setTimeout(() => vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'), 150);
                         break;
-                }
-                
-                if (requiresFocusRestore) {
-                    setTimeout(() => {
-                        vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
-                    }, 150);
                 }
             },
             null,
@@ -248,7 +239,7 @@ export class DataViewerPanel {
             // Write the request to a file, then send an invisible command to trigger the R callback
             const reqFile = nodePath.join(outDir, '.view_request');
             try { nodeFs.writeFileSync(reqFile, varName, 'utf8'); } catch {}
-            
+
             const hasLaterFile = nodePath.join(outDir, '.has_later');
             if (!nodeFs.existsSync(hasLaterFile)) {
                 rTerminal.sendText(`View(${varName})`, true);
@@ -273,7 +264,7 @@ export class DataViewerPanel {
             const metaLines = metaRaw.replace(/\r/g, '').trim().split('\n');
             this._totalRows = parseInt(metaLines[0], 10) || 0;
             this._totalCols = parseInt(metaLines[1], 10) || 0;
-            
+
             if (metaLines[2] === '3D') {
                 this._is3D = true;
                 this._totalSlices = parseInt(metaLines[3], 10) || 1;
@@ -282,7 +273,7 @@ export class DataViewerPanel {
                 if (!isAutoRefresh) {
                     this._currentSlice = 1;
                 }
-                
+
                 const sliceCsvPath = nodePath.join(outDir, `dv_slice_${this._currentSlice}.csv`);
                 // On Windows, slice CSV may still be locked when meta watcher fires.
                 const csvRaw = await this._waitForCsvReady(sliceCsvPath, 3000);
@@ -470,10 +461,11 @@ export class DataViewerPanel {
             this._isPoppedOut = this._panel.viewColumn !== vscode.ViewColumn.Three;
         }
         const isPoppedOut = this._isPoppedOut;
+        const actualMinimized = isPoppedOut ? false : this._isMinimized;
 
         let mainContent: string;
         if (this._isLoading) {
-            mainContent = `<div class="status-msg">⏳ Loading "${escapeHtml(this._varName)}"…</div>`;
+            mainContent = `<div class="status-msg">Loading "${escapeHtml(this._varName)}"&hellip;</div>`;
         } else if (this._errorMessage) {
             mainContent = `<div class="status-msg error">⚠ ${escapeHtml(this._errorMessage)}</div>`;
         } else if (this._columns.length === 0 && !this._varName) {
@@ -639,9 +631,9 @@ export class DataViewerPanel {
             position: sticky; top: 0; z-index: 1;
             background: var(--vscode-editor-background);
             font-family: var(--vscode-font-family);
-            font-weight: 600; font-style: italic; 
+            font-weight: 600; font-style: italic;
             letter-spacing: 0.5px;
-            color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 65%); 
+            color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 65%);
             opacity: 1;
             cursor: pointer; user-select: none;
             border-bottom: 2px solid var(--vscode-editorGroup-border);
@@ -724,7 +716,7 @@ export class DataViewerPanel {
         .empty-state p { font-size: var(--vscode-font-size, 13px); line-height: 1.6; }
     </style>
 </head>
-<body${this._isMinimized ? ' class="minimized"' : ''}>
+<body${actualMinimized ? ' class="minimized"' : ''}>
     <div class="toolbar">
         <div>
             ${this._varName ? `<span class="meta">${escapeHtml(this._varName)} (${this._totalRows.toLocaleString()} × ${this._totalCols}${this._is3D ? ` × ${this._totalSlices}` : ''})</span>` : ''}

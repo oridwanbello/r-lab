@@ -46,6 +46,7 @@ npm run watch
 - Console Logs: `console.log` statements within the extension code will appear in the "Debug Console" of your primary VS Code window.
 - Testing the Layout: In the Extension Development Host, press `Cmd+Shift+P` and execute "Toggle R Layout" to observe the 3-pane orchestration.
 - Reloading: If you make changes to the source code, compile them, then run the "Developer: Reload Window" command in the Extension Development Host to see the updates.
+- **Pre-Release QA Testing**: Before submitting a Pull Request or releasing a new version, you must complete the manual test suite to ensure complex webviews and OS-specific terminal hooks remain stable. Please refer to our [QA Runbook](docs/QA.md) for the complete testing checklist.
 
 ### Packaging for Distribution
 
