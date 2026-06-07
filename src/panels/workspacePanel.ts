@@ -111,6 +111,16 @@ export class WorkspacePanel {
                             }
                         }
                         break;
+                    case 'removeVariable':
+                        if (msg.varName) {
+                            this._sendToRConsole(`rm(${msg.varName}, envir = .GlobalEnv)`);
+                            await this._refreshWorkspace();
+                        }
+                        break;
+                    case 'clearWorkspace':
+                        this._sendToRConsole("rm(list = ls(all.names = TRUE), envir = .GlobalEnv)");
+                        await this._refreshWorkspace();
+                        break;
                     case 'refreshPackages':
                         await this._fetchInstalledPackages();
                         break;
@@ -636,6 +646,9 @@ tryCatch({
         // Eye icon (pristine Feather Icons)
         const EYE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
 
+        const TRASH_ICON = '<svg viewBox="0 0 16 16"><path fill="none" d="M9.25,2H6.75a0.25,0.25,0,0,0-0.25,0.25V3h3V2.25A0.25,0.25,0,0,0,9.25,2Z"/><path fill="currentColor" d="M13.5,3H10.5V2.25A1.25,1.25,0,0,0,9.25,1H6.75A1.25,1.25,0,0,0,5.5,2.25V3H2.5a0.5,0.5,0,0,0,0,1H3L3.63,13.53C3.67,14.37,4.31,15,5.13,15h5.75c0.82,0,1.45-.62,1.5-1.47L13,4h0.5a0.5,0.5,0,0,0,0-1ZM6,13H6a0.5,0.5,0,0,1-.5-.48l-0.25-7a0.5,0.5,0,1,1,1-.04l0.25,7A0.5,0.5,0,0,1,6,13ZM8.5,12.5a0.5,0.5,0,0,1-1,0V5.5a0.5,0.5,0,0,1,1,0ZM9.5,3H6.5V2.25a0.25,0.25,0,0,1,.25-.25h2.5a0.25,0.25,0,0,1,.25.25Zm1,9.55a0.5,0.5,0,0,1-.5.45H10a0.5,0.5,0,0,1-.5-.52l0.25-7a0.5,0.5,0,1,1,1,.04Z"/></svg>';
+        const BROOM_ICON = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.91,1.81L13.85,2.76L10.04,6.57C10.75,7.59 10.85,8.83 10.25,9.63L6.04,5.41C6.84,4.81 8.07,4.91 9.1,5.63L12.91,1.81M3.95,11.71C2.61,10.37 1.79,8.77 1.57,7.28L4.82,5.89L9.78,10.85L8.39,14.1C6.89,13.87 5.29,13.05 3.95,11.71Z"/></svg>';
+
         // Paperclip icon (pristine Feather Icons) for attached objects
         const PAPERCLIP_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-paperclip"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
 
@@ -786,6 +799,32 @@ tryCatch({
         }
         .view-btn:hover { opacity: 1; }
         .view-btn svg { display: block; }
+
+        /* ── Remove & Clear Buttons ── */
+        .remove-btn, .clear-all-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+            color: var(--vscode-foreground);
+            opacity: 0.5;
+            vertical-align: middle;
+            flex-shrink: 0;
+        }
+        .remove-btn { margin-right: 6px; width: 14px; height: 14px; }
+        .remove-btn svg { display: block; width: 14px; height: 14px; }
+        .clear-all-btn { margin-right: 6px; width: 14px; height: 14px; }
+        .clear-all-btn svg { display: block; width: 14px; height: 14px; }
+
+        .remove-btn:hover, .clear-all-btn:hover {
+            opacity: 1;
+            color: var(--vscode-errorForeground);
+        }
+
+        .name-header-col { white-space: nowrap; }
 
         /* ── Status Messages ── */
         .status-msg { padding: 20px; text-align: center; opacity: 0.6; }
@@ -1056,6 +1095,8 @@ tryCatch({
             const ICON_ATTACHED = '${ICON_ATTACHED.replace(/'/g, "\\'")}';
             const ICON_LOADED = '${ICON_LOADED.replace(/'/g, "\\'")}';
             const EYE_ICON = '${EYE_ICON.replace(/'/g, "\\'")}';
+            const TRASH_ICON = '${TRASH_ICON.replace(/'/g, "\\'")}';
+            const BROOM_ICON = '${BROOM_ICON.replace(/'/g, "\\'")}';
             const PAPERCLIP_ICON = '${PAPERCLIP_ICON.replace(/'/g, "\\'")}';
 
             let currentFilter = 'all';
@@ -1114,14 +1155,15 @@ tryCatch({
                     const btn = v.isDataFrame
                         ? '<button class="view-btn" data-var="' + escapeHtml(v.name) + '" data-tooltip="View in Data Viewer">' + EYE_ICON + '</button>'
                         : '';
+                    const removeBtn = '<button class="remove-btn" data-var="' + escapeHtml(v.name) + '" data-tooltip="Remove Variable">' + TRASH_ICON + '</button>';
                     return '<tr class="var-row">'
-                        + '<td class="name-col frozen-col"><span class="var-name">' + escapeHtml(v.name) + '</span>' + btn + '</td>'
+                        + '<td class="name-col frozen-col">' + removeBtn + '<span class="var-name">' + escapeHtml(v.name) + '</span>' + btn + '</td>'
                         + '<td class="type-col">' + escapeHtml(v.type) + '</td>'
                         + '<td class="size-col">' + escapeHtml(v.size) + '</td>'
                         + '<td class="preview-col">' + escapeHtml(v.preview) + '</td>'
                         + '</tr>';
                 }).join('');
-                el.innerHTML = '<table><thead><tr><th class="frozen-col">Name</th><th>Class</th><th>Size</th><th>Value</th></tr></thead><tbody>' + rows + '</tbody></table>';
+                el.innerHTML = '<table><thead><tr><th class="frozen-col name-header-col"><button class="clear-all-btn" id="btn-clear-env" data-tooltip="Clear All Variables">' + BROOM_ICON + '</button><span>Name</span></th><th>Class</th><th>Size</th><th>Value</th></tr></thead><tbody>' + rows + '</tbody></table>';
 
                 attachViewListeners();
             }
@@ -1134,6 +1176,20 @@ tryCatch({
                         if (varName) vscode.postMessage({ type: 'viewData', varName });
                     });
                 });
+                document.querySelectorAll('.remove-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const varName = btn.getAttribute('data-var');
+                        if (varName) vscode.postMessage({ type: 'removeVariable', varName });
+                    });
+                });
+                const clearBtn = document.getElementById('btn-clear-env');
+                if (clearBtn) {
+                    clearBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        vscode.postMessage({ type: 'clearWorkspace' });
+                    });
+                }
             }
 
             // ── Packages Rendering ──
