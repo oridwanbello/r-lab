@@ -85,6 +85,10 @@ export class ViewerPanel {
         this._updateWebviewState();
     }
 
+    public restoreActivePlotlyWidgetAfterPaneSplit(): void {
+        this._panel.webview.postMessage({ type: 'restorePaneSplit' });
+    }
+
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
         this._panel = panel;
         this._extensionUri = extensionUri;
@@ -326,24 +330,11 @@ export class ViewerPanel {
                         const styleInject = `
                         <script>
                             window.addEventListener('message', function(e) {
-                                if (e.data.command === 'resize') {
-                                    var resizePlotlyDiv = document.querySelector('.js-plotly-plot');
-                                    if (window.Plotly && resizePlotlyDiv) {
-                                        var refreshPlotly = function() {
-                                            try {
-                                                var resized = window.Plotly.Plots && window.Plotly.Plots.resize
-                                                    ? window.Plotly.Plots.resize(resizePlotlyDiv)
-                                                    : Promise.resolve();
-                                                Promise.resolve(resized).then(function() {
-                                                    if (window.Plotly.redraw) return window.Plotly.redraw(resizePlotlyDiv);
-                                                }).catch(function() {});
-                                            } catch (err) {}
-                                        };
-                                        refreshPlotly();
-                                        setTimeout(refreshPlotly, 120);
-                                        setTimeout(refreshPlotly, 320);
-                                        setTimeout(refreshPlotly, 700);
+                                if (e.data.command === 'restorePaneSplit') {
+                                    if (window.Plotly && document.querySelector('.js-plotly-plot')) {
+                                        window.location.reload();
                                     }
+                                } else if (e.data.command === 'resize') {
                                     window.dispatchEvent(new Event('resize'));
                                 } else if (e.data.command === 'exportPng') {
                                     var plotlyDiv = document.querySelector('.js-plotly-plot');
@@ -807,6 +798,15 @@ export class ViewerPanel {
             }, 300);
         }
 
+        function restorePlotlyAfterPaneSplit() {
+            if (!currentUrl || !frame.contentWindow) return;
+            setTimeout(() => {
+                try {
+                    frame.contentWindow.postMessage({ command: 'restorePaneSplit' }, '*');
+                } catch {}
+            }, 120);
+        }
+
         frame.addEventListener('load', () => {
             setRendering(false);
             nudgeIframeLayout();
@@ -818,7 +818,9 @@ export class ViewerPanel {
         // Handle messages from backend
         window.addEventListener('message', event => {
             const msg = event.data;
-            if (msg.type === 'updateState') {
+            if (msg.type === 'restorePaneSplit') {
+                restorePlotlyAfterPaneSplit();
+            } else if (msg.type === 'updateState') {
                 const state = msg.state;
                 const newUrl = state.url || '';
 

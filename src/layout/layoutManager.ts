@@ -337,6 +337,7 @@ export function registerLayoutCommand(
             PlotsPanel.currentPanel?.setMinimized(false);
             DataViewerPanel.currentPanel?.setMinimized(false);
             ViewerPanel.currentPanel?.setMinimized(false);
+            ViewerPanel.currentPanel?.restoreActivePlotlyWidgetAfterPaneSplit();
 
             await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', false);
         })
