@@ -206,6 +206,15 @@ export class ProblemsPanel {
         .pane-title { font-weight: 600; text-transform: uppercase; opacity: 0.7; }
         .summary { opacity: 0.7; }
         .content { flex: 1; overflow: auto; }
+        .status-msg {
+            min-height: 100%;
+            padding: 20px;
+            text-align: center;
+            opacity: 0.6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
         .file-group { margin-bottom: 2px; }
         .file-header {
             display: flex;
@@ -337,5 +346,4 @@ function severityIcon(severity: vscode.DiagnosticSeverity): string {
         default: return '<i class="codicon codicon-record"></i>';
     }
 }
-
 

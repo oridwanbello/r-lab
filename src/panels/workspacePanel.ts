@@ -118,7 +118,9 @@ export class WorkspacePanel {
                         }
                         break;
                     case 'clearWorkspace':
-                        this._sendToRConsole("rm(list = ls(all.names = TRUE), envir = .GlobalEnv)");
+                        this._sendToRConsole(
+                            'rm(list = grep(.r_layout_protected_objects, ls(envir = .GlobalEnv, all.names = TRUE), value = TRUE, invert = TRUE), envir = .GlobalEnv)'
+                        );
                         await this._refreshWorkspace();
                         break;
                     case 'refreshPackages':
@@ -827,7 +829,16 @@ tryCatch({
         .name-header-col { white-space: nowrap; }
 
         /* ── Status Messages ── */
-        .status-msg { padding: 20px; text-align: center; opacity: 0.6; }
+        .status-msg {
+            flex: 1;
+            min-height: 100%;
+            padding: 20px;
+            text-align: center;
+            opacity: 0.6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
         .status-msg.error { color: var(--vscode-errorForeground); opacity: 0.9; white-space: pre-wrap; }
 
         /* ── Empty State ── */
@@ -843,6 +854,11 @@ tryCatch({
             padding: 2px 5px;
             border-radius: 6px;
             font-size: 0.9em;
+        }
+        .attached-empty code {
+            background: none;
+            padding: 0;
+            border-radius: 0;
         }
 
         /* ── Custom Instant Tooltip ── */
@@ -1277,7 +1293,7 @@ tryCatch({
                 cAttached.textContent = items.length > 0 ? '(' + items.length + ')' : '';
 
                 if (items.length === 0) {
-                    el.innerHTML = '<div class="empty-state">' + PAPERCLIP_ICON + '<p>No attached objects.<br/>Use <code>attach(data)</code> to add objects<br/>to the search path.</p></div>';
+                    el.innerHTML = '<div class="empty-state attached-empty">' + PAPERCLIP_ICON + '<p>No attached objects.<br/>Use <code>attach(data)</code> to add objects<br/>to the search path.</p></div>';
                     return;
                 }
 
@@ -1339,6 +1355,9 @@ tryCatch({
                     el.addEventListener('mouseleave', () => {
                         tooltip.style.display = 'none';
                     });
+                    el.addEventListener('click', () => {
+                        tooltip.style.display = 'none';
+                    });
                 });
             }
             setupTooltips();
@@ -1364,4 +1383,3 @@ tryCatch({
         }
     }
 }
-

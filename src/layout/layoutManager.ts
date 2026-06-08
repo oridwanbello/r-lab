@@ -161,7 +161,7 @@ export function registerLayoutCommand(
         // Escape backslashes for Windows paths; forward slashes work on all platforms
         const escapedPath = filePath.replace(/\\/g, '/');
         rConsoleTerminal.show(false); // bring it into view without stealing keyboard focus
-        rConsoleTerminal.sendText(`source('${escapedPath}', echo = FALSE)`);
+        rConsoleTerminal.sendText(`source('${escapedPath}', echo = FALSE, print.eval = TRUE)`);
     };
 
     context.subscriptions.push(
@@ -1054,9 +1054,12 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                     }
                 }
                 if (varName) {
-                    const dvp = DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
-                    dvp.loadVariable(varName, true);
-                    dvp.reveal();
+                    const existingPanel = DataViewerPanel.currentPanel;
+                    const dvp = existingPanel || DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
+                    await dvp.loadVariable(varName, true);
+                    if (!dvp.isPoppedOut()) {
+                        dvp.reveal();
+                    }
                 }
             } catch {}
         };
@@ -1238,6 +1241,8 @@ async function deactivateLayout(): Promise<void> {
                     panelPositions['workspace'] = group.viewColumn;
                 } else if (tab.label === 'Data Viewer') {
                     panelPositions['dataViewer'] = group.viewColumn;
+                } else if (tab.label === 'Viewer') {
+                    panelPositions['viewer'] = group.viewColumn;
                 } else if (tab.label === 'Problems') {
                     panelPositions['problems'] = group.viewColumn;
                 }
@@ -1269,23 +1274,20 @@ async function deactivateLayout(): Promise<void> {
         await extensionContext.workspaceState.update('r-layout.viewerState', undefined);
     }
 
-    // Ensure focus is on a text editor before disposing panels to avoid "No active text editor" warnings from vscode-R
-    if (sourceFiles.length > 0) {
-        try {
-            await vscode.window.showTextDocument(sourceFiles[0], { preview: false, preserveFocus: false });
-        } catch {}
-    } else {
-        await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
-    }
+    // Ensure focus is on a text editor before disposing panels to avoid
+    // "No active text editor" warnings from vscode-R when the active tab is
+    // a popped-out R Layout webview in the main editor area.
+    await focusTextEditorBeforePanelDisposal(sourceFiles);
 
-    // 4. Dispose panel singletons (closes our Webview tabs)
-    //    We dispose HelpPanel here because we just serialized its state.
-    HelpPanel.currentPanel?.dispose();
-    PlotsPanel.currentPanel?.dispose();
-    ViewerPanel.currentPanel?.dispose();
-    ProblemsPanel.currentPanel?.dispose();
-    WorkspacePanel.currentPanel?.dispose();
-    DataViewerPanel.currentPanel?.dispose();
+    // 4. Dispose panel singletons (closes our Webview tabs). VS Code can clear
+    // activeTextEditor after any individual webview closes, so restore the text
+    // focus between disposals when needed.
+    await disposePanelWithTextFocus(() => HelpPanel.currentPanel?.dispose(), sourceFiles);
+    await disposePanelWithTextFocus(() => PlotsPanel.currentPanel?.dispose(), sourceFiles);
+    await disposePanelWithTextFocus(() => ViewerPanel.currentPanel?.dispose(), sourceFiles);
+    await disposePanelWithTextFocus(() => ProblemsPanel.currentPanel?.dispose(), sourceFiles);
+    await disposePanelWithTextFocus(() => WorkspacePanel.currentPanel?.dispose(), sourceFiles);
+    await disposePanelWithTextFocus(() => DataViewerPanel.currentPanel?.dispose(), sourceFiles);
 
     // 5. Restore user settings FIRST - before moving terminals or reopening files -
     //    so that terminal defaults are correct when moving, and closeEmptyGroups
@@ -1345,12 +1347,14 @@ async function deactivateLayout(): Promise<void> {
             try { await vscode.window.tabGroups.close(tab); } catch {}
         }
     }
+    await focusTextEditorBeforePanelDisposal(sourceFiles);
 
     // 8. Reset to single editor group.
     await vscode.commands.executeCommand('vscode.setEditorLayout', {
         orientation: 0,
         groups: [{}],
     });
+    await focusTextEditorBeforePanelDisposal(sourceFiles);
 
     // 9. Restore the sidebar
     try {
@@ -1929,10 +1933,22 @@ options(browser = function(url) {
 
         .file <- file.path(.out_dir, sprintf("plot_%05d.png", .rlayout_current_plot_id))
         .rds_file <- file.path(.out_dir, sprintf("plot_%05d.rds", .rlayout_current_plot_id))
-        try(saveRDS(.p, .rds_file), silent = TRUE)
-        png(filename = .file, width = 1600, height = 1200, res = 200, bg = "white")
+        .tmp_file <- tempfile("rlayout_plot_", tmpdir = .out_dir, fileext = ".tmp")
+        png(filename = .tmp_file, width = 1600, height = 1200, res = 200, bg = "white")
         try(replayPlot(.p), silent = TRUE)
         dev.off()
+        .tmp_size <- file.info(.tmp_file)$size
+        if (!is.na(.tmp_size) && .tmp_size > 12000) {
+          try(saveRDS(.p, .rds_file), silent = TRUE)
+          if (file.exists(.file)) unlink(.file)
+          if (!file.rename(.tmp_file, .file)) {
+            file.copy(.tmp_file, .file, overwrite = TRUE)
+            unlink(.tmp_file)
+          }
+        } else {
+          unlink(.tmp_file)
+          .rlayout_last_plot_hash <<- NULL
+        }
       }
     }
   }
@@ -1940,7 +1956,9 @@ options(browser = function(url) {
 
 .rlayout_update_plot_id_base <- function() {
   if (dev.cur() > 1 && !isTRUE(par("page"))) return()
-  # Force save the PREVIOUS plot before we clear the device
+  # Force save the previous plot before a new page clears it.
+  # .rlayout_force_save_plot renders to a temp PNG first and rejects blank
+  # device captures, which Windows can expose as non-empty display lists.
   tryCatch(.rlayout_force_save_plot(), error = function(e) {})
   .rlayout_advance_next_plot <<- TRUE
 }
@@ -1995,12 +2013,16 @@ if (exists(".Last", envir = .GlobalEnv)) {
 
 # 5. Data Viewer export function.
 #    .rlayout_csv and .rlayout_meta are already set above - no paths needed at call time.
-.r_layout_view_data <- function(varName) {
+.r_layout_protected_objects <- "^\\\\.rlayout_|^\\\\.r_layout|^null_dev$|^\\\\.First$|^\\\\.Last$|^View$"
+
+.r_layout_view_data <- function(varName, rowLimit = 1000) {
   .rlayout_active_df_to_export <<- varName
   tryCatch({
     unlink(.rlayout_meta)
     unlink(.rlayout_csv)
     obj <- get(varName, envir = .GlobalEnv)
+    rowLimit <- suppressWarnings(as.integer(rowLimit))
+    if (is.na(rowLimit) || rowLimit < 1) rowLimit <- 1000
 
     is3D <- is.array(obj) && length(dim(obj)) == 3
     if (!is3D && !is.data.frame(obj) && !is.matrix(obj)) {
@@ -2045,7 +2067,7 @@ if (exists(".Last", envir = .GlobalEnv)) {
         if (!is.data.frame(slice_obj)) {
           slice_obj <- as.data.frame(slice_obj, check.names = FALSE)
         }
-        write.csv(head(slice_obj, 1000), file.path(dirname(.rlayout_csv), sprintf("dv_slice_%d.csv", i)), row.names = TRUE, na = "NA")
+        write.csv(head(slice_obj, rowLimit), file.path(dirname(.rlayout_csv), sprintf("dv_slice_%d.csv", i)), row.names = TRUE, na = "NA")
       }
 
       writeLines(c(
@@ -2062,7 +2084,7 @@ if (exists(".Last", envir = .GlobalEnv)) {
 
         obj <- as.data.frame(obj, check.names = FALSE)
       }
-      write.csv(head(obj, 1000), .rlayout_csv, row.names = TRUE, na = "NA")
+      write.csv(head(obj, rowLimit), .rlayout_csv, row.names = TRUE, na = "NA")
       writeLines(c(as.character(nrow(obj)), as.character(ncol(obj)), "2D", varName), .rlayout_meta)
     }
   }, error = function(e) {
@@ -2100,8 +2122,10 @@ invisible(local({
         try({
           .var_req <- readLines(.view_req_path, warn = FALSE)
           if (length(.var_req) > 0 && nchar(.var_req[1]) > 0) {
+             .row_limit <- if (length(.var_req) >= 2) suppressWarnings(as.integer(.var_req[2])) else 1000
+             if (is.na(.row_limit) || .row_limit < 1) .row_limit <- 1000
              if (exists(.var_req[1], envir = .GlobalEnv)) {
-               .r_layout_view_data(.var_req[1])
+               .r_layout_view_data(.var_req[1], .row_limit)
              }
           }
           unlink(.view_req_path)
@@ -2135,8 +2159,10 @@ invisible(local({
         try({
           .var_req <- readLines(.view_req_path, warn = FALSE)
           if (length(.var_req) > 0 && nchar(.var_req[1]) > 0) {
+             .row_limit <- if (length(.var_req) >= 2) suppressWarnings(as.integer(.var_req[2])) else 1000
+             if (is.na(.row_limit) || .row_limit < 1) .row_limit <- 1000
              if (exists(.var_req[1], envir = .GlobalEnv)) {
-               .r_layout_view_data(.var_req[1])
+               .r_layout_view_data(.var_req[1], .row_limit)
              }
           }
           unlink(.view_req_path)
@@ -2162,6 +2188,69 @@ invisible(local({
 
 function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function focusTextEditorBeforePanelDisposal(sourceFiles: vscode.Uri[]): Promise<void> {
+    const visibleEditor = vscode.window.visibleTextEditors.find(e => e.viewColumn === vscode.ViewColumn.One)
+        || vscode.window.visibleTextEditors[0];
+
+    if (visibleEditor) {
+        try {
+            await vscode.window.showTextDocument(visibleEditor.document, {
+                viewColumn: visibleEditor.viewColumn,
+                preview: false,
+                preserveFocus: false,
+            });
+            await delay(80);
+            if (vscode.window.activeTextEditor) {
+                return;
+            }
+        } catch {}
+    }
+
+    for (const uri of sourceFiles) {
+        try {
+            await vscode.window.showTextDocument(uri, {
+                viewColumn: vscode.ViewColumn.One,
+                preview: false,
+                preserveFocus: false,
+            });
+            await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+            await delay(120);
+            if (vscode.window.activeTextEditor) {
+                return;
+            }
+        } catch {}
+    }
+
+    try {
+        await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+        await delay(120);
+        if (vscode.window.activeTextEditor) {
+            return;
+        }
+    } catch {}
+
+    try {
+        const doc = await vscode.workspace.openTextDocument({ content: '', language: 'plaintext' });
+        currentAnchorUri = doc.uri.toString();
+        await vscode.window.showTextDocument(doc, {
+            viewColumn: vscode.ViewColumn.One,
+            preview: false,
+            preserveFocus: false,
+        });
+        await delay(120);
+    } catch {}
+}
+
+async function disposePanelWithTextFocus(disposePanel: () => void, sourceFiles: vscode.Uri[]): Promise<void> {
+    try {
+        disposePanel();
+    } catch {}
+    await delay(40);
+    if (!vscode.window.activeTextEditor) {
+        await focusTextEditorBeforePanelDisposal(sourceFiles);
+    }
 }
 
 function getConfigTarget(): vscode.ConfigurationTarget {

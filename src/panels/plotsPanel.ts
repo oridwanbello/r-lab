@@ -788,9 +788,11 @@ tryCatch({
     <meta http-equiv="Content-Security-Policy"
           content="default-src 'none';
                    img-src ${webview.cspSource} data:;
-                   style-src 'nonce-${nonce}';
+                   style-src 'nonce-${nonce}' https://cdn.jsdelivr.net;
+                   font-src https://cdn.jsdelivr.net;
                    script-src 'nonce-${nonce}';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/@vscode/codicons@0.0.36/dist/codicon.min.css" rel="stylesheet">
     <style nonce="${nonce}">
         * { margin: 0; padding: 0; box-sizing: border-box; }
         ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
@@ -1107,6 +1109,11 @@ tryCatch({
             box-shadow: none !important;
         }
         .empty-state {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
             text-align: center;
             opacity: 0.3;
         }
@@ -1333,6 +1340,9 @@ tryCatch({
             align-items: center;
             gap: 6px;
         }
+        .export-modal-instruction .codicon {
+            color: var(--vscode-textLink-foreground);
+        }
         .export-modal-main-area {
             display: flex;
             flex-direction: row;
@@ -1548,7 +1558,7 @@ tryCatch({
         <div class="export-modal-content">
             <div class="export-modal-top-strip">
                 <div class="export-modal-instruction">
-                    <svg viewBox="0 0 16 16" width="14" height="14" fill="var(--vscode-textLink-foreground)"><path d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8z" fill-rule="evenodd"/><path d="M7.25 11.5v-4h1.5v4h-1.5zm.75-6a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>
+                    <i class="codicon codicon-info"></i>
                     Drag the bottom-right corner of the plot below to find your best aspect ratio.
                 </div>
             </div>
@@ -2565,6 +2575,9 @@ tryCatch({
                 el.addEventListener('mouseleave', () => {
                     tooltip.style.display = 'none';
                 });
+                el.addEventListener('click', () => {
+                    tooltip.style.display = 'none';
+                });
             };
 
             document.querySelectorAll('[data-tooltip]').forEach(setupTooltip);
@@ -2638,4 +2651,3 @@ tryCatch({
 }
 
 //  Utility
-

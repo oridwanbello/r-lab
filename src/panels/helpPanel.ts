@@ -487,7 +487,15 @@ export class HelpPanel {
         .btn-home:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground) !important; }
         .btn-home svg { width: 16px; height: 16px; display: block; }
         .content { flex: 1; overflow: auto; }
-        .status-msg { padding: 20px; text-align: center; opacity: 0.6; }
+        .status-msg {
+            min-height: 100%;
+            padding: 20px;
+            text-align: center;
+            opacity: 0.6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
 
 
         .help-html-content {
@@ -921,6 +929,9 @@ export class HelpPanel {
                 el.addEventListener('mouseleave', () => {
                     tooltip.style.display = 'none';
                 });
+                el.addEventListener('click', () => {
+                    tooltip.style.display = 'none';
+                });
             });
 
             // Process KaTeX Mathematics
@@ -982,5 +993,4 @@ function stripTerminalFormatting(text: string): string {
         // Normalize any remaining stray backspaces
         .replace(/\x08/g, '');
 }
-
 

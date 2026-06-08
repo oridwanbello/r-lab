@@ -641,7 +641,28 @@ export class ViewerPanel {
             box-shadow: 0 4px 12px rgba(0,0,0,0.08);
         }
 
+        .render-overlay {
+            position: absolute;
+            inset: 0 8px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: var(--vscode-editor-background);
+            color: var(--vscode-descriptionForeground);
+            font-size: var(--vscode-font-size, 13px);
+            z-index: 2;
+            pointer-events: none;
+        }
+        .render-overlay.loading {
+            display: flex;
+        }
+
         .empty-state {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
             text-align: center;
             opacity: 0.3;
         }
@@ -713,6 +734,7 @@ export class ViewerPanel {
             <p style="font-size: 0.85em; opacity: 0.8; margin-top: 8px;">Run an HTML widget or Shiny app to view it here.</p>
         </div>
         <iframe id="viewer-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"></iframe>
+        <div id="render-overlay" class="render-overlay">Rendering&hellip;</div>
     </div>
 
     <div id="tooltip" class="tooltip"></div>
@@ -724,6 +746,7 @@ export class ViewerPanel {
 
         const frame = document.getElementById('viewer-frame');
         const emptyState = document.getElementById('empty-state');
+        const renderOverlay = document.getElementById('render-overlay');
         const btnRefresh = document.getElementById('btn-refresh');
         const btnSnapshot = document.getElementById('btn-snapshot');
         const btnExternal = document.getElementById('btn-external');
@@ -737,6 +760,19 @@ export class ViewerPanel {
 
         let currentUrl = '';
         let isPoppedOut = false;
+
+        function setRendering(isRendering) {
+            if (renderOverlay) {
+                renderOverlay.classList.toggle('loading', !!isRendering);
+            }
+        }
+
+        frame.addEventListener('load', () => {
+            setRendering(false);
+        });
+        frame.addEventListener('error', () => {
+            setRendering(false);
+        });
 
         // Handle messages from backend
         window.addEventListener('message', event => {
@@ -767,6 +803,7 @@ export class ViewerPanel {
                 if (newUrl !== currentUrl) {
                     currentUrl = newUrl;
                     if (currentUrl) {
+                        setRendering(true);
                         frame.src = currentUrl;
                         frame.style.display = 'block';
                         emptyState.style.display = 'none';
@@ -781,6 +818,7 @@ export class ViewerPanel {
                         btnDelete.removeAttribute('disabled');
                         btnClear.removeAttribute('disabled');
                     } else {
+                        setRendering(false);
                         frame.src = '';
                         frame.style.display = 'none';
                         emptyState.style.display = 'block';
@@ -820,6 +858,7 @@ export class ViewerPanel {
 
         btnRefresh.addEventListener('click', () => {
             if (!btnRefresh.hasAttribute('disabled') && currentUrl) {
+                setRendering(true);
                 frame.src = frame.src;
             }
         });
@@ -833,6 +872,20 @@ export class ViewerPanel {
         btnNext.addEventListener('click', () => {
             if (!btnNext.hasAttribute('disabled')) {
                 vscode.postMessage({ type: 'navigateNext' });
+            }
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                if (!btnPrev.hasAttribute('disabled')) {
+                    vscode.postMessage({ type: 'navigatePrev' });
+                }
+            } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                if (!btnNext.hasAttribute('disabled')) {
+                    vscode.postMessage({ type: 'navigateNext' });
+                }
             }
         });
 
@@ -888,6 +941,9 @@ export class ViewerPanel {
                 tooltip.style.left = left + 'px';
             });
             el.addEventListener('mouseleave', () => {
+                tooltip.style.display = 'none';
+            });
+            el.addEventListener('click', () => {
                 tooltip.style.display = 'none';
             });
         });

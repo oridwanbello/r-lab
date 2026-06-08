@@ -32,6 +32,7 @@ export class DataViewerPanel {
     private _focusPending: boolean = false;
     private _lastRenderHash = '';
     private _disposables: vscode.Disposable[] = [];
+    private _rowLimit = 1000;
 
     // 3D Matrix Navigation State
     private _is3D = false;
@@ -118,6 +119,12 @@ export class DataViewerPanel {
                             await this.loadVariable(this._varName, false);
                         }
                         break;
+                    case 'loadNext':
+                        if (this._varName && this._rows.length < this._totalRows) {
+                            this._rowLimit = Math.min(this._rowLimit + 1000, this._totalRows);
+                            await this.loadVariable(this._varName, false);
+                        }
+                        break;
                     case 'setSlice':
                         if (this._varName && msg.slice !== undefined) {
                             await this.loadVariable(this._varName, false, msg.slice);
@@ -175,6 +182,13 @@ export class DataViewerPanel {
         }
     }
 
+    public isPoppedOut(): boolean {
+        if (this._panel.viewColumn !== undefined) {
+            this._isPoppedOut = this._panel.viewColumn !== vscode.ViewColumn.Three;
+        }
+        return this._isPoppedOut;
+    }
+
     /** Hide or show all webview content (toolbar, table, controls).
      *  Used when the top-right pane is maximized so only the
      *  VS Code tab bar remains visible for the bottom-right group.
@@ -191,6 +205,9 @@ export class DataViewerPanel {
      *  which avoids polluting the user's history with massive chunks of code.
      */
     public async loadVariable(varName: string, isAutoRefresh: boolean = false, sliceIndex?: number): Promise<void> {
+        if (varName !== this._varName) {
+            this._rowLimit = 1000;
+        }
         this._varName = varName;
         // The user specifically requested the tab title never change from "Data Viewer"
         this._panel.title = 'Data Viewer';
@@ -238,11 +255,11 @@ export class DataViewerPanel {
 
             // Write the request to a file, then send an invisible command to trigger the R callback
             const reqFile = nodePath.join(outDir, '.view_request');
-            try { nodeFs.writeFileSync(reqFile, varName, 'utf8'); } catch {}
+            try { nodeFs.writeFileSync(reqFile, `${varName}\n${this._rowLimit}`, 'utf8'); } catch {}
 
             const hasLaterFile = nodePath.join(outDir, '.has_later');
             if (!nodeFs.existsSync(hasLaterFile)) {
-                rTerminal.sendText(`View(${varName})`, true);
+                rTerminal.sendText(`.r_layout_view_data(${JSON.stringify(varName)}, ${this._rowLimit})`, true);
             }
         }
 
@@ -440,7 +457,8 @@ export class DataViewerPanel {
             is3D: this._is3D,
             totalSlices: this._totalSlices,
             currentSlice: this._currentSlice,
-            sliceLabels: this._sliceLabels
+            sliceLabels: this._sliceLabels,
+            rowLimit: this._rowLimit
         });
 
         if (this._lastRenderHash === stateToHash) {
@@ -489,8 +507,9 @@ export class DataViewerPanel {
             // Build row data as JSON for client-side sorting
             const rowsJson = JSON.stringify(this._rows);
 
-            const truncated = this._totalRows > 1000
-                ? `<div class="truncation-notice"><i class="codicon codicon-info icon-info"></i><span>Showing first 1,000 of ${this._totalRows.toLocaleString()} rows</span></div>`
+            const loadedRows = this._rows.length;
+            const truncated = this._totalRows > loadedRows
+                ? `<div class="truncation-notice"><i class="codicon codicon-info icon-info"></i><span>Showing first ${loadedRows} of ${this._totalRows} rows</span><button id="btn-load-next" class="load-next-btn">Load Next</button></div>`
                 : '';
 
             mainContent = `
@@ -616,11 +635,26 @@ export class DataViewerPanel {
             color: var(--vscode-descriptionForeground);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             font-family: var(--vscode-editor-font-family, monospace);
+            font-size: 0.85em;
+            opacity: 0.9;
             display: flex;
             align-items: center;
             gap: 6px;
         }
         .icon-info { color: var(--vscode-textLink-foreground, var(--vscode-foreground)); }
+        .load-next-btn {
+            background: var(--vscode-toolbar-hoverBackground);
+            border: 1px solid var(--vscode-editorGroup-border);
+            border-radius: 4px;
+            color: var(--vscode-textLink-foreground);
+            cursor: pointer;
+            font-family: var(--vscode-font-family);
+            font-size: inherit;
+            padding: 1px 6px;
+        }
+        .load-next-btn:hover {
+            background: var(--vscode-list-hoverBackground);
+        }
         .table-wrapper { flex: 1; overflow: auto; }
         table { width: 100%; border-collapse: collapse; }
         th, td {
@@ -693,7 +727,16 @@ export class DataViewerPanel {
         tbody tr:hover td.row-num { background: linear-gradient(var(--vscode-list-hoverBackground), var(--vscode-list-hoverBackground)), var(--vscode-editor-background); }
         .na { opacity: 0.35; font-style: italic; }
         .content { flex: 1; overflow: auto; display: flex; flex-direction: column; }
-        .status-msg { padding: 20px; text-align: center; opacity: 0.6; }
+        .status-msg {
+            flex: 1;
+            min-height: 100%;
+            padding: 20px;
+            text-align: center;
+            opacity: 0.6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
         .status-msg.error { color: var(--vscode-errorForeground); opacity: 0.9; white-space: pre-wrap; }
 
         /* Custom Instant Tooltip */
@@ -760,6 +803,9 @@ export class DataViewerPanel {
             // Refresh Button
             document.getElementById('btn-refresh')?.addEventListener('click', () => {
                 vscode.postMessage({ type: 'refresh' });
+            });
+            document.getElementById('btn-load-next')?.addEventListener('click', () => {
+                vscode.postMessage({ type: 'loadNext' });
             });
 
             // Slice Navigation Buttons
@@ -893,6 +939,9 @@ export class DataViewerPanel {
                 el.addEventListener('mouseleave', () => {
                     tooltip.style.display = 'none';
                 });
+                el.addEventListener('click', () => {
+                    tooltip.style.display = 'none';
+                });
             });
 
             vscode.postMessage({ type: 'ready' });
@@ -915,5 +964,3 @@ export class DataViewerPanel {
 }
 
 //  Utility
-
-
