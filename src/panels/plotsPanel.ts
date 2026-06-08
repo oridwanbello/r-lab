@@ -498,6 +498,8 @@ tryCatch({
         } else {
             postscript(file='${safeTargetTempPath}', width=.w_in, height=.h_in, horizontal=FALSE, onefile=FALSE, paper="special")
         }
+        replayPlot(p)
+        dev.off()
     } else if ('${targetExt}' == 'jpeg' || '${targetExt}' == 'jpg') {
         jpeg(filename='${safeTargetTempPath}', width=.w, height=.h, units=.unit, res=.res, bg='white', quality=90)
         replayPlot(p)
@@ -1751,6 +1753,7 @@ tryCatch({
                 const fileSizeDiv = document.getElementById('export-filesize');
                 if (previewImg && message.src) {
                     previewImg.src = message.src + '?t=' + Date.now();
+                    previewImg.style.visibility = 'visible';
                 }
                 if (fileSizeDiv && message.fileSize) {
                     fileSizeDiv.textContent = '~ ' + message.fileSize;
@@ -2273,10 +2276,20 @@ tryCatch({
             let isSyncingUI = false;
             let currentPreviewScale = 1;
 
+            function clearPreview() {
+                const previewImg = document.getElementById('preview-img');
+                if (previewImg) {
+                    previewImg.removeAttribute('src');
+                    previewImg.style.visibility = 'hidden';
+                }
+                if (fileSizeDiv) fileSizeDiv.textContent = 'calculating...';
+            }
+
             btnSave?.addEventListener('click', (e) => {
                 if (!btnSave.hasAttribute('disabled')) {
                     e.stopPropagation();
                     exportModal.classList.add('active');
+                    clearPreview();
                     isSyncingUI = true;
                     // Always reset to safe default dimensions when opening
                     if (currentUnit === 'px') {
@@ -2293,6 +2306,9 @@ tryCatch({
 
             btnExportCancel?.addEventListener('click', () => {
                 exportModal.classList.remove('active');
+                clearTimeout(previewDebounceTimer);
+                if (previewOverlay) previewOverlay.classList.remove('loading');
+                clearPreview();
             });
 
             window.addEventListener('resize', () => {
@@ -2339,9 +2355,8 @@ tryCatch({
             const triggerPreviewUpdate = () => {
                 if (!exportModal.classList.contains('active')) return;
 
-                if (fileSizeDiv) fileSizeDiv.textContent = 'calculating...';
-
                 clearTimeout(previewDebounceTimer);
+                clearPreview();
                 if (previewOverlay) previewOverlay.classList.add('loading');
                 previewDebounceTimer = setTimeout(() => {
                     latestPreviewRequestId += 1;
@@ -2412,8 +2427,8 @@ tryCatch({
                 const isRaster = formatSelect.value === 'png' || formatSelect.value === 'jpg';
                 if (isRaster) {
                     unitSelect.value = 'px';
-                    widthInput.value = '1600';
-                    heightInput.value = '1200';
+                    widthInput.value = '2400';
+                    heightInput.value = '1800';
                 } else {
                     unitSelect.value = 'in';
                     widthInput.value = '8';
