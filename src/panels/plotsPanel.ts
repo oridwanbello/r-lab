@@ -806,7 +806,13 @@ tryCatch({
             height: 100vh;
             overflow: hidden;
         }
-        body.minimized > * { display: none !important; }
+        body.minimized > * {
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+        body.pane-restoring .thumbnail {
+            transition: none !important;
+        }
         .toolbar {
             display: flex;
             align-items: center;
@@ -1109,6 +1115,8 @@ tryCatch({
             box-shadow: none !important;
         }
         .empty-state {
+            position: absolute;
+            inset: 0;
             height: 100%;
             display: flex;
             flex-direction: column;
@@ -1653,6 +1661,14 @@ tryCatch({
                 renderState(message.state);
             } else if (message.command === 'setMinimized') {
                 document.body.classList.toggle('minimized', message.minimized);
+                if (!message.minimized && lastState) {
+                    window.__suppressPlotResizeUntil = Date.now() + 700;
+                    document.body.classList.add('pane-restoring');
+                    setTimeout(() => document.body.classList.remove('pane-restoring'), 350);
+                    requestAnimationFrame(() => {
+                        requestAnimationFrame(() => renderState(lastState));
+                    });
+                }
             } else if (message.type === 'previewRendered') {
                 const previewImg = document.getElementById('preview-img');
                 const previewOverlay = document.getElementById('preview-overlay');
@@ -1849,10 +1865,15 @@ tryCatch({
                 if (!isCompareMode) {
                     const originalSrc = state.plots[state.currentIndex];
                     const isInteractive = originalSrc.includes('_interactive.svg');
-                    const newSrc = isInteractive ? getInteractiveSvgUri(state.isNightMode, false, plotArea.clientWidth, plotArea.clientHeight) : originalSrc;
+                    const plotW = plotArea.clientWidth;
+                    const plotH = plotArea.clientHeight;
+                    const hasStableInteractiveSize = plotW > 20 && plotH > 20;
+                    const newSrc = isInteractive && hasStableInteractiveSize ? getInteractiveSvgUri(state.isNightMode, false, plotW, plotH) : originalSrc;
 
                     let srcChanged = currentImageSrc !== originalSrc;
-                    if (srcChanged || (isInteractive && themeChanged) || (isInteractive && mainImg.getAttribute('src') !== newSrc)) {
+                    if (isInteractive && !hasStableInteractiveSize) {
+                        currentImageSrc = originalSrc;
+                    } else if (srcChanged || (isInteractive && themeChanged) || (isInteractive && mainImg.getAttribute('src') !== newSrc)) {
                         currentImageSrc = originalSrc;
                         mainImg.src = newSrc;
                         if (srcChanged) resetZoom();
@@ -1883,8 +1904,8 @@ tryCatch({
                     const rUrl = state.plots[compareRightIndex] || state.plots[0];
                     const leftPane = document.getElementById('compare-left');
                     const rightPane = document.getElementById('compare-right');
-                    const lSrc = lUrl.includes('_interactive.svg') ? getInteractiveSvgUri(state.isNightMode, false, leftPane.clientWidth, leftPane.clientHeight) : lUrl;
-                    const rSrc = rUrl.includes('_interactive.svg') ? getInteractiveSvgUri(state.isNightMode, false, rightPane.clientWidth, rightPane.clientHeight) : rUrl;
+                    const lSrc = lUrl.includes('_interactive.svg') && leftPane.clientWidth > 20 && leftPane.clientHeight > 20 ? getInteractiveSvgUri(state.isNightMode, false, leftPane.clientWidth, leftPane.clientHeight) : lUrl;
+                    const rSrc = rUrl.includes('_interactive.svg') && rightPane.clientWidth > 20 && rightPane.clientHeight > 20 ? getInteractiveSvgUri(state.isNightMode, false, rightPane.clientWidth, rightPane.clientHeight) : rUrl;
 
                     const imgLeft = document.getElementById('img-left');
                     const imgRight = document.getElementById('img-right');
@@ -1911,7 +1932,7 @@ tryCatch({
                 currentImageSrc = '';
                 mainImg.style.display = 'none';
                 document.getElementById('compare-view').style.display = 'none';
-                emptyState.style.display = 'block';
+                emptyState.style.display = 'flex';
                 resetZoom();
             }
 
@@ -2602,11 +2623,14 @@ tryCatch({
 
             // Dynamic Resize Re-rendering Observer
             window._plotSwitchTimeout = null;
+            window.__suppressPlotResizeUntil = 0;
             let resizeTimeout;
 
             window.triggerRerender = function() {
+                if (document.body.classList.contains('minimized')) return;
+                if (Date.now() < window.__suppressPlotResizeUntil) return;
                 const plotArea = document.getElementById('plot-area');
-                if (plotArea && !isCompareMode) {
+                if (plotArea && !isCompareMode && plotArea.clientWidth > 20 && plotArea.clientHeight > 20) {
                     vscode.postMessage({
                         type: 'resize',
                         width: plotArea.clientWidth,
@@ -2616,6 +2640,8 @@ tryCatch({
             };
 
             window.addEventListener('resize', () => {
+                if (document.body.classList.contains('minimized')) return;
+                if (Date.now() < window.__suppressPlotResizeUntil) return;
                 clearTimeout(resizeTimeout);
                 resizeTimeout = setTimeout(() => {
                     if (typeof triggerRerender === 'function') {

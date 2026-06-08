@@ -546,7 +546,7 @@ export class DataViewerPanel {
             height: 100vh;
             overflow: hidden;
         }
-        body.minimized > * { display: none !important; }
+        body.minimized > * { visibility: hidden !important; pointer-events: none !important; }
         .toolbar {
             position: relative;
             display: flex;

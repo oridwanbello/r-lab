@@ -326,7 +326,29 @@ export class ViewerPanel {
                         const styleInject = `
                         <script>
                             window.addEventListener('message', function(e) {
-                                if (e.data.command === 'exportPng') {
+                                if (e.data.command === 'resize') {
+                                    var resizePlotlyDiv = document.querySelector('.js-plotly-plot');
+                                    if (window.Plotly && resizePlotlyDiv) {
+                                        var refreshPlotly = function(forceReact) {
+                                            try {
+                                                var resized = window.Plotly.Plots && window.Plotly.Plots.resize
+                                                    ? window.Plotly.Plots.resize(resizePlotlyDiv)
+                                                    : Promise.resolve();
+                                                Promise.resolve(resized).then(function() {
+                                                    if (window.Plotly.redraw) return window.Plotly.redraw(resizePlotlyDiv);
+                                                }).then(function() {
+                                                    if (forceReact && window.Plotly.react && resizePlotlyDiv.data && resizePlotlyDiv.layout) {
+                                                        return window.Plotly.react(resizePlotlyDiv, resizePlotlyDiv.data, resizePlotlyDiv.layout, resizePlotlyDiv._context);
+                                                    }
+                                                }).catch(function() {});
+                                            } catch (err) {}
+                                        };
+                                        refreshPlotly(false);
+                                        setTimeout(function() { refreshPlotly(false); }, 120);
+                                        setTimeout(function() { refreshPlotly(true); }, 320);
+                                    }
+                                    window.dispatchEvent(new Event('resize'));
+                                } else if (e.data.command === 'exportPng') {
                                     var plotlyDiv = document.querySelector('.js-plotly-plot');
                                     if (window.Plotly && plotlyDiv) {
                                         window.Plotly.toImage(plotlyDiv, {format: 'png', width: plotlyDiv.clientWidth, height: plotlyDiv.clientHeight, scale: 3}).then(function(dataUrl) {
@@ -543,7 +565,10 @@ export class ViewerPanel {
             height: 100vh;
             overflow: hidden;
         }
-        body.minimized > * { display: none !important; }
+        body.minimized > * {
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
 
         .toolbar {
             display: flex;
@@ -760,11 +785,28 @@ export class ViewerPanel {
 
         let currentUrl = '';
         let isPoppedOut = false;
+        let wasMinimized = false;
 
         function setRendering(isRendering) {
             if (renderOverlay) {
                 renderOverlay.classList.toggle('loading', !!isRendering);
             }
+        }
+
+        function nudgeIframeLayout() {
+            if (!currentUrl || !frame.contentWindow) return;
+            setTimeout(() => {
+                try {
+                    frame.contentWindow.dispatchEvent(new Event('resize'));
+                    frame.contentWindow.postMessage({ command: 'resize' }, '*');
+                } catch {}
+            }, 80);
+            setTimeout(() => {
+                try {
+                    frame.contentWindow.dispatchEvent(new Event('resize'));
+                    frame.contentWindow.postMessage({ command: 'resize' }, '*');
+                } catch {}
+            }, 300);
         }
 
         frame.addEventListener('load', () => {
@@ -793,7 +835,12 @@ export class ViewerPanel {
                     }
                 }
 
-                document.body.classList.toggle('minimized', !!state.minimized);
+                const isMinimized = !!state.minimized;
+                document.body.classList.toggle('minimized', isMinimized);
+                if (wasMinimized && !isMinimized) {
+                    nudgeIframeLayout();
+                }
+                wasMinimized = isMinimized;
                 document.body.classList.toggle('night-mode', state.isNightMode);
 
                 btnNightMode.innerHTML = state.isNightMode ? \`${sunIcon}\` : \`${moonIcon}\`;

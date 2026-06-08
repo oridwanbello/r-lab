@@ -265,6 +265,14 @@ export function registerLayoutCommand(
                 return;
             }
 
+            // Hide Group 3 content before shrinking it. This prevents thumbnails
+            // and webview canvases from visibly compressing during the layout change.
+            WorkspacePanel.currentPanel?.setMinimized(true);
+            PlotsPanel.currentPanel?.setMinimized(true);
+            DataViewerPanel.currentPanel?.setMinimized(true);
+            ViewerPanel.currentPanel?.setMinimized(true);
+            await delay(80);
+
             await vscode.commands.executeCommand('vscode.setEditorLayout', {
                 orientation: 0,
                 groups: [
@@ -279,23 +287,12 @@ export function registerLayoutCommand(
                 ]
             });
 
-            // Hide webview content in Group 3 panels so only tabs are visible
-            WorkspacePanel.currentPanel?.setMinimized(true);
-            PlotsPanel.currentPanel?.setMinimized(true);
-            DataViewerPanel.currentPanel?.setMinimized(true);
-            ViewerPanel.currentPanel?.setMinimized(true);
             await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', true);
         }),
         vscode.commands.registerCommand('r-layout.restoreRightSplit', async () => {
             if (!isLayoutActive) {
                 return;
             }
-
-            // Restore webview content in Group 3 panels
-            WorkspacePanel.currentPanel?.setMinimized(false);
-            PlotsPanel.currentPanel?.setMinimized(false);
-            DataViewerPanel.currentPanel?.setMinimized(false);
-            ViewerPanel.currentPanel?.setMinimized(false);
 
             // Two-step restore:
             // 1) Read current layout (pixel values at current window scale),
@@ -333,6 +330,13 @@ export function registerLayoutCommand(
                     }
                 ]
             });
+            await delay(80);
+
+            // Restore webview content only after the split has real dimensions.
+            WorkspacePanel.currentPanel?.setMinimized(false);
+            PlotsPanel.currentPanel?.setMinimized(false);
+            DataViewerPanel.currentPanel?.setMinimized(false);
+            ViewerPanel.currentPanel?.setMinimized(false);
 
             await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', false);
         })
