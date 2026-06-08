@@ -2426,16 +2426,49 @@ tryCatch({
 
             const plotArea = document.querySelector('.plot-area');
 
+            function getComparePaneKey(targetPaneId) {
+                if (targetPaneId === 'compare-left' || targetPaneId === 'img-left') return 'left';
+                if (targetPaneId === 'compare-right' || targetPaneId === 'img-right') return 'right';
+                return activeCompareSide;
+            }
+
+            function getZoomAnchor(mouseX, mouseY, targetKey, paneKey) {
+                let container;
+                if (paneKey === 'main') container = plotArea;
+                else if (paneKey === 'left') container = document.getElementById('compare-left');
+                else container = document.getElementById('compare-right');
+
+                const containerRect = container.getBoundingClientRect();
+                if (!isCompareMode || !isSyncZoom || mouseX === undefined || mouseY === undefined) {
+                    return {
+                        x: mouseX !== undefined ? mouseX : containerRect.left + containerRect.width / 2,
+                        y: mouseY !== undefined ? mouseY : containerRect.top + containerRect.height / 2
+                    };
+                }
+
+                let sourceContainer;
+                if (targetKey === 'left') sourceContainer = document.getElementById('compare-left');
+                else sourceContainer = document.getElementById('compare-right');
+
+                const sourceRect = sourceContainer.getBoundingClientRect();
+                const relX = sourceRect.width > 0 ? (mouseX - sourceRect.left) / sourceRect.width : 0.5;
+                const relY = sourceRect.height > 0 ? (mouseY - sourceRect.top) / sourceRect.height : 0.5;
+
+                return {
+                    x: containerRect.left + relX * containerRect.width,
+                    y: containerRect.top + relY * containerRect.height
+                };
+            }
+
             function applyZoom(zoomFactor, mouseX, mouseY, targetPaneId) {
                 let targetKeys = [];
+                const sourceCompareKey = getComparePaneKey(targetPaneId);
                 if (!isCompareMode) {
                     targetKeys = ['main'];
                 } else {
                     if (isSyncZoom) targetKeys = ['left', 'right'];
                     else {
-                        if (targetPaneId === 'compare-left' || targetPaneId === 'img-left') targetKeys = ['left'];
-                        else if (targetPaneId === 'compare-right' || targetPaneId === 'img-right') targetKeys = ['right'];
-                        else targetKeys = [activeCompareSide];
+                        targetKeys = [sourceCompareKey];
                     }
                 }
 
@@ -2457,21 +2490,12 @@ tryCatch({
 
                     const rect = img.getBoundingClientRect();
 
-                    let container;
-                    if (k === 'main') container = plotArea;
-                    else if (k === 'left') container = document.getElementById('compare-left');
-                    else container = document.getElementById('compare-right');
-
-                    const containerRect = container.getBoundingClientRect();
-
                     const centerX = rect.left + rect.width / 2;
                     const centerY = rect.top + rect.height / 2;
 
-                    const viewportCenterX = containerRect.left + containerRect.width / 2;
-                    const viewportCenterY = containerRect.top + containerRect.height / 2;
-
-                    const cx = mouseX !== undefined ? mouseX : viewportCenterX;
-                    const cy = mouseY !== undefined ? mouseY : viewportCenterY;
+                    const anchor = getZoomAnchor(mouseX, mouseY, sourceCompareKey, k);
+                    const cx = anchor.x;
+                    const cy = anchor.y;
 
                     st.translateX += (cx - centerX) * (1 - actualZoomFactor);
                     st.translateY += (cy - centerY) * (1 - actualZoomFactor);
