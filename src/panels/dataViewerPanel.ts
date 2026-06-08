@@ -483,7 +483,7 @@ export class DataViewerPanel {
 
         let mainContent: string;
         if (this._isLoading) {
-            mainContent = `<div class="status-msg loading-msg"><span>Loading</span><span class="loading-var">${escapeHtml(this._varName)}&hellip;</span></div>`;
+            mainContent = `<div class="status-msg loading-msg"><span>Loading</span><span class="loading-var">${escapeHtml(this._varName)}</span><span>&hellip;</span></div>`;
         } else if (this._errorMessage) {
             mainContent = `<div class="status-msg error">⚠ ${escapeHtml(this._errorMessage)}</div>`;
         } else if (this._columns.length === 0 && !this._varName) {
@@ -742,7 +742,7 @@ export class DataViewerPanel {
             gap: 4px;
         }
         .loading-var {
-            color: inherit;
+            color: var(--vscode-textPreformat-foreground, var(--vscode-editor-foreground));
             font-family: var(--vscode-editor-font-family, monospace);
         }
 
