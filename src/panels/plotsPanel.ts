@@ -31,7 +31,9 @@ export class PlotsPanel {
     private _focusPending: boolean = false;
     private _disposables: vscode.Disposable[] = [];
     private _isNightMode = false;
-    private _lastRenderedDims: Map<string, { w: number, h: number }> = new Map();
+    private _lastRenderedDims: Map<string, { w: number, h: number, res: number, renderScale: number }> = new Map();
+    private _resizeRenderTokens: Map<string, number> = new Map();
+    private _previewRenderToken = 0;
     private _customPlotDir: string | undefined;
     private _lastDirAction: 'outview' | 'view' | undefined;
     private _extensionUri: vscode.Uri;
@@ -163,7 +165,13 @@ export class PlotsPanel {
                         this._handleSaveAs((msg as any).format, (msg as any).width, (msg as any).height, (msg as any).unit);
                         break;
                     case 'previewRender':
-                        this._handleRequestPreviewRender((msg as any).format, (msg as any).width, (msg as any).height, (msg as any).unit);
+                        this._handleRequestPreviewRender(
+                            (msg as any).format,
+                            (msg as any).width,
+                            (msg as any).height,
+                            (msg as any).unit,
+                            (msg as any).requestId
+                        );
                         break;
                     case 'deleteCurrent':
                         this._handleDeleteCurrent();
@@ -173,7 +181,7 @@ export class PlotsPanel {
                         this._render();
                         break;
                     case 'resize':
-                        this._handleResize((msg as any).width, (msg as any).height);
+                        this._handleResize((msg as any).width, (msg as any).height, (msg as any).pixelRatio);
                         break;
                     case 'setCustomDir':
                         this._handleSetCustomDir((msg as any).path, false);
@@ -318,7 +326,7 @@ export class PlotsPanel {
         }
     }
 
-    private async _handleResize(width: number, height: number): Promise<void> {
+    private async _handleResize(width: number, height: number, pixelRatio?: number): Promise<void> {
         if (this._currentIndex < 0) {
             return;
         }
@@ -340,8 +348,9 @@ export class PlotsPanel {
 
         const rscriptPath = getRscriptPath();
 
-        let w = width * 2;
-        let h = height * 2;
+        const renderScale = Math.min(Math.max(Number(pixelRatio) || 1, 1), 2.5);
+        let w = width * renderScale;
+        let h = height * renderScale;
         const res = 150; // Fixed baseline resolution for consistent text proportionality
 
         // Ensure physical dimensions never drop below 5 inches to prevent R "figure margins too large" errors.
@@ -359,21 +368,26 @@ export class PlotsPanel {
         // Prevent redundant re-rendering if this plot was already rendered at this exact dimension
         const cacheKey = sourceUri.fsPath;
         const lastDims = this._lastRenderedDims.get(cacheKey);
-        if (lastDims && lastDims.w === w && lastDims.h === h) {
+        if (lastDims && lastDims.w === w && lastDims.h === h && lastDims.res === res && lastDims.renderScale === renderScale) {
             return; // Already perfectly rendered for this size
         }
 
-        // Save these dimensions as the latest for this plot
-        this._lastRenderedDims.set(cacheKey, { w, h });
+        const token = (this._resizeRenderTokens.get(cacheKey) || 0) + 1;
+        this._resizeRenderTokens.set(cacheKey, token);
+
+        const tmpPngPath = path.join(
+            path.dirname(sourceUri.fsPath),
+            `.${path.basename(sourceUri.fsPath, '.png')}.resize-${process.pid}-${Date.now()}-${token}.tmp`
+        );
 
         // Escape paths for R
         const safeRdsPath = rdsPath.replace(/\\/g, '/');
-        const safePngPath = sourceUri.fsPath.replace(/\\/g, '/');
+        const safeTmpPngPath = tmpPngPath.replace(/\\/g, '/');
 
         const script = `
 tryCatch({
     p <- readRDS('${safeRdsPath}')
-    png('${safePngPath}', width=${w}, height=${h}, res=${res}, bg='white')
+    png('${safeTmpPngPath}', width=${w}, height=${h}, res=${res}, bg='white')
     replayPlot(p)
     dev.off()
 }, error = function(e) {})
@@ -382,12 +396,32 @@ tryCatch({
         childProcess.execFile(rscriptPath, ['-e', script], { encoding: 'utf8' }, (error) => {
             if (error) {
                 console.error('[R Layout] Dynamic resize re-rendering failed:', error);
+                try { if (fs.existsSync(tmpPngPath)) { fs.unlinkSync(tmpPngPath); } } catch {}
+                return;
+            }
+
+            if (this._resizeRenderTokens.get(cacheKey) !== token || this._currentIndex < 0 || this._plots[this._currentIndex]?.fsPath !== sourceUri.fsPath) {
+                try { if (fs.existsSync(tmpPngPath)) { fs.unlinkSync(tmpPngPath); } } catch {}
+                return;
+            }
+
+            try {
+                const stats = fs.existsSync(tmpPngPath) ? fs.statSync(tmpPngPath) : undefined;
+                if (!stats || stats.size === 0) {
+                    try { if (fs.existsSync(tmpPngPath)) { fs.unlinkSync(tmpPngPath); } } catch {}
+                    return;
+                }
+                fs.renameSync(tmpPngPath, sourceUri.fsPath);
+                this._lastRenderedDims.set(cacheKey, { w, h, res, renderScale });
+            } catch (err) {
+                console.error('[R Layout] Dynamic resize replacement failed:', err);
+                try { if (fs.existsSync(tmpPngPath)) { fs.unlinkSync(tmpPngPath); } } catch {}
             }
             // If successful, the file watcher picks up the modified PNG and automatically calls _render().
         });
     }
 
-    private async _handleRequestPreviewRender(format: string, widthStr: string, heightStr: string, unit: string): Promise<void> {
+    private async _handleRequestPreviewRender(format: string, widthStr: string, heightStr: string, unit: string, requestId?: number): Promise<void> {
         if (this._currentIndex < 0) {
             return;
         }
@@ -409,13 +443,16 @@ tryCatch({
             fs.mkdirSync(tmpDir, { recursive: true });
         }
 
+        const token = ++this._previewRenderToken;
         const previewPath = path.join(tmpDir, 'export_preview.png');
+        const tmpPreviewPath = path.join(tmpDir, `export_preview.${process.pid}.${Date.now()}.${token}.tmp`);
         const targetExt = format.toLowerCase();
         const targetTempPath = path.join(tmpDir, `export_size_test.${targetExt}`);
+        const tmpTargetTempPath = path.join(tmpDir, `export_size_test.${process.pid}.${Date.now()}.${token}.${targetExt}.tmp`);
 
         const safeRdsPath = rdsPath.replace(/\\/g, '/');
-        const safePngPath = previewPath.replace(/\\/g, '/');
-        const safeTargetTempPath = targetTempPath.replace(/\\/g, '/');
+        const safePngPath = tmpPreviewPath.replace(/\\/g, '/');
+        const safeTargetTempPath = tmpTargetTempPath.replace(/\\/g, '/');
 
         const rscriptPath = getRscriptPath();
         const script = `
@@ -470,12 +507,22 @@ tryCatch({
 `;
 
         childProcess.execFile(rscriptPath, ['-e', script], (error) => {
-            if (!error && fs.existsSync(previewPath)) {
+            const cleanupTemps = () => {
+                try { if (fs.existsSync(tmpPreviewPath)) { fs.unlinkSync(tmpPreviewPath); } } catch {}
+                try { if (fs.existsSync(tmpTargetTempPath)) { fs.unlinkSync(tmpTargetTempPath); } } catch {}
+            };
+
+            if (error || this._previewRenderToken !== token) {
+                cleanupTemps();
+                return;
+            }
+
+            if (fs.existsSync(tmpPreviewPath)) {
                 let fileSizeInBytes = 0;
                 if (targetExt === 'png') {
-                    fileSizeInBytes = fs.statSync(previewPath).size;
-                } else if (fs.existsSync(targetTempPath)) {
-                    fileSizeInBytes = fs.statSync(targetTempPath).size;
+                    fileSizeInBytes = fs.statSync(tmpPreviewPath).size;
+                } else if (fs.existsSync(tmpTargetTempPath)) {
+                    fileSizeInBytes = fs.statSync(tmpTargetTempPath).size;
                 }
 
                 let fileSizeStr = '';
@@ -489,11 +536,23 @@ tryCatch({
                     }
                 }
 
+                try {
+                    fs.renameSync(tmpPreviewPath, previewPath);
+                    if (fs.existsSync(tmpTargetTempPath)) {
+                        fs.renameSync(tmpTargetTempPath, targetTempPath);
+                    }
+                } catch (err) {
+                    console.error('[R Layout] Preview render replacement failed:', err);
+                    cleanupTemps();
+                    return;
+                }
+
                 const webviewUri = this._panel.webview.asWebviewUri(vscode.Uri.file(previewPath)).toString();
                 this._panel.webview.postMessage({
                     type: 'previewRendered',
                     src: webviewUri,
-                    fileSize: fileSizeStr
+                    fileSize: fileSizeStr,
+                    requestId
                 });
             }
         });
@@ -1686,6 +1745,7 @@ tryCatch({
                     });
                 }
             } else if (message.type === 'previewRendered') {
+                if (message.requestId !== undefined && message.requestId < latestPreviewRequestId) return;
                 const previewImg = document.getElementById('preview-img');
                 const previewOverlay = document.getElementById('preview-overlay');
                 const fileSizeDiv = document.getElementById('export-filesize');
@@ -1723,6 +1783,7 @@ tryCatch({
         let activeCompareSide = 'left';
         let isSyncZoom = true;
         let lastBackendIndex = -1;
+        let latestPreviewRequestId = 0;
 
         let transformState = {
             main: { scale: 1, translateX: 0, translateY: 0 },
@@ -2283,12 +2344,14 @@ tryCatch({
                 clearTimeout(previewDebounceTimer);
                 if (previewOverlay) previewOverlay.classList.add('loading');
                 previewDebounceTimer = setTimeout(() => {
+                    latestPreviewRequestId += 1;
                     vscode.postMessage({
                         type: 'previewRender',
                         format: formatSelect.value,
                         width: widthInput.value,
                         height: heightInput.value,
-                        unit: unitSelect.value
+                        unit: unitSelect.value,
+                        requestId: latestPreviewRequestId
                     });
                 }, 400);
             };
@@ -2683,20 +2746,7 @@ tryCatch({
             window.__suppressPlotResizeUntil = 0;
             let resizeTimeout;
 
-            window.triggerRerender = function() {
-                if (document.body.classList.contains('minimized')) return;
-                if (Date.now() < window.__suppressPlotResizeUntil) return;
-                const plotArea = document.getElementById('plot-area');
-                if (plotArea && !isCompareMode && plotArea.clientWidth > 20 && plotArea.clientHeight > 20) {
-                    vscode.postMessage({
-                        type: 'resize',
-                        width: plotArea.clientWidth,
-                        height: plotArea.clientHeight
-                    });
-                }
-            };
-
-            window.addEventListener('resize', () => {
+            function schedulePlotRerender() {
                 if (document.body.classList.contains('minimized')) return;
                 if (Date.now() < window.__suppressPlotResizeUntil) return;
                 clearTimeout(resizeTimeout);
@@ -2712,8 +2762,31 @@ tryCatch({
                     if (isWidget || (isCompareMode && (isLeftWidget || isRightWidget))) {
                         renderState(lastState);
                     }
-                }, 400); // 400ms debounce
-            });
+                }, 400);
+            }
+
+            window.triggerRerender = function() {
+                if (document.body.classList.contains('minimized')) return;
+                if (Date.now() < window.__suppressPlotResizeUntil) return;
+                const plotArea = document.getElementById('plot-area');
+                if (plotArea && !isCompareMode && plotArea.clientWidth > 20 && plotArea.clientHeight > 20) {
+                    vscode.postMessage({
+                        type: 'resize',
+                        width: plotArea.clientWidth,
+                        height: plotArea.clientHeight,
+                        pixelRatio: Math.min(Math.max(window.devicePixelRatio || 1, 1), 2.5)
+                    });
+                }
+            };
+
+            window.addEventListener('resize', schedulePlotRerender);
+            if (typeof ResizeObserver !== 'undefined') {
+                const plotArea = document.getElementById('plot-area');
+                if (plotArea) {
+                    const resizeObserver = new ResizeObserver(schedulePlotRerender);
+                    resizeObserver.observe(plotArea);
+                }
+            }
 
             vscode.postMessage({ type: 'ready' });
 </script>
