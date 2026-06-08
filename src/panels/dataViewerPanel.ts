@@ -483,7 +483,7 @@ export class DataViewerPanel {
 
         let mainContent: string;
         if (this._isLoading) {
-            mainContent = `<div class="status-msg">Loading "${escapeHtml(this._varName)}"&hellip;</div>`;
+            mainContent = `<div class="status-msg loading-msg"><span>Loading</span><span class="loading-var">${escapeHtml(this._varName)}&hellip;</span></div>`;
         } else if (this._errorMessage) {
             mainContent = `<div class="status-msg error">⚠ ${escapeHtml(this._errorMessage)}</div>`;
         } else if (this._columns.length === 0 && !this._varName) {
@@ -738,6 +738,13 @@ export class DataViewerPanel {
             justify-content: center;
         }
         .status-msg.error { color: var(--vscode-errorForeground); opacity: 0.9; white-space: pre-wrap; }
+        .loading-msg {
+            gap: 4px;
+        }
+        .loading-var {
+            color: inherit;
+            font-family: var(--vscode-editor-font-family, monospace);
+        }
 
         /* Custom Instant Tooltip */
         .tooltip {

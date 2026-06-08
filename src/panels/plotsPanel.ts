@@ -903,7 +903,7 @@ tryCatch({
         }
         .toolbar button#btn-delete:hover:not([disabled]),
         .toolbar button#btn-clear:hover:not([disabled]) {
-            color: var(--vscode-editorWarning-foreground);
+            color: #FF0000;
         }
         .toolbar button svg { width: 14px; height: 14px; display: block; }
         .toolbar button[disabled] {
@@ -1084,11 +1084,27 @@ tryCatch({
             overflow: hidden;
             border-radius: 8px;
             transform: translateZ(0); /* preserves rounded corners when panning */
-            border: 4px solid transparent;
-            transition: border-color 0.2s ease;
         }
-        .compare-pane.active {
-            border-color: var(--vscode-focusBorder);
+        .compare-pane::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 8px;
+            background: color-mix(in srgb, var(--vscode-editor-background) 45%, var(--vscode-editor-foreground) 55%);
+            z-index: 2;
+            pointer-events: none;
+            transition: background-color 0.2s ease;
+        }
+        .compare-pane.active-left::before {
+            background: var(--vscode-charts-blue, #3794ff);
+        }
+        .compare-pane.active-right::before {
+            background: var(--vscode-charts-purple, #b146c2);
+        }
+        .compare-view.overlay-active .compare-pane::before {
+            display: none;
         }
         .compare-pane img {
             max-width: 100%;
@@ -1634,7 +1650,7 @@ tryCatch({
             <div class="plot-viewport">
                 <img id="main-image" src="" alt="Plot" style="display: none;" />
                 <div id="compare-view" class="compare-view">
-                    <div id="compare-left" class="compare-pane active" data-side="left">
+                    <div id="compare-left" class="compare-pane" data-side="left">
                         <img id="img-left" src="" />
                     </div>
                     <div id="compare-right" class="compare-pane" data-side="right">
@@ -1736,6 +1752,17 @@ tryCatch({
             updateTransform();
         }
 
+        function setInitialComparePair(index, plotCount) {
+            compareLeftIndex = index;
+            if (plotCount <= 1) {
+                compareRightIndex = index;
+            } else if (index < plotCount - 1) {
+                compareRightIndex = index + 1;
+            } else {
+                compareRightIndex = index - 1;
+            }
+        }
+
         function renderState(state) {
             lastState = state;
             document.body.classList.toggle('minimized', !!state.minimized);
@@ -1746,8 +1773,7 @@ tryCatch({
                     if (activeCompareSide === 'left') compareLeftIndex = state.currentIndex;
                     else compareRightIndex = state.currentIndex;
                 } else {
-                    compareLeftIndex = state.currentIndex;
-                    compareRightIndex = state.currentIndex > 0 ? state.currentIndex - 1 : 0;
+                    setInitialComparePair(state.currentIndex, state.plots.length);
                 }
             }
             lastBackendIndex = state.currentIndex;
@@ -1909,6 +1935,10 @@ tryCatch({
 
                     const imgLeft = document.getElementById('img-left');
                     const imgRight = document.getElementById('img-right');
+                    leftPane.classList.toggle('active-left', activeCompareSide === 'left');
+                    leftPane.classList.remove('active-right');
+                    rightPane.classList.toggle('active-right', activeCompareSide === 'right');
+                    rightPane.classList.remove('active-left');
 
                     if (imgLeft.getAttribute('src') !== lSrc) {
                         imgLeft.src = lSrc;
@@ -1922,8 +1952,6 @@ tryCatch({
                     if (rUrl.includes('_interactive.svg')) imgRight.classList.add('is-interactive');
                     else imgRight.classList.remove('is-interactive');
 
-                    document.getElementById('compare-left').classList.toggle('active', activeCompareSide === 'left');
-                    document.getElementById('compare-right').classList.toggle('active', activeCompareSide === 'right');
                 }
 
                 window.__lastNightMode = state.isNightMode;
@@ -2096,11 +2124,13 @@ tryCatch({
                     isCompareMode = !isCompareMode;
                     if (isCompareMode) {
                         activeCompareSide = 'left';
+                        setInitialComparePair(lastBackendIndex, currentPlots.length);
                     } else {
                         compareDropdown.classList.remove('open');
                         document.getElementById('overlay-slider').value = 0;
                         const valLabel = document.getElementById('overlay-val');
                         if (valLabel) valLabel.textContent = '0%';
+                        document.getElementById('compare-view').classList.remove('overlay-active');
                         document.getElementById('compare-right').classList.remove('overlay-mode');
                         document.getElementById('compare-right').style.opacity = '1';
                     }
@@ -2131,10 +2161,13 @@ tryCatch({
                 if (valLabel) valLabel.textContent = percentage + '%';
 
                 const rightPane = document.getElementById('compare-right');
+                const compareView = document.getElementById('compare-view');
                 if (val > 0) {
+                    compareView.classList.add('overlay-active');
                     rightPane.classList.add('overlay-mode');
                     rightPane.style.opacity = val.toString();
                 } else {
+                    compareView.classList.remove('overlay-active');
                     rightPane.classList.remove('overlay-mode');
                     rightPane.style.opacity = '1';
                 }

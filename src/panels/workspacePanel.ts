@@ -820,10 +820,29 @@ tryCatch({
         .remove-btn svg { display: block; width: 14px; height: 14px; }
         .clear-all-btn { margin-right: 6px; width: 14px; height: 14px; }
         .clear-all-btn svg { display: block; width: 14px; height: 14px; }
+        .remove-btn[disabled], .clear-all-btn[disabled] {
+            cursor: default;
+            opacity: 0.75;
+        }
 
         .remove-btn:hover, .clear-all-btn:hover {
             opacity: 1;
-            color: var(--vscode-editorWarning-foreground);
+            color: #FF0000;
+        }
+        .remove-btn[disabled]:hover, .clear-all-btn[disabled]:hover {
+            color: var(--vscode-foreground);
+        }
+        .icon-spinner {
+            width: 12px;
+            height: 12px;
+            border: 2px solid currentColor;
+            border-right-color: transparent;
+            border-radius: 50%;
+            animation: rlayout-spin 0.65s linear infinite;
+            box-sizing: border-box;
+        }
+        @keyframes rlayout-spin {
+            to { transform: rotate(360deg); }
         }
 
         .name-header-col { white-space: nowrap; }
@@ -1113,6 +1132,9 @@ tryCatch({
             const EYE_ICON = '${EYE_ICON.replace(/'/g, "\\'")}';
             const TRASH_ICON = '${TRASH_ICON.replace(/'/g, "\\'")}';
             const BROOM_ICON = '${BROOM_ICON.replace(/'/g, "\\'")}';
+            const SPINNER_ICON = '<span class="icon-spinner"></span>';
+            const pendingRemovals = new Set();
+            let pendingClear = false;
             const PAPERCLIP_ICON = '${PAPERCLIP_ICON.replace(/'/g, "\\'")}';
 
             let currentFilter = 'all';
@@ -1137,6 +1159,7 @@ tryCatch({
             window.addEventListener('message', event => {
                 const msg = event.data;
                 if (msg.command === 'update') {
+                    syncPendingDeletes(msg);
                     renderEnvironment(msg);
                     renderPackages(msg);
                     renderAttached(msg);
@@ -1145,6 +1168,19 @@ tryCatch({
                     document.body.classList.toggle('minimized', msg.minimized);
                 }
             });
+
+            function syncPendingDeletes(msg) {
+                if (msg.errorMessage) {
+                    pendingRemovals.clear();
+                    pendingClear = false;
+                    return;
+                }
+                const names = new Set((msg.variables || []).map(v => v.name));
+                pendingRemovals.forEach(name => {
+                    if (!names.has(name)) pendingRemovals.delete(name);
+                });
+                if (pendingClear && names.size === 0) pendingClear = false;
+            }
 
             // ── Environment Rendering ──
             function renderEnvironment(msg) {
@@ -1171,7 +1207,9 @@ tryCatch({
                     const btn = v.isDataFrame
                         ? '<button class="view-btn" data-var="' + escapeHtml(v.name) + '" data-tooltip="View in Data Viewer">' + EYE_ICON + '</button>'
                         : '';
-                    const removeBtn = '<button class="remove-btn" data-var="' + escapeHtml(v.name) + '" data-tooltip="Remove Variable">' + TRASH_ICON + '</button>';
+                    const isRemoving = pendingClear || pendingRemovals.has(v.name);
+                    const removeBtn = '<button class="remove-btn" data-var="' + escapeHtml(v.name) + '" data-tooltip="Remove Variable"'
+                        + (isRemoving ? ' disabled' : '') + '>' + (isRemoving ? SPINNER_ICON : TRASH_ICON) + '</button>';
                     return '<tr class="var-row">'
                         + '<td class="name-col frozen-col">' + removeBtn + '<span class="var-name">' + escapeHtml(v.name) + '</span>' + btn + '</td>'
                         + '<td class="type-col">' + escapeHtml(v.type) + '</td>'
@@ -1179,7 +1217,8 @@ tryCatch({
                         + '<td class="preview-col">' + escapeHtml(v.preview) + '</td>'
                         + '</tr>';
                 }).join('');
-                el.innerHTML = '<table><thead><tr><th class="frozen-col name-header-col"><button class="clear-all-btn" id="btn-clear-env" data-tooltip="Clear All Variables">' + BROOM_ICON + '</button><span>Name</span></th><th>Class</th><th>Size</th><th>Value</th></tr></thead><tbody>' + rows + '</tbody></table>';
+                el.innerHTML = '<table><thead><tr><th class="frozen-col name-header-col"><button class="clear-all-btn" id="btn-clear-env" data-tooltip="Clear All Variables"'
+                    + (pendingClear ? ' disabled' : '') + '>' + (pendingClear ? SPINNER_ICON : BROOM_ICON) + '</button><span>Name</span></th><th>Class</th><th>Size</th><th>Value</th></tr></thead><tbody>' + rows + '</tbody></table>';
 
                 attachViewListeners();
             }
@@ -1195,14 +1234,28 @@ tryCatch({
                 document.querySelectorAll('.remove-btn').forEach(btn => {
                     btn.addEventListener('click', (e) => {
                         e.stopPropagation();
+                        if (btn.hasAttribute('disabled')) return;
                         const varName = btn.getAttribute('data-var');
-                        if (varName) vscode.postMessage({ type: 'removeVariable', varName });
+                        if (varName) {
+                            pendingRemovals.add(varName);
+                            btn.setAttribute('disabled', 'true');
+                            btn.innerHTML = SPINNER_ICON;
+                            vscode.postMessage({ type: 'removeVariable', varName });
+                        }
                     });
                 });
                 const clearBtn = document.getElementById('btn-clear-env');
                 if (clearBtn) {
                     clearBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
+                        if (clearBtn.hasAttribute('disabled')) return;
+                        pendingClear = true;
+                        clearBtn.setAttribute('disabled', 'true');
+                        clearBtn.innerHTML = SPINNER_ICON;
+                        document.querySelectorAll('.remove-btn').forEach(btn => {
+                            btn.setAttribute('disabled', 'true');
+                            btn.innerHTML = SPINNER_ICON;
+                        });
                         vscode.postMessage({ type: 'clearWorkspace' });
                     });
                 }

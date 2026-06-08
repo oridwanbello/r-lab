@@ -637,7 +637,7 @@ export class ViewerPanel {
         }
         .toolbar button#btn-delete:hover:not([disabled]),
         .toolbar button#btn-clear:hover:not([disabled]) {
-            color: var(--vscode-editorWarning-foreground);
+            color: #FF0000;
         }
         .toolbar button svg { width: 14px; height: 14px; display: block; }
         .toolbar button[disabled] {
@@ -868,7 +868,7 @@ export class ViewerPanel {
                         setRendering(false);
                         frame.src = '';
                         frame.style.display = 'none';
-                        emptyState.style.display = 'block';
+                        emptyState.style.display = 'flex';
                         btnRefresh.setAttribute('disabled', 'true');
                         btnSnapshot.setAttribute('disabled', 'true');
                         btnExternal.setAttribute('disabled', 'true');
