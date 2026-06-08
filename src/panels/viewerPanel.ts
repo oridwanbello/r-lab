@@ -329,23 +329,20 @@ export class ViewerPanel {
                                 if (e.data.command === 'resize') {
                                     var resizePlotlyDiv = document.querySelector('.js-plotly-plot');
                                     if (window.Plotly && resizePlotlyDiv) {
-                                        var refreshPlotly = function(forceReact) {
+                                        var refreshPlotly = function() {
                                             try {
                                                 var resized = window.Plotly.Plots && window.Plotly.Plots.resize
                                                     ? window.Plotly.Plots.resize(resizePlotlyDiv)
                                                     : Promise.resolve();
                                                 Promise.resolve(resized).then(function() {
                                                     if (window.Plotly.redraw) return window.Plotly.redraw(resizePlotlyDiv);
-                                                }).then(function() {
-                                                    if (forceReact && window.Plotly.react && resizePlotlyDiv.data && resizePlotlyDiv.layout) {
-                                                        return window.Plotly.react(resizePlotlyDiv, resizePlotlyDiv.data, resizePlotlyDiv.layout, resizePlotlyDiv._context);
-                                                    }
                                                 }).catch(function() {});
                                             } catch (err) {}
                                         };
-                                        refreshPlotly(false);
-                                        setTimeout(function() { refreshPlotly(false); }, 120);
-                                        setTimeout(function() { refreshPlotly(true); }, 320);
+                                        refreshPlotly();
+                                        setTimeout(refreshPlotly, 120);
+                                        setTimeout(refreshPlotly, 320);
+                                        setTimeout(refreshPlotly, 700);
                                     }
                                     window.dispatchEvent(new Event('resize'));
                                 } else if (e.data.command === 'exportPng') {
@@ -583,16 +580,17 @@ export class ViewerPanel {
             overflow-x: auto;
             overflow-y: hidden;
             white-space: nowrap;
+            scrollbar-width: thin;
         }
         .toolbar::-webkit-scrollbar {
-            height: 2px;
+            height: 1px;
         }
         .toolbar::-webkit-scrollbar-track {
             background: transparent;
         }
         .toolbar::-webkit-scrollbar-thumb {
             background-color: transparent;
-            border-radius: 2px;
+            border-radius: 1px;
         }
         .toolbar:hover::-webkit-scrollbar-thumb {
             background-color: var(--vscode-scrollbarSlider-background);
@@ -637,7 +635,7 @@ export class ViewerPanel {
         }
         .toolbar button#btn-delete:hover:not([disabled]),
         .toolbar button#btn-clear:hover:not([disabled]) {
-            color: #FF0000;
+            color: var(--vscode-problemsErrorIcon-foreground, #DC3545);
         }
         .toolbar button svg { width: 14px; height: 14px; display: block; }
         .toolbar button[disabled] {
@@ -811,6 +809,7 @@ export class ViewerPanel {
 
         frame.addEventListener('load', () => {
             setRendering(false);
+            nudgeIframeLayout();
         });
         frame.addEventListener('error', () => {
             setRendering(false);
@@ -824,6 +823,7 @@ export class ViewerPanel {
                 const newUrl = state.url || '';
 
                 if (state.isPoppedOut !== undefined) {
+                    const panelLocationChanged = isPoppedOut !== state.isPoppedOut;
                     isPoppedOut = state.isPoppedOut;
                     if (btnPopout) {
                         btnPopout.setAttribute('data-tooltip', isPoppedOut ? 'Restore to Side Panel' : 'Pop-out to Main Editor');
@@ -832,6 +832,9 @@ export class ViewerPanel {
                         if (tooltip && tooltip.style.display === 'block' && btnPopout.matches(':hover')) {
                             tooltip.textContent = btnPopout.getAttribute('data-tooltip');
                         }
+                    }
+                    if (panelLocationChanged) {
+                        nudgeIframeLayout();
                     }
                 }
 

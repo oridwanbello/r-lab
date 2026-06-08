@@ -560,16 +560,17 @@ export class DataViewerPanel {
             overflow-x: auto;
             overflow-y: hidden;
             white-space: nowrap;
+            scrollbar-width: thin;
         }
         .toolbar::-webkit-scrollbar {
-            height: 2px;
+            height: 1px;
         }
         .toolbar::-webkit-scrollbar-track {
             background: transparent;
         }
         .toolbar::-webkit-scrollbar-thumb {
             background-color: transparent;
-            border-radius: 2px;
+            border-radius: 1px;
         }
         .toolbar:hover::-webkit-scrollbar-thumb {
             background-color: var(--vscode-scrollbarSlider-background);

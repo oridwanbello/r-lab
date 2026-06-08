@@ -678,21 +678,22 @@ tryCatch({
         }
         body.minimized > * { visibility: hidden !important; pointer-events: none !important; }
 
-        /* ── Tab Bar ── */
+        /* Tab Bar */
         .tabs {
             display: flex; align-items: center; border-bottom: 1px solid var(--vscode-editorGroup-border);
             background: var(--vscode-editor-background); flex-shrink: 0;
             overflow-x: auto; overflow-y: hidden;
+            scrollbar-width: thin;
         }
         .tabs::-webkit-scrollbar {
-            height: 2px;
+            height: 1px;
         }
         .tabs::-webkit-scrollbar-track {
             background: transparent;
         }
         .tabs::-webkit-scrollbar-thumb {
             background-color: transparent;
-            border-radius: 2px;
+            border-radius: 1px;
         }
         .tabs:hover::-webkit-scrollbar-thumb {
             background-color: var(--vscode-scrollbarSlider-background);
@@ -708,18 +709,18 @@ tryCatch({
         .tab:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
         .tab.active { opacity: 1; color: var(--vscode-textLink-foreground); }
 
-        /* ── Content Panels ── */
+        /* Content Panels */
         .content { flex: 1; overflow: hidden; display: none; flex-direction: column; }
         .content.active { display: flex; }
 
-        /* ── Table Scroll Wrapper ── */
+        /* Table Scroll Wrapper */
         .table-scroll-wrapper {
             flex: 1;
             overflow: auto;
             position: relative;
         }
 
-        /* ── Tables ── */
+        /* Tables */
         table { width: 100%; border-collapse: collapse; }
         thead th {
             position: sticky; top: 0; z-index: 2;
@@ -746,7 +747,7 @@ tryCatch({
             background: color-mix(in srgb, var(--vscode-list-hoverBackground) 100%, var(--vscode-editor-background));
         }
 
-        /* ── Frozen first column ── */
+        /* Frozen first column */
         thead th.frozen-col, .var-row td.frozen-col {
             position: sticky;
             left: 0;
@@ -758,7 +759,7 @@ tryCatch({
             background: linear-gradient(var(--vscode-list-hoverBackground), var(--vscode-list-hoverBackground)), var(--vscode-editor-background);
         }
 
-        /* ── Column styles ── */
+        /* Column styles */
         .name-col { width: 1%; white-space: nowrap; padding-right: 16px !important; }
         .var-name {
             font-family: var(--vscode-editor-font-family, monospace);
@@ -784,7 +785,7 @@ tryCatch({
             vertical-align: middle;
         }
 
-        /* ── View Button (Eye) ── */
+        /* View Button */
         .view-btn {
             display: inline-flex;
             align-items: center;
@@ -802,7 +803,7 @@ tryCatch({
         .view-btn:hover { opacity: 1; }
         .view-btn svg { display: block; }
 
-        /* ── Remove & Clear Buttons ── */
+        /* Remove and Clear Buttons */
         .remove-btn, .clear-all-btn {
             display: inline-flex;
             align-items: center;
@@ -827,7 +828,7 @@ tryCatch({
 
         .remove-btn:hover, .clear-all-btn:hover {
             opacity: 1;
-            color: #FF0000;
+            color: var(--vscode-problemsErrorIcon-foreground, #DC3545);
         }
         .remove-btn[disabled]:hover, .clear-all-btn[disabled]:hover {
             color: var(--vscode-foreground);
@@ -847,7 +848,7 @@ tryCatch({
 
         .name-header-col { white-space: nowrap; }
 
-        /* ── Status Messages ── */
+        /* Status Messages */
         .status-msg {
             flex: 1;
             min-height: 100%;
@@ -860,7 +861,7 @@ tryCatch({
         }
         .status-msg.error { color: var(--vscode-errorForeground); opacity: 0.9; white-space: pre-wrap; }
 
-        /* ── Empty State ── */
+        /* Empty State */
         .empty-state {
             display: flex; flex-direction: column; align-items: center;
             justify-content: center; height: 100%; text-align: center; opacity: 0.3;
@@ -880,7 +881,7 @@ tryCatch({
             border-radius: 0;
         }
 
-        /* ── Custom Instant Tooltip ── */
+        /* Custom Instant Tooltip */
         .tooltip {
             position: fixed;
             background: var(--vscode-editorHoverWidget-background, #252526);
@@ -897,7 +898,7 @@ tryCatch({
             white-space: nowrap;
         }
 
-        /* ══════════ PACKAGES TAB ══════════ */
+        /* Packages Tab */
 
         .pkg-toolbar {
             display: flex;
@@ -913,16 +914,17 @@ tryCatch({
             overflow-x: auto;
             overflow-y: hidden;
             white-space: nowrap;
+            scrollbar-width: thin;
         }
         .pkg-toolbar::-webkit-scrollbar {
-            height: 2px;
+            height: 1px;
         }
         .pkg-toolbar::-webkit-scrollbar-track {
             background: transparent;
         }
         .pkg-toolbar::-webkit-scrollbar-thumb {
             background-color: transparent;
-            border-radius: 2px;
+            border-radius: 1px;
         }
         .pkg-toolbar:hover::-webkit-scrollbar-thumb {
             background-color: var(--vscode-scrollbarSlider-background);
@@ -996,7 +998,7 @@ tryCatch({
         }
         .pkg-refresh-btn svg { width: 14px; height: 14px; display: block; }
 
-        /* ── Package Table ── */
+        /* Package Table */
         .pkg-table-wrapper {
             flex: 1;
             overflow: auto;
@@ -1073,7 +1075,7 @@ tryCatch({
             left: 36px;
         }
 
-        /* ── Attached Objects List ── */
+        /* Attached Objects List */
         .attached-list { list-style: none; padding: 0; margin: 0; }
         .attached-list li {
             padding: 4px 16px;
@@ -1140,7 +1142,7 @@ tryCatch({
             let currentFilter = 'all';
             let currentSearch = '';
 
-            // ── Tab Switching ──
+            // Tab Switching
             document.querySelectorAll('.tab').forEach(tab => {
                 tab.addEventListener('click', () => {
                     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -1155,7 +1157,7 @@ tryCatch({
                 return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
             }
 
-            // ── Update Handler ──
+            // Update Handler
             window.addEventListener('message', event => {
                 const msg = event.data;
                 if (msg.command === 'update') {
@@ -1182,7 +1184,7 @@ tryCatch({
                 if (pendingClear && names.size === 0) pendingClear = false;
             }
 
-            // ── Environment Rendering ──
+            // Environment Rendering
             function renderEnvironment(msg) {
                 const el = document.getElementById('env-scroll');
                 const cEnv = document.getElementById('count-env');
@@ -1261,7 +1263,7 @@ tryCatch({
                 }
             }
 
-            // ── Packages Rendering ──
+            // Packages Rendering
             function renderPackages(msg) {
                 const el = document.getElementById('pkg-scroll');
                 const cPkg = document.getElementById('count-packages');
@@ -1338,7 +1340,7 @@ tryCatch({
                 });
             }
 
-            // ── Attached Objects Rendering ──
+            // Attached Objects Rendering
             function renderAttached(msg) {
                 const el = document.getElementById('tab-attached');
                 const cAttached = document.getElementById('count-attached');
@@ -1353,7 +1355,7 @@ tryCatch({
                 el.innerHTML = '<ul class="attached-list">' + items.map(n => '<li>' + PAPERCLIP_ICON + '<span class="attached-name">' + escapeHtml(n) + '</span></li>').join('') + '</ul>';
             }
 
-            // ── Package Search & Filter ──
+            // Package Search and Filter
             document.getElementById('pkg-search')?.addEventListener('input', (e) => {
                 currentSearch = e.target.value;
                 // Re-render packages with current state by requesting a refresh message
@@ -1383,7 +1385,7 @@ tryCatch({
                 }
             });
 
-            // ── Instant Tooltip Controller ──
+            // Instant Tooltip Controller
             const tooltip = document.getElementById('tooltip');
             function setupTooltips() {
                 document.querySelectorAll('[data-tooltip]').forEach(el => {

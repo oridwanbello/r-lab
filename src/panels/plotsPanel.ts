@@ -183,6 +183,14 @@ export class PlotsPanel {
                     case 'resize':
                         this._handleResize((msg as any).width, (msg as any).height, (msg as any).pixelRatio);
                         break;
+                    case 'resizePlot':
+                        this._handleResize(
+                            (msg as any).width,
+                            (msg as any).height,
+                            (msg as any).pixelRatio,
+                            (msg as any).index
+                        );
+                        break;
                     case 'setCustomDir':
                         this._handleSetCustomDir((msg as any).path, false);
                         break;
@@ -326,11 +334,12 @@ export class PlotsPanel {
         }
     }
 
-    private async _handleResize(width: number, height: number, pixelRatio?: number): Promise<void> {
-        if (this._currentIndex < 0) {
+    private async _handleResize(width: number, height: number, pixelRatio?: number, plotIndex?: number): Promise<void> {
+        const targetIndex = typeof plotIndex === 'number' ? plotIndex : this._currentIndex;
+        if (targetIndex < 0 || targetIndex >= this._plots.length) {
             return;
         }
-        const sourceUri = this._plots[this._currentIndex];
+        const sourceUri = this._plots[targetIndex];
         // Only dynamically resize generated plots, not interactive SVG placeholders
         if (sourceUri.fsPath.includes('_interactive.svg')) {
             return;
@@ -400,7 +409,7 @@ tryCatch({
                 return;
             }
 
-            if (this._resizeRenderTokens.get(cacheKey) !== token || this._currentIndex < 0 || this._plots[this._currentIndex]?.fsPath !== sourceUri.fsPath) {
+            if (this._resizeRenderTokens.get(cacheKey) !== token || !this._plots.some(plot => plot.fsPath === sourceUri.fsPath)) {
                 try { if (fs.existsSync(tmpPngPath)) { fs.unlinkSync(tmpPngPath); } } catch {}
                 return;
             }
@@ -888,16 +897,17 @@ tryCatch({
             overflow-x: auto;
             overflow-y: hidden;
             white-space: nowrap;
+            scrollbar-width: thin;
         }
         .toolbar::-webkit-scrollbar {
-            height: 2px;
+            height: 1px;
         }
         .toolbar::-webkit-scrollbar-track {
             background: transparent;
         }
         .toolbar::-webkit-scrollbar-thumb {
             background-color: transparent;
-            border-radius: 2px;
+            border-radius: 1px;
         }
         .toolbar:hover::-webkit-scrollbar-thumb {
             background-color: var(--vscode-scrollbarSlider-background);
@@ -964,7 +974,7 @@ tryCatch({
         }
         .toolbar button#btn-delete:hover:not([disabled]),
         .toolbar button#btn-clear:hover:not([disabled]) {
-            color: #FF0000;
+            color: var(--vscode-problemsErrorIcon-foreground, #DC3545);
         }
         .toolbar button svg { width: 14px; height: 14px; display: block; }
         .toolbar button[disabled] {
@@ -1153,7 +1163,7 @@ tryCatch({
             left: 0;
             right: 0;
             height: 8px;
-            background: color-mix(in srgb, var(--vscode-editor-background) 45%, var(--vscode-editor-foreground) 55%);
+            background: var(--vscode-editorWidget-border, #C0C0C0);
             z-index: 2;
             pointer-events: none;
             transition: background-color 0.2s ease;
@@ -1163,6 +1173,10 @@ tryCatch({
         }
         .compare-pane.active-right::before {
             background: var(--vscode-charts-purple, #b146c2);
+        }
+        body.vscode-dark .compare-pane:not(.active-left):not(.active-right)::before,
+        body.night-mode .compare-pane:not(.active-left):not(.active-right)::before {
+            background: #A9A9A9;
         }
         .compare-view.overlay-active .compare-pane::before {
             display: none;
@@ -1827,6 +1841,31 @@ tryCatch({
             }
         }
 
+        function requestPlotRerenderAtIndex(index, container) {
+            if (document.body.classList.contains('minimized')) return;
+            if (Date.now() < window.__suppressPlotResizeUntil) return;
+            if (!lastState || !lastState.plots || index < 0 || index >= lastState.plots.length) return;
+            if (!container || container.clientWidth <= 20 || container.clientHeight <= 20) return;
+
+            const url = lastState.plots[index];
+            if (!url || url.includes('_interactive.svg')) return;
+
+            vscode.postMessage({
+                type: 'resizePlot',
+                index: index,
+                width: container.clientWidth,
+                height: container.clientHeight,
+                pixelRatio: Math.min(Math.max(window.devicePixelRatio || 1, 1), 2.5)
+            });
+        }
+
+        function requestVisibleCompareRerenders() {
+            if (!isCompareMode) return;
+            const plotArea = document.getElementById('plot-area');
+            requestPlotRerenderAtIndex(compareLeftIndex, plotArea);
+            requestPlotRerenderAtIndex(compareRightIndex, plotArea);
+        }
+
         function renderState(state) {
             lastState = state;
             document.body.classList.toggle('minimized', !!state.minimized);
@@ -2016,6 +2055,7 @@ tryCatch({
                     if (rUrl.includes('_interactive.svg')) imgRight.classList.add('is-interactive');
                     else imgRight.classList.remove('is-interactive');
 
+                    requestVisibleCompareRerenders();
                 }
 
                 window.__lastNightMode = state.isNightMode;
@@ -2766,7 +2806,9 @@ tryCatch({
                 if (Date.now() < window.__suppressPlotResizeUntil) return;
                 clearTimeout(resizeTimeout);
                 resizeTimeout = setTimeout(() => {
-                    if (typeof triggerRerender === 'function') {
+                    if (isCompareMode) {
+                        requestVisibleCompareRerenders();
+                    } else if (typeof triggerRerender === 'function') {
                         triggerRerender();
                     } else {
                         triggerPreviewUpdate();
@@ -2784,7 +2826,9 @@ tryCatch({
                 if (document.body.classList.contains('minimized')) return;
                 if (Date.now() < window.__suppressPlotResizeUntil) return;
                 const plotArea = document.getElementById('plot-area');
-                if (plotArea && !isCompareMode && plotArea.clientWidth > 20 && plotArea.clientHeight > 20) {
+                if (isCompareMode) {
+                    requestVisibleCompareRerenders();
+                } else if (plotArea && plotArea.clientWidth > 20 && plotArea.clientHeight > 20) {
                     vscode.postMessage({
                         type: 'resize',
                         width: plotArea.clientWidth,
