@@ -357,6 +357,8 @@ export class PlotsPanel {
 
         const rscriptPath = getRscriptPath();
 
+        // Left-edge cutoff note: a render-only width gutter was tried here and did not help.
+        // First compare the saved PNG bounds with the webview display path before changing device dimensions again.
         const renderScale = Math.min(Math.max(Number(pixelRatio) || 1, 1), 2.5);
         let w = width * renderScale;
         let h = height * renderScale;
@@ -897,6 +899,7 @@ tryCatch({
             overflow-x: auto;
             overflow-y: hidden;
             white-space: nowrap;
+            /* Scrollbar note: changing WebKit height and removing scrollbar-width did not make this native-tab thin. */
             scrollbar-width: thin;
         }
         .toolbar::-webkit-scrollbar {
@@ -1080,6 +1083,7 @@ tryCatch({
             position: relative;
             overflow: hidden;
             border-radius: 8px;
+            /* Left-edge cutoff note: if saved PNGs are intact, inspect this clipping path and subpixel sizing first. */
             transform: translateZ(0); /* preserves rounded corners when panning */
         }
         .plot-area.zoomed {

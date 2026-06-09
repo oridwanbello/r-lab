@@ -571,6 +571,7 @@ export class ViewerPanel {
             overflow-x: auto;
             overflow-y: hidden;
             white-space: nowrap;
+            /* Scrollbar note: changing WebKit height and removing scrollbar-width did not make this native-tab thin. */
             scrollbar-width: thin;
         }
         .toolbar::-webkit-scrollbar {

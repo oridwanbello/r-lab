@@ -683,6 +683,7 @@ tryCatch({
             display: flex; align-items: center; border-bottom: 1px solid var(--vscode-editorGroup-border);
             background: var(--vscode-editor-background); flex-shrink: 0;
             overflow-x: auto; overflow-y: hidden;
+            /* Scrollbar note: changing WebKit height and removing scrollbar-width did not make this native-tab thin. */
             scrollbar-width: thin;
         }
         .tabs::-webkit-scrollbar {
@@ -914,6 +915,7 @@ tryCatch({
             overflow-x: auto;
             overflow-y: hidden;
             white-space: nowrap;
+            /* Scrollbar note: changing WebKit height and removing scrollbar-width did not make this native-tab thin. */
             scrollbar-width: thin;
         }
         .pkg-toolbar::-webkit-scrollbar {
