@@ -2,7 +2,7 @@
 
 All notable changes to the R Layout extension will be documented in this file.
 
-## [0.3.7] - 2026-06-05
+## [0.3.7] - 2026-06-09
 
 ### Added
 
@@ -17,7 +17,7 @@ All notable changes to the R Layout extension will be documented in this file.
 ### Changed
 
 - Unobtrusive Notifications: Moved plot export and copy-to-clipboard success messages to the VS Code status bar instead of persistent popups.
-- UI Refinements: Thinned horizontal scrollbars across all webviews for a native feel, and perfected responsive gap/padding alignment in the Plot Export sidebar.
+- UI Refinements: Refined responsive gap and padding alignment in the Plot Export sidebar.
 - Widget Placeholder: Adjusted the interactive widget SVG placeholder text size and alignment for better visual balance.
 - Workspace Previews: Updated complex object previews (lists, data frames, tibbles) to `{}` formatting with inline R types, adjusted truncation, and horizontal scrolling.
 
@@ -37,6 +37,10 @@ All notable changes to the R Layout extension will be documented in this file.
 - Windows File Watcher Race Conditions: Fixed stale data in the Data Viewer and broken thumbnails in the Plots panel caused by write latencies.
 - Copy Plot: Fixed copy-to-clipboard on Windows and macOS using native CLI utilities.
 - Test Script: Resolved line length lint errors in `.tmp/test.R`, replaced `library()` imports with `::`, and adjusted Plotly title spacing.
+- Pre-Release Hardening: Safely quote R commands generated from file paths, custom plot directories, package names, and variable names.
+- Viewer Server Security: Hardened the local Viewer file server against path traversal.
+- Watcher Lifecycle: Dispose Viewer and Data Viewer filesystem watchers on layout deactivation so they cannot retain stale workspace roots.
+- Documentation Hygiene: Corrected `.R-layout` naming and removed raw non-ASCII characters from source files.
 
 ## [0.3.6] - 2026-05-30
 
@@ -125,7 +129,7 @@ All notable changes to the R Layout extension will be documented in this file.
 - Webview Architecture: Migrated all sidebar panels (Environment Explorer, Data Viewer, Plots) from Activity Bar WebviewViews to Editor Grid WebviewPanels for deep layout integration.
 - Terminal Management: Implemented robust terminal reuse and vanishing console protection.
 - Settings Preservation: The layout toggle now meticulously saves and restores global VS Code settings (`closeEmptyGroups`, `terminal.integrated.defaultLocation`) to avoid destructive overwrites.
-- Cleanup Logic: The `.r-layout` directory is now cleaned up unconditionally on shutdown.
+- Cleanup Logic: The `.R-layout` directory is now cleaned up unconditionally on shutdown.
 - UI Polish: Updated plot gallery with theme-responsive backgrounds and refined rounding.
 
 ## [0.2.0] - 2026-04-15
@@ -135,7 +139,7 @@ All notable changes to the R Layout extension will be documented in this file.
 - Custom Plot Directory: Added toolbar tool to override plot locations with native folder picker support.
 - Environment Explorer: Tree view displaying variables from the active debug session.
 - Plot Gallery: Initial implementation watching `.layout/plots/` for image files.
-- Data Viewer: Initial implementation for inspecting dataframes.
+- Data Viewer: Initial implementation for inspecting data frames.
 
 ### Changed
 

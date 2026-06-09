@@ -485,7 +485,7 @@ export class DataViewerPanel {
         if (this._isLoading) {
             mainContent = `<div class="status-msg loading-msg"><span>Loading</span><span class="loading-var">${escapeHtml(this._varName)}</span><span>&hellip;</span></div>`;
         } else if (this._errorMessage) {
-            mainContent = `<div class="status-msg error">⚠ ${escapeHtml(this._errorMessage)}</div>`;
+            mainContent = `<div class="status-msg error">Error: ${escapeHtml(this._errorMessage)}</div>`;
         } else if (this._columns.length === 0 && !this._varName) {
             mainContent = `
                 <div class="empty-state">
@@ -499,8 +499,8 @@ export class DataViewerPanel {
         } else {
             const headerCells = this._columns
                 .map((col, i) => {
-                    if (i === 0) {return `<th data-col="0" class="sortable row-num"><span class="col-name"></span><span class="sort-icon">⏶⏷</span></th>`;}
-                    return `<th data-col="${i}" class="sortable"><span class="col-name">${escapeHtml(col)}</span><span class="sort-icon">⏶⏷</span></th>`;
+                    if (i === 0) {return `<th data-col="0" class="sortable row-num"><span class="col-name"></span><span class="sort-icon">&#9650;&#9660;</span></th>`;}
+                    return `<th data-col="${i}" class="sortable"><span class="col-name">${escapeHtml(col)}</span><span class="sort-icon">&#9650;&#9660;</span></th>`;
                 })
                 .join('');
 
@@ -775,7 +775,7 @@ export class DataViewerPanel {
 <body${actualMinimized ? ' class="minimized"' : ''}>
     <div class="toolbar">
         <div>
-            ${this._varName ? `<span class="meta">${escapeHtml(this._varName)} (${this._totalRows.toLocaleString()} × ${this._totalCols}${this._is3D ? ` × ${this._totalSlices}` : ''})</span>` : ''}
+            ${this._varName ? `<span class="meta">${escapeHtml(this._varName)} (${this._totalRows.toLocaleString()} &times; ${this._totalCols}${this._is3D ? ` &times; ${this._totalSlices}` : ''})</span>` : ''}
         </div>
         <div class="toolbar-actions">
             ${this._is3D ? `
@@ -853,10 +853,10 @@ export class DataViewerPanel {
                 function applySort() {
                     document.querySelectorAll('th.sortable').forEach((t, i) => {
                         t.classList.remove('sort-asc','sort-desc');
-                        t.querySelector('.sort-icon').textContent = '⏶⏷';
+                        t.querySelector('.sort-icon').innerHTML = '&#9650;&#9660;';
                         if (i === sortCol) {
                             t.classList.add(sortAsc ? 'sort-asc' : 'sort-desc');
-                            t.querySelector('.sort-icon').textContent = sortAsc ? '⏶' : '⏷';
+                            t.querySelector('.sort-icon').innerHTML = sortAsc ? '&#9650;' : '&#9660;';
                         }
                     });
 

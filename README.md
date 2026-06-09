@@ -14,7 +14,7 @@ Transform your editor into an RStudio-inspired 3-pane grid with a single click. 
 ## Core Features
 
 - Instant Layout: Snaps your editor into a 3-pane grid (Source Editor, Terminal/Console, and Workspace/Plots).
-- Workspace & Package Manager: Live variable inspector, dictionary-style object previews, and a 1-click interactive dataframe viewer. Includes a dedicated tab to search, attach, and detach R packages.
+- Workspace & Package Manager: Live variable inspector, dictionary-style object previews, and a 1-click interactive data frame viewer. Includes a dedicated tab to search, attach, and detach R packages.
 - Plot Gallery & Export: Interactive plot navigation (scroll/pinch zoom, pan) with advanced export settings (PDF, SVG, EPS, PNG, JPG) and smart file size estimation.
 - HTML Widget Viewer: Sandboxed layout tab for R `viewer()` outputs (Shiny apps, `htmlwidgets`, Quarto previews, vignettes).
 - Integrated R Help & Smart Execution: KaTeX math rendering, cross-reference linking, and dynamic code execution (Run Source / Run Selection).
@@ -22,8 +22,8 @@ Transform your editor into an RStudio-inspired 3-pane grid with a single click. 
 ## Getting Started
 
 1. Prerequisite: Ensure you have the official [vscode-R](https://marketplace.visualstudio.com/items?itemName=REditorSupport.r) extension installed.
-2. Open a workspace and click "R Layout" in the Status Bar (or run `Toggle R Layout` from the Command Palette).
-3. Open an `.R` or `.Rmd` file and click the "Source File" icon in the editor title bar to run your code.
+2. Open a workspace and click "R Layout" in the Status Bar, or run `Toggle R Layout` from the Command Palette.
+3. Open an `.R` file and click the source icon in the editor title bar. For `.Rmd`, `.qmd`, or Markdown files, select a code chunk or line and run the selection.
 
 ## Key Settings & Commands
 
@@ -32,7 +32,7 @@ Transform your editor into an RStudio-inspired 3-pane grid with a single click. 
 | `r-layout.rConsoleType` | Select console type (`Auto Detect`, `Standard R`, `Radian`) to enforce bracketed paste. |
 | `r-layout.rConsolePath` | Path or command for the R Console terminal (default: `"R"`). |
 | `r-layout.restoreCustomPanelPositions` | If true, restores panels to custom dragged locations instead of strict 3-pane. |
-| `r-layout.plotOutputDir` | Custom directory for R Layout plot images. |
+| `r-layout.plotOutputDir` | Custom directory for R Layout plot images. Defaults to `.R-layout/plots` in the workspace or home directory. |
 | `Toggle R Layout` | Snap the editor into or out of the 3-pane grid. |
 | `Maximize Top Pane` | Expand the top-right pane; minimizes bottom panes. |
 

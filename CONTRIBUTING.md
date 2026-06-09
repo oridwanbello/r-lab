@@ -69,12 +69,13 @@ The project has been refactored into a modular architecture to support the 3-pan
 - `src/extension.ts`: The main entry point.
 - `src/layout/layoutManager.ts`: The core engine that orchestrates the VS Code layout, grid groups, and terminal preservation.
 - `src/panels/`: Contains the WebviewPanel singletons for the layout:
-  - `dataViewerPanel.ts`: Renders dataframe tables.
+  - `dataViewerPanel.ts`: Renders data frame and matrix tables.
   - `helpPanel.ts`: Displays integrated R documentation.
   - `plotsPanel.ts`: Watches for and renders plot images.
   - `problemsPanel.ts`: Visualizes workspace diagnostics with native Codicons.
-  - `workspacePanel.ts`: Renders the DAP variable tree.
-- `src/util/`: Helper utilities (e.g., Debug Adapter Protocol functions).
+  - `viewerPanel.ts`: Displays HTML widgets, Shiny apps, and other `viewer()` outputs.
+  - `workspacePanel.ts`: Renders Global Environment, Packages, and Attached Objects tabs.
+- `src/utils/`: Helper utilities for webviews and R path resolution.
 
 ---
 

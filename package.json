@@ -53,7 +53,7 @@
         "r-layout.plotOutputDir": {
           "type": "string",
           "default": "",
-          "description": "A custom directory path where R Layout should silently write plot images. If left blank, it uses the default temporary folder (.r_layout/plots in the workspace root, or your home directory if no workspace is open)."
+          "description": "A custom directory path where R Layout should silently write plot images. If left blank, it uses the default temporary folder (.R-layout/plots in the workspace root, or your home directory if no workspace is open)."
         }
       }
     },

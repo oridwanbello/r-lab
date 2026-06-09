@@ -285,9 +285,23 @@ export class ViewerPanel {
                     return;
                 }
 
-                // Prevent directory traversal attacks
-                const safePath = path.normalize(requestPath).replace(/^(\.\.[\/\\])+/, '');
-                const filePath = path.join(dir, safePath);
+                let decodedPath: string;
+                try {
+                    decodedPath = decodeURIComponent(requestPath);
+                } catch {
+                    res.writeHead(400);
+                    res.end('Bad request');
+                    return;
+                }
+
+                const safeRelativePath = path.normalize(decodedPath).replace(/^[/\\]+/, '');
+                const rootDir = path.resolve(dir);
+                const filePath = path.resolve(rootDir, safeRelativePath);
+                if (filePath !== rootDir && !filePath.startsWith(rootDir + path.sep)) {
+                    res.writeHead(403);
+                    res.end('Forbidden');
+                    return;
+                }
 
                 fs.readFile(filePath, (err, data) => {
                     if (err) {
@@ -571,7 +585,7 @@ export class ViewerPanel {
             overflow-x: auto;
             overflow-y: hidden;
             white-space: nowrap;
-            /* Scrollbar note: changing WebKit height and removing scrollbar-width did not make this native-tab thin. */
+            /* Previous attempt: WebKit height changes and removing scrollbar-width did not match native tab scrollbars. */
             scrollbar-width: thin;
         }
         .toolbar::-webkit-scrollbar {

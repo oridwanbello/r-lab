@@ -15,15 +15,11 @@ import { getRPath, getRArgs } from '../utils/rPathResolver';
  *
  * Orchestrates an asymmetrical 3-pane RStudio-style layout:
  *
- *   ┌──────────────────────────────┬──────────────────────────────┐
- *   │                              │                              │
- *   │                              │       2 R Console / Term     │
- *   │                              │                              │
- *   │      1 Source Editor         ├──────────────────────────────┤
- *   │       (Full Height)          │                              │
- *   │                              │       3 Workspace / Plots    │
- *   │                              │                              │
- *   └──────────────────────────────┴──────────────────────────────┘
+ *   +------------------------------+------------------------------+
+ *   |                              |       2 R Console / Term     |
+ *   |      1 Source Editor         +------------------------------+
+ *   |       (Full Height)          |       3 Workspace / Plots    |
+ *   +------------------------------+------------------------------+
  *
  * On activation:
  *   - Saves open source files, then closes ALL editors & terminals
@@ -161,7 +157,7 @@ export function registerLayoutCommand(
         // Escape backslashes for Windows paths; forward slashes work on all platforms
         const escapedPath = filePath.replace(/\\/g, '/');
         rConsoleTerminal.show(false); // bring it into view without stealing keyboard focus
-        rConsoleTerminal.sendText(`source('${escapedPath}', echo = FALSE, print.eval = TRUE)`);
+        rConsoleTerminal.sendText(`source(${JSON.stringify(escapedPath)}, echo = FALSE, print.eval = TRUE)`);
     };
 
     context.subscriptions.push(
@@ -253,7 +249,7 @@ export function registerLayoutCommand(
     // Maximize: apply hardcoded 0.9/0.1 vertical layout (works reliably).
     // Restore:  read the CURRENT layout (at current window pixel scale),
     //           equalize the vertical sub-split, and re-apply.  This keeps
-    //           all values at the same pixel scale — mixing proportional
+    //           all values at the same pixel scale; mixing proportional
     //           values (0-1) with pixel values caused distortion on
     //           short windows.  Reading at current scale also ensures
     //           values are above minimum heights, so proportional resize
@@ -313,7 +309,7 @@ export function registerLayoutCommand(
                 }
                 await vscode.commands.executeCommand('vscode.setEditorLayout', current);
             } catch {
-                // ignore – step 2 below will handle it
+                // ignore; step 2 below will handle it
             }
 
             // Step 2: proportional re-stamp
@@ -443,8 +439,8 @@ export async function resetStaleLayout(
     // CONDITIONAL stale-layout cleanup
     // Only close editors and reset the layout if there are actually
     // stale elements from a previous R Layout session:
-    //   • more than one editor group (leftover 3-pane grid), OR
-    //   • webview / notebook tabs (our panel singletons) still open
+    //   - more than one editor group (leftover 3-pane grid), OR
+    //   - webview / notebook tabs (our panel singletons) still open
     // On a clean startup with no stale layout this is a no-op,
     // which avoids creating a spurious two-group split.
     const groups = vscode.window.tabGroups.all;
@@ -711,7 +707,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     await delay(10);
 
-    //  CRITICAL: Populate groups in strict order 1 → 2 → 3 → 4
+    //  CRITICAL: Populate groups in strict order 1 -> 2 -> 3 -> 4
     //  VS Code assigns ViewColumn numbers based on the order
     //  groups first receive content. If we put content into
     //  Group 2 before Group 1, the ViewColumns all shift.
@@ -751,7 +747,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     // viewColumn or moveToEditor + immediate Group 1 restore instead.
     await delay(10);
 
-    // 9. Group 2 (bottom-left): R Console → Terminal → Problems
+    // 9. Group 2 (bottom-left): R Console -> Terminal -> Problems
     //
     //    Strategy for existing terminals (session retention):
     //      a) Create ProblemsPanel in ViewColumn.Two FIRST - this anchors Group 2
@@ -760,7 +756,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     //      c) Call terminal.show(false) to make the terminal the active one
     //         in the panel without stealing editor focus away from Group 2.
     //      d) Call moveToEditor - moves the active panel terminal to the
-    //         currently focused editor group (Group 2). ✓
+    //         currently focused editor group (Group 2).
     //
     //    For NEW terminals, createTerminal with location.viewColumn is reliable.
     // 9a. Anchor Group 2 with ProblemsPanel before any terminal placement.
@@ -912,7 +908,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     }
 
     // ProblemsPanel: dispose the anchor instance and recreate so it becomes the
-    // LAST tab in Group 2, giving order: R Console → Terminal → Problems.
+    // LAST tab in Group 2, giving order: R Console -> Terminal -> Problems.
     await delay(10);
     ProblemsPanel.currentPanel?.dispose();
     await delay(10);
@@ -922,7 +918,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
 
     // 10. HelpPanel: Appended to Group 2 (Top-Right) so it becomes the 4th tab
-    //     Order in Group 2: R Console → Terminal → Problems → Help
+    //     Order in Group 2: R Console -> Terminal -> Problems -> Help
     const helpPanel = HelpPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
     if (savedHelpState) { helpPanel.loadState(savedHelpState); }
     await delay(10);
@@ -935,7 +931,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         await vscode.commands.executeCommand('workbench.action.firstEditorInGroup');
     } catch {}
 
-    // 11. Group 3 (bottom-right): Workspace → Plots → Data Viewer → Viewer (Workspace FIRST, Workspace FOCUSED)
+    // 11. Group 3 (bottom-right): Workspace -> Plots -> Data Viewer -> Viewer (Workspace FIRST, Workspace FOCUSED)
     //     Create Workspace first (leftmost tab), then Plots, then Data Viewer, then Viewer.
     //     Reveal Workspace at the end to make it the active/focused tab.
     const workspacePanel = WorkspacePanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three, !restoreCustom);
@@ -1146,8 +1142,8 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     try { await vscode.commands.executeCommand('workbench.action.closePanel'); } catch {}
 
     // 16. Set final tab focus:
-    //     • R Console  → first tab in Group 2 (top-right)
-    //     • Workspace  → first tab in Group 3 (bottom-right)
+    //     - R Console  -> first tab in Group 2 (top-right)
+    //     - Workspace  -> first tab in Group 3 (bottom-right)
     //     Done LAST so nothing steals the focus back.
 
     // Group 3 (bottom-right): activate Workspace (first tab)
@@ -1226,6 +1222,10 @@ async function deactivateLayout(): Promise<void> {
 
     // 2. Dispose layout guards immediately so they don't interfere
     disposeLayoutGuards();
+    viewerWatcher?.dispose();
+    viewerWatcher = undefined;
+    dvWatcher?.dispose();
+    dvWatcher = undefined;
 
     // 3. Save user's text files and custom panel positions before closing
     const sourceFiles: vscode.Uri[] = [];
@@ -1594,7 +1594,7 @@ function disposeLayoutGuards(): void {
  *           fails for all extensions (e.g. extension doesn't support it).
  *
  * After each successful placement, the new tab is moved left past Help so
- * the order is always Chat(s) → Help per the AGENTS.md spec.
+ * the order is always Chat(s) -> Help per the AGENTS.md spec.
  *
  * IMPORTANT: Caller must create HelpPanel in Group 3 BEFORE calling this.
  * focusThirdEditorGroup silently no-ops on an empty group - Group 3 must
@@ -1630,7 +1630,7 @@ async function focusGroup3(): Promise<void> {
 
 function updateStatusBar(): void {
     if (isLayoutActive) {
-        statusBarItem.text = 'R Layout ●';
+        statusBarItem.text = 'R Layout $(circle-filled)';
         statusBarItem.tooltip = 'Click to Deactivate RStudio Layout';
     } else {
         statusBarItem.text = 'R Layout';
@@ -1871,7 +1871,7 @@ local({
 
 # Default plot output directory (absolute path injected by extension).
 # Can be overridden mid-session via: options(.rlayout_plot_dir = "/your/custom/path")
-# Resetting: options(.rlayout_plot_dir = NULL)  → reverts to default
+# Resetting: options(.rlayout_plot_dir = NULL) reverts to default
 options(.rlayout_plot_dir = "${absPlotsDir}")
 
 # Set default device to null pdf to enable invisible plot recording

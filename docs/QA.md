@@ -21,8 +21,8 @@ Goal: Verify R graphics are captured correctly and the UI functions work.
 - [ ] Layered Graphics: Run `plot(1:10)`, then `lines(10:1)`. Ensure only *one* plot shows in the gallery, and it contains both layers (no duplicates).
 - [ ] Responsive Resizing: Resize the Plots pane. Ensure the plot re-renders automatically to fit the new dimensions without distortion.
 - [ ] Interactivity: Test click-and-drag panning and scroll-wheel zooming on a plot.
-- [ ] Export Options: Export a plot as `PNG`, `SVG`, `PDF`, and `EPS`. Verify the export progress bar briefly appears, follows up with an auto-dismissing success toast, and that the files exist on disk.
-- [ ] Comparison Mode: Generate two different plots. Select the second plot, hold `Shift` (or click the Compare button), and select the first plot. Verify the side-by-side slider works.
+- [ ] Export Options: Export a plot as `PNG`, `SVG`, `PDF`, and `EPS`. Verify the export progress notification appears, a status-bar success message follows, and the files exist on disk.
+- [ ] Comparison Mode: Generate two different plots. Use the Compare button and verify side-by-side comparison, synced zoom/pan, and overlay controls work.
 
 ### 3. Data Viewer
 
@@ -31,7 +31,6 @@ Goal: Ensure data tables load quickly, correctly parse, and handle edge cases.
 - [ ] Basic View(): Run `View(mtcars)`. Verify the webview opens in Group 3, shows the correct headers, and row numbers.
 - [ ] Large Datasets: Run `View(ggplot2::diamonds)`. Ensure it loads without freezing the UI and shows the truncation notice if it exceeds the row limit.
 - [ ] 3D Matrices: Create a 3D matrix (`arr <- array(1:24, dim = c(4, 3, 2))`) and run `View(arr)`. Ensure the Slice Navigation buttons appear and correctly swap between slices.
-- [ ] Data Export: Click the CSV export button. Verify the download toast notification appears.
 - [ ] Windows Lock Race: (On Windows) Rapidly call `View(df1)` then `View(df2)`. Ensure `df2` loads successfully and doesn't throw `ENOENT` or get stuck on `df1`.
 
 ### 4. Workspace Explorer
@@ -39,15 +38,17 @@ Goal: Ensure data tables load quickly, correctly parse, and handle edge cases.
 Goal: Ensure environment variables track perfectly.
 
 - [ ] Variable Detection: Create `x <- 5` and `df <- data.frame(a=1)`. Ensure both appear in the Workspace panel.
-- [ ] Hierarchical Trees: Click the dropdown arrow on a list or data frame. Ensure the child elements expand correctly.
-- [ ] Quick Viewer Launch: Click the eye icon next to `df`. Ensure the Data Viewer opens for that specific dataframe.
+- [ ] Quick Viewer Launch: Click the eye icon next to `df`. Ensure the Data Viewer opens for that specific data frame.
+- [ ] Variable Removal: Remove a single variable with the trash icon. Verify the loading spinner appears and only that variable is removed.
+- [ ] Clear Workspace: Click the broom icon. Verify user variables are cleared while R Layout internals such as `View`, `.r_layout_view_data`, and `.rlayout_*` objects are preserved.
+- [ ] Package Attach/Detach: Attach and detach a package from the Packages tab. Verify `later` can be detached without unloading/crashing the R session.
 
 ### 5. HTML Widgets & Viewer Panel
 
 Goal: Ensure web-based outputs render and serve correctly.
 
 - [ ] HTML Widgets: Run `plotly::plot_ly(mtcars, x = ~wt, y = ~mpg, type = 'scatter', mode = 'markers')`. Verify the interactive chart appears in the Viewer pane.
-- [ ] Snapshots: Click the "Capture as PNG" button in the Viewer pane. Verify the auto-dismissing success toast appears and the image is saved.
+- [ ] Snapshots: Click the "Capture as PNG" button in the Viewer pane. Verify the status-bar success message appears, the completion notification appears, and the image is saved.
 - [ ] Local Shiny App: Run a basic Shiny app. Verify the Viewer pane loads the app correctly.
 
 ### 6. Webview Pop-out & Focus Management

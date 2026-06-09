@@ -327,7 +327,7 @@ export class HelpPanel {
         // Determine what to show in the main area
         let mainContent: string;
         if (this._isLoading) {
-            mainContent = `<div class="status-msg">⏳ Loading help for "${escapeHtml(this._lastQuery)}"…</div>`;
+            mainContent = `<div class="status-msg">Loading help for "${escapeHtml(this._lastQuery)}"&hellip;</div>`;
         } else if (this._helpText) {
             mainContent = `
                 <div class="help-html-content">${this._helpText}</div>`;
@@ -972,15 +972,15 @@ export class HelpPanel {
  * Strips terminal overstrike sequences from R's Rd2txt output.
  *
  * R uses two overstrike conventions:
- *   Bold:      char + \b + char  →  e.g. "L\bL" displays as bold L
- *   Underline: _ + \b + char     →  e.g. "_\bL" displays as underlined L
+ *   Bold:      char + \b + char  -> e.g. "L\bL" displays as bold L
+ *   Underline: _ + \b + char     -> e.g. "_\bL" displays as underlined L
  *              (headers show as _L_o_a_d when \b is lost in pipe capture)
  *
  * We strip both forms and also remove any remaining bare ANSI escape codes.
  */
 function stripTerminalFormatting(text: string): string {
     return text
-        // Remove overstrike: "X\bX" (bold) → "X"
+        // Remove overstrike: "X\bX" (bold) -> "X"
         .replace(/.\x08/g, '')
         // Remove underscore-letter overstrike remnants: "_L" style headers
         // Pattern: repeated _CHAR sequence like _L_o_a_d_i_n_g
@@ -993,4 +993,3 @@ function stripTerminalFormatting(text: string): string {
         // Normalize any remaining stray backspaces
         .replace(/\x08/g, '');
 }
-

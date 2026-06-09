@@ -100,26 +100,27 @@ export class WorkspacePanel {
                         }
                         break;
                     case 'attachPackage':
-                        if (msg.pkgName) { this._sendToRConsole(`library(${msg.pkgName})`); }
+                        if (msg.pkgName) { this._sendToRConsole(`library(${JSON.stringify(msg.pkgName)}, character.only = TRUE)`); }
                         break;
                     case 'detachPackage':
                         if (msg.pkgName) {
+                            const packageName = JSON.stringify(`package:${msg.pkgName}`);
                             if (msg.pkgName === 'later') {
-                                this._sendToRConsole(`detach("package:${msg.pkgName}")`);
+                                this._sendToRConsole(`detach(${packageName})`);
                             } else {
-                                this._sendToRConsole(`detach("package:${msg.pkgName}", unload = TRUE)`);
+                                this._sendToRConsole(`detach(${packageName}, unload = TRUE)`);
                             }
                         }
                         break;
                     case 'removeVariable':
                         if (msg.varName) {
-                            this._sendToRConsole(`rm(${msg.varName}, envir = .GlobalEnv)`);
+                            this._sendToRConsole(`rm(list = ${JSON.stringify(msg.varName)}, envir = .GlobalEnv)`);
                             await this._refreshWorkspace();
                         }
                         break;
                     case 'clearWorkspace':
                         this._sendToRConsole(
-                            'rm(list = grep(.r_layout_protected_objects, ls(envir = .GlobalEnv, all.names = TRUE), value = TRUE, invert = TRUE), envir = .GlobalEnv)'
+                            'local({ p <- if (exists(".r_layout_protected_objects", envir = .GlobalEnv)) get(".r_layout_protected_objects", envir = .GlobalEnv) else "^\\\\.rlayout_|^\\\\.r_layout|^null_dev$|^\\\\.First$|^\\\\.Last$|^View$"; rm(list = grep(p, ls(envir = .GlobalEnv, all.names = TRUE), value = TRUE, invert = TRUE), envir = .GlobalEnv) })'
                         );
                         await this._refreshWorkspace();
                         break;
@@ -683,7 +684,7 @@ tryCatch({
             display: flex; align-items: center; border-bottom: 1px solid var(--vscode-editorGroup-border);
             background: var(--vscode-editor-background); flex-shrink: 0;
             overflow-x: auto; overflow-y: hidden;
-            /* Scrollbar note: changing WebKit height and removing scrollbar-width did not make this native-tab thin. */
+            /* Previous attempt: WebKit height changes and removing scrollbar-width did not match native tab scrollbars. */
             scrollbar-width: thin;
         }
         .tabs::-webkit-scrollbar {
@@ -915,7 +916,7 @@ tryCatch({
             overflow-x: auto;
             overflow-y: hidden;
             white-space: nowrap;
-            /* Scrollbar note: changing WebKit height and removing scrollbar-width did not make this native-tab thin. */
+            /* Previous attempt: WebKit height changes and removing scrollbar-width did not match native tab scrollbars. */
             scrollbar-width: thin;
         }
         .pkg-toolbar::-webkit-scrollbar {
@@ -1198,7 +1199,7 @@ tryCatch({
                 }
 
                 if (msg.errorMessage) {
-                    el.innerHTML = '<div class="status-msg error">⚠ ' + escapeHtml(msg.errorMessage) + '</div>';
+                    el.innerHTML = '<div class="status-msg error">Error: ' + escapeHtml(msg.errorMessage) + '</div>';
                     return;
                 }
 
@@ -1293,7 +1294,7 @@ tryCatch({
                     );
                 }
 
-                // Sort: attached first, then loaded, then none — alphabetical within each
+                // Sort: attached first, then loaded, then none; alphabetical within each
                 filtered.sort((a, b) => {
                     const order = { attached: 0, loaded: 1, none: 2 };
                     const diff = order[a.status] - order[b.status];
