@@ -127,6 +127,12 @@ export function registerLayoutCommand(
     context.subscriptions.push(
         vscode.commands.registerCommand('r-layout.noop', () => {})
     );
+    context.subscriptions.push(
+        vscode.commands.registerCommand('r-layout.syncWidgetPlaceholder', () => {
+            const hasWidgets = ViewerPanel.currentPanel?.hasInteractiveWidgetHistory() ?? false;
+            PlotsPanel.currentPanel?.setWidgetPlaceholderVisible(hasWidgets);
+        })
+    );
 
     // Source File to R Console
     // This command sends source('filepath') to our R Console terminal.
@@ -941,7 +947,8 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     plotsPanel.syncPlots(); // catch up on any plots created while layout was closed
     const dataPanel = DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three, !restoreCustom);
     const viewerPanel = ViewerPanel.createOrShow(context.extensionUri, undefined, vscode.ViewColumn.Three, !restoreCustom);
-    if (savedViewerState) { viewerPanel.loadState(savedViewerState); }
+    if (savedViewerState) { await viewerPanel.loadState(savedViewerState); }
+    await vscode.commands.executeCommand('r-layout.syncWidgetPlaceholder');
 
     if (!restoreCustom) {
         workspacePanel.reveal(); // restore Workspace as the focused tab in Group 3
@@ -2224,6 +2231,30 @@ function _buildWatcherRprofile(): string | undefined {
       }
     `;
 
+    const plotDirRequestCode = `
+      .plot_dir_req_path <- file.path("${absOutDir}", ".plot_dir_req")
+      if (file.exists(.plot_dir_req_path)) {
+        try({
+          .dir_req <- readLines(.plot_dir_req_path, warn = FALSE)
+          if (length(.dir_req) > 0) {
+            .target_dir <- trimws(.dir_req[1])
+            if (identical(.target_dir, "__DEFAULT__") || !nzchar(.target_dir)) {
+              options(.rlayout_plot_dir = NULL)
+            } else {
+              .target_dir <- path.expand(.target_dir)
+              dir.create(.target_dir, showWarnings = FALSE, recursive = TRUE)
+              options(.rlayout_plot_dir = .target_dir)
+            }
+            .rlayout_current_plot_id <<- 0
+            .rlayout_last_plot_hash <<- NULL
+            .rlayout_advance_next_plot <<- TRUE
+            .rlayout_skip_stale_plot_once <<- TRUE
+          }
+          unlink(.plot_dir_req_path)
+        }, silent = TRUE)
+      }
+    `;
+
     const rCode = `
 # R Layout workspace watcher - auto-loaded via R_PROFILE_USER
 
@@ -2247,29 +2278,18 @@ local({
 .rlayout_active_df_slice <- 1
 .rlayout_last_plot_hash <- NULL
 .rlayout_current_plot_id <- 0
+.rlayout_skip_stale_plot_once <- FALSE
 
 # Default plot output directory (absolute path injected by extension).
-# Can be overridden mid-session via: options(.rlayout_plot_dir = "/your/custom/path")
-# Resetting: options(.rlayout_plot_dir = NULL) reverts to default
 options(.rlayout_plot_dir = "${absPlotsDir}")
 
 # Set default device to null pdf to enable invisible plot recording
 options(device = function(...) { pdf(file=NULL, ...); dev.control("enable") })
 
-# Function to emit an SVG placeholder for interactive widgets
+# Flush any pending plot before an interactive widget takes over the Viewer.
 .rlayout_emit_interactive_placeholder <- function() {
+  ${plotDirRequestCode}
   tryCatch(.rlayout_force_save_plot(), error = function(e) {})
-
-  .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
-  if (!dir.exists(.out_dir)) dir.create(.out_dir, recursive = TRUE, showWarnings = FALSE)
-
-  # We only ever use ONE widget placeholder file so it doesn't consume or skip plot numbers
-  plot_name <- file.path(.out_dir, "widget_interactive.svg")
-
-  # Write a minimal SVG to trigger the filesystem watcher and update modified time.
-  # The VS Code UI dynamically injects the true visual design.
-  svg_content <- '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'
-  writeLines(svg_content, plot_name)
 }
 
 # Hook HTML/Shiny viewer
@@ -2340,6 +2360,12 @@ options(browser = function(url) {
 
 .rlayout_update_plot_id_base <- function() {
   if (dev.cur() > 1 && !isTRUE(par("page"))) return()
+  if (isTRUE(.rlayout_skip_stale_plot_once)) {
+    .rlayout_skip_stale_plot_once <<- FALSE
+    .rlayout_last_plot_hash <<- NULL
+    .rlayout_advance_next_plot <<- TRUE
+    return()
+  }
   # Force save the previous plot before a new page clears it.
   # .rlayout_force_save_plot renders to a temp PNG first and rejects blank
   # device captures, which Windows can expose as non-empty display lists.
@@ -2347,6 +2373,12 @@ options(browser = function(url) {
   .rlayout_advance_next_plot <<- TRUE
 }
 .rlayout_update_plot_id_grid <- function() {
+  if (isTRUE(.rlayout_skip_stale_plot_once)) {
+    .rlayout_skip_stale_plot_once <<- FALSE
+    .rlayout_last_plot_hash <<- NULL
+    .rlayout_advance_next_plot <<- TRUE
+    return()
+  }
   tryCatch(.rlayout_force_save_plot(), error = function(e) {})
   .rlayout_advance_next_plot <<- TRUE
 }
@@ -2532,10 +2564,15 @@ invisible(local({
         }, silent = TRUE)
       }
 
+      ${plotDirRequestCode}
       ${plotExportCode}
 
       # 2. Capture plots quietly
-      tryCatch(.rlayout_force_save_plot(), error = function(e) {})
+      if (isTRUE(.rlayout_skip_stale_plot_once)) {
+        .rlayout_last_plot_hash <<- NULL
+      } else {
+        tryCatch(.rlayout_force_save_plot(), error = function(e) {})
+      }
 
       # 3. Snapshot Workspace
       ${snapshotCode}
@@ -2569,6 +2606,7 @@ invisible(local({
         }, silent = TRUE)
       }
 
+      ${plotDirRequestCode}
       ${plotExportCode}
       if ("later" %in% loadedNamespaces()) {
         try(later::later(.rlayout_loop, 0.2), silent = TRUE)

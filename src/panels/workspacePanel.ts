@@ -708,10 +708,19 @@ tryCatch({
         .tabs::-webkit-scrollbar-thumb:active {
             background-color: var(--vscode-scrollbarSlider-activeBackground);
         }
-        .tab { padding: 8px 16px; cursor: pointer; opacity: 0.6; font-weight: 600; white-space: nowrap; display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+        .tab { padding: 8px 16px; cursor: pointer; opacity: 0.6; font-size: var(--vscode-font-size, 13px); font-weight: normal; white-space: nowrap; display: flex; align-items: center; gap: 4px; flex-shrink: 0; position: relative; }
         .tab:not(:last-child) { border-right: 1px solid var(--vscode-editorGroup-border); }
         .tab:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
-        .tab.active { opacity: 1; color: var(--vscode-textLink-foreground); }
+        .tab.active { opacity: 1; color: var(--vscode-foreground); }
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 3px;
+            background: var(--vscode-button-background);
+        }
 
         /* Content Panels */
         .content { flex: 1; overflow: hidden; display: none; flex-direction: column; }

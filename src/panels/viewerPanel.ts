@@ -35,6 +35,15 @@ export class ViewerPanel {
     private _currentServeDir: string | undefined;
     private _currentPort: number | undefined;
 
+    private static _isInteractiveWidgetUrl(url: string): boolean {
+        let decoded = url;
+        try {
+            decoded = decodeURIComponent(url);
+        } catch {}
+        decoded = decoded.replace(/\\/g, '/');
+        return /viewhtml.*\/index\.html(?:[?#].*)?$/i.test(decoded);
+    }
+
     public static createOrShow(
         extensionUri: vscode.Uri,
         url?: string,
@@ -196,6 +205,11 @@ export class ViewerPanel {
         this._currentIndex = this._history.length - 1;
 
         await this._navigate(url);
+        this._syncWidgetPlaceholder();
+    }
+
+    public hasInteractiveWidgetHistory(): boolean {
+        return this._history.some(url => ViewerPanel._isInteractiveWidgetUrl(url));
     }
 
     public saveState(): any {
@@ -218,6 +232,7 @@ export class ViewerPanel {
             this._currentUrl = undefined;
             this._updateWebviewState();
         }
+        this._syncWidgetPlaceholder();
     }
 
     private async _navigate(url: string): Promise<void> {
@@ -485,10 +500,12 @@ export class ViewerPanel {
             if (this._currentIndex >= this._history.length) {
                 this._currentIndex = this._history.length - 1;
             }
+            this._syncWidgetPlaceholder();
             // Navigate triggers updateWebviewState
             this._navigate(this._history[this._currentIndex]);
             return;
         }
+        this._syncWidgetPlaceholder();
         this._updateWebviewState();
     }
 
@@ -497,7 +514,12 @@ export class ViewerPanel {
         this._currentIndex = -1;
         this._currentUrl = undefined;
         this._cleanupWidgetPlaceholders();
+        this._syncWidgetPlaceholder();
         this._updateWebviewState();
+    }
+
+    private _syncWidgetPlaceholder(): void {
+        vscode.commands.executeCommand('r-layout.syncWidgetPlaceholder');
     }
 
     private _cleanupWidgetPlaceholders(): void {
