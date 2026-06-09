@@ -938,30 +938,8 @@ tryCatch({
             z-index: 100;
             position: relative;
             flex-shrink: 0;
-            overflow-x: auto;
-            overflow-y: hidden;
+            overflow: visible;
             white-space: nowrap;
-            /* Previous attempt: WebKit height changes and removing scrollbar-width did not match native tab scrollbars. */
-            scrollbar-width: thin;
-        }
-        .toolbar::-webkit-scrollbar {
-            height: 1px;
-        }
-        .toolbar::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .toolbar::-webkit-scrollbar-thumb {
-            background-color: transparent;
-            border-radius: 1px;
-        }
-        .toolbar:hover::-webkit-scrollbar-thumb {
-            background-color: var(--vscode-scrollbarSlider-background);
-        }
-        .toolbar::-webkit-scrollbar-thumb:hover {
-            background-color: var(--vscode-scrollbarSlider-hoverBackground);
-        }
-        .toolbar::-webkit-scrollbar-thumb:active {
-            background-color: var(--vscode-scrollbarSlider-activeBackground);
         }
         .toolbar > * {
             flex-shrink: 0;
@@ -969,8 +947,14 @@ tryCatch({
         .nav-controls {
             display: flex;
             align-items: center;
+            justify-content: flex-end;
             gap: 6px;
+            flex: 1 1 auto;
+            min-width: 0;
             margin-left: auto;
+        }
+        .nav-controls > * {
+            flex-shrink: 0;
         }
         .separator {
             width: 1px;
@@ -1029,6 +1013,35 @@ tryCatch({
         }
         .toolbar button[disabled]:hover {
             background: none;
+        }
+        .toolbar-overflow {
+            position: relative;
+            display: none;
+            flex-shrink: 0;
+        }
+        .toolbar-overflow.visible {
+            display: flex;
+        }
+        .toolbar-overflow-menu {
+            display: none;
+            position: absolute;
+            top: 30px;
+            right: 0;
+            z-index: 1200;
+            min-width: 34px;
+            padding: 4px;
+            flex-direction: column;
+            gap: 4px;
+            background: var(--vscode-editorHoverWidget-background, #252526);
+            border: 1px solid var(--vscode-editorHoverWidget-border, #454545);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            border-radius: 6px;
+        }
+        .toolbar-overflow.open .toolbar-overflow-menu {
+            display: flex;
+        }
+        .toolbar-overflow-menu .btn-group {
+            width: fit-content;
         }
 
         /* Custom Instant Tooltip */
@@ -1689,6 +1702,10 @@ tryCatch({
             </div>
             <button id="btn-custom-dir" class="btn-custom-dir" data-tooltip="Set Custom Plot Directory"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="m7.52 2c-0.00591-2.1e-4 -0.0118-3.1e-4 -0.0178-3.1e-4l-1.2-1.6c-0.0932-0.124-0.214-0.225-0.353-0.294-0.139-0.0694-0.292-0.106-0.447-0.106h-3.5c-0.53 0-1.04 0.211-1.41 0.586-0.375 0.375-0.586 0.884-0.586 1.41v10c0 0.53 0.211 1.04 0.586 1.41 0.375 0.375 0.884 0.586 1.41 0.586h4v-1h-4c-0.265 0-0.52-0.105-0.707-0.293-0.188-0.188-0.293-0.442-0.293-0.707v-7l3.88 3e-5c0.203 1.9e-4 0.383 3.5e-4 0.557-0.0415 0.153-0.0368 0.299-0.0974 0.434-0.18 0.153-0.0936 0.279-0.221 0.423-0.365l1.41-1.41h6.29c0.265 0 0.52 0.105 0.707 0.293s0.293 0.442 0.293 0.707v2h1v-2c0-0.53-0.211-1.04-0.586-1.41s-0.884-0.586-1.41-0.586h-6.48zm-2.02-1 1.2 1.6-1.08 1.08c-0.19 0.19-0.229 0.225-0.268 0.248-0.0447 0.0274-0.0935 0.0476-0.145 0.0599-0.0442 0.0106-0.0969 0.0138-0.365 0.0138h-3.84v-2c0-0.265 0.105-0.52 0.293-0.707 0.188-0.188 0.442-0.293 0.707-0.293h3.5z" clip-rule="evenodd" fill="currentColor" fill-rule="evenodd"/><path d="m11.5 7c0.276 0 0.5 0.224 0.5 0.5v3.5h3.5c0.276 0 0.5 0.224 0.5 0.5s-0.224 0.5-0.5 0.5h-3.5v3.5c0 0.276-0.224 0.5-0.5 0.5s-0.5-0.224-0.5-0.5v-3.5h-3.5c-0.276 0-0.5-0.224-0.5-0.5s0.224-0.5 0.5-0.5h3.5v-3.5c0-0.276 0.224-0.5 0.5-0.5z" fill="currentColor"/></svg></button>
             <button id="btn-popout" data-tooltip="${isPoppedOut ? 'Restore to Side Panel' : 'Pop-out to Main Editor'}"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/><path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/></svg></button>
+            <div id="toolbar-overflow" class="toolbar-overflow">
+                <button id="btn-toolbar-overflow" data-tooltip="More Tools">...</button>
+                <div id="toolbar-overflow-menu" class="toolbar-overflow-menu"></div>
+            </div>
         </div>
     </div>
     <div id="dir-dropdown" class="dir-dropdown">
@@ -1860,6 +1877,50 @@ tryCatch({
             left: { scale: 1, translateX: 0, translateY: 0 },
             right: { scale: 1, translateX: 0, translateY: 0 }
         };
+
+        function layoutToolbarOverflow() {
+            const nav = document.querySelector('.nav-controls');
+            const overflow = document.getElementById('toolbar-overflow');
+            const menu = document.getElementById('toolbar-overflow-menu');
+            if (!nav || !overflow || !menu) return;
+
+            const originalItems = Array.from(nav.children)
+                .filter(el => el !== overflow)
+                .concat(Array.from(menu.children));
+            originalItems.forEach(el => nav.insertBefore(el, overflow));
+            overflow.classList.remove('visible', 'open');
+
+            const isOverflowing = () => {
+                const navRect = nav.getBoundingClientRect();
+                return Array.from(nav.children).some(el => {
+                    const rect = el.getBoundingClientRect();
+                    return rect.left < navRect.left || rect.right > navRect.right;
+                });
+            };
+
+            if (!isOverflowing()) {
+                return;
+            }
+
+            overflow.classList.add('visible');
+            const movable = Array.from(nav.children).filter(el => el !== overflow);
+            while (isOverflowing() && movable.length > 0) {
+                const item = movable.pop();
+                if (!item) break;
+                menu.insertBefore(item, menu.firstChild);
+            }
+
+            if (menu.children.length === 0) {
+                overflow.classList.remove('visible', 'open');
+            }
+        }
+
+        function scheduleToolbarOverflowLayout() {
+            requestAnimationFrame(() => {
+                layoutToolbarOverflow();
+                requestAnimationFrame(layoutToolbarOverflow);
+            });
+        }
 
         function updateTransform() {
             const plotArea = document.getElementById('plot-area');
@@ -2258,6 +2319,7 @@ tryCatch({
                     btnPopout.setAttribute('data-tooltip', isPoppedOut ? 'Restore to Side Panel' : 'Pop-out to Main Editor');
                 }
             }
+            scheduleToolbarOverflowLayout();
         }
 
             renderState(initialState);
@@ -2301,6 +2363,7 @@ tryCatch({
 
             btnCompareOptions?.addEventListener('click', (e) => {
                 e.stopPropagation();
+                document.getElementById('toolbar-overflow')?.classList.remove('open');
                 compareDropdown.classList.toggle('open');
                 document.getElementById('dir-dropdown')?.classList.remove('open');
                 document.getElementById('export-dropdown')?.classList.remove('open');
@@ -2754,6 +2817,8 @@ tryCatch({
 
             const btnCustomDir = document.getElementById('btn-custom-dir');
             const dropdown = document.getElementById('dir-dropdown');
+            const toolbarOverflow = document.getElementById('toolbar-overflow');
+            const btnToolbarOverflow = document.getElementById('btn-toolbar-overflow');
             const btnSetOutViewDir = document.getElementById('btn-set-out-view-dir');
             const btnCancelDir = document.getElementById('btn-cancel-dir');
             const btnBrowse = document.getElementById('btn-browse');
@@ -2766,6 +2831,7 @@ tryCatch({
 
             btnCustomDir?.addEventListener('click', (e) => {
                 e.stopPropagation();
+                toolbarOverflow?.classList.remove('open');
                 dropdown?.classList.toggle('open');
                 btnCustomDir?.classList.toggle('active', dropdown?.classList.contains('open') || false);
                 if (dropdown?.classList.contains('open')) {
@@ -2778,6 +2844,12 @@ tryCatch({
             });
             document.addEventListener('click', () => {
                 closeDirDropdown();
+                toolbarOverflow?.classList.remove('open');
+            });
+            btnToolbarOverflow?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toolbarOverflow?.classList.toggle('open');
+                dropdown?.classList.remove('open');
             });
             btnSetOutViewDir?.addEventListener('click', () => {
                 closeDirDropdown(!!dirInput?.value.trim());
@@ -2799,6 +2871,8 @@ tryCatch({
             document.getElementById('btn-popout')?.addEventListener('click', () => {
                 vscode.postMessage({ type: isPoppedOut ? 'restore' : 'popout' });
             });
+            window.addEventListener('resize', scheduleToolbarOverflowLayout);
+            scheduleToolbarOverflowLayout();
 
             const tooltip = document.getElementById('tooltip');
             const setupTooltip = (el) => {

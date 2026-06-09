@@ -610,30 +610,8 @@ export class ViewerPanel {
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             flex-shrink: 0;
             gap: 6px;
-            overflow-x: auto;
-            overflow-y: hidden;
+            overflow: visible;
             white-space: nowrap;
-            /* Previous attempt: WebKit height changes and removing scrollbar-width did not match native tab scrollbars. */
-            scrollbar-width: thin;
-        }
-        .toolbar::-webkit-scrollbar {
-            height: 1px;
-        }
-        .toolbar::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .toolbar::-webkit-scrollbar-thumb {
-            background-color: transparent;
-            border-radius: 1px;
-        }
-        .toolbar:hover::-webkit-scrollbar-thumb {
-            background-color: var(--vscode-scrollbarSlider-background);
-        }
-        .toolbar::-webkit-scrollbar-thumb:hover {
-            background-color: var(--vscode-scrollbarSlider-hoverBackground);
-        }
-        .toolbar::-webkit-scrollbar-thumb:active {
-            background-color: var(--vscode-scrollbarSlider-activeBackground);
         }
         .toolbar > * {
             flex-shrink: 0;
@@ -641,8 +619,14 @@ export class ViewerPanel {
         .nav-controls {
             display: flex;
             align-items: center;
+            justify-content: flex-end;
             gap: 6px;
+            flex: 1 1 auto;
+            min-width: 0;
             margin-left: auto;
+        }
+        .nav-controls > * {
+            flex-shrink: 0;
         }
         .counter {
             font-size: 0.9em;
@@ -675,6 +659,32 @@ export class ViewerPanel {
         .toolbar button[disabled] {
             opacity: 0.3;
             cursor: default;
+        }
+        .toolbar-overflow {
+            position: relative;
+            display: none;
+            flex-shrink: 0;
+        }
+        .toolbar-overflow.visible {
+            display: flex;
+        }
+        .toolbar-overflow-menu {
+            display: none;
+            position: absolute;
+            top: 30px;
+            right: 0;
+            z-index: 1200;
+            min-width: 34px;
+            padding: 4px;
+            flex-direction: column;
+            gap: 4px;
+            background: var(--vscode-editorHoverWidget-background, #252526);
+            border: 1px solid var(--vscode-editorHoverWidget-border, #454545);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            border-radius: 6px;
+        }
+        .toolbar-overflow.open .toolbar-overflow-menu {
+            display: flex;
         }
 
         .viewer-area {
@@ -781,6 +791,10 @@ export class ViewerPanel {
             <button id="btn-popout" data-tooltip="Pop-out to Main Editor">
                 <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/><path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/></svg>
             </button>
+            <div id="toolbar-overflow" class="toolbar-overflow">
+                <button id="btn-toolbar-overflow" data-tooltip="More Tools">...</button>
+                <div id="toolbar-overflow-menu" class="toolbar-overflow-menu"></div>
+            </div>
         </div>
     </div>
 
@@ -818,6 +832,50 @@ export class ViewerPanel {
         let currentUrl = '';
         let isPoppedOut = false;
         let wasMinimized = false;
+
+        function layoutToolbarOverflow() {
+            const nav = document.querySelector('.nav-controls');
+            const overflow = document.getElementById('toolbar-overflow');
+            const menu = document.getElementById('toolbar-overflow-menu');
+            if (!nav || !overflow || !menu) return;
+
+            const originalItems = Array.from(nav.children)
+                .filter(el => el !== overflow)
+                .concat(Array.from(menu.children));
+            originalItems.forEach(el => nav.insertBefore(el, overflow));
+            overflow.classList.remove('visible', 'open');
+
+            const isOverflowing = () => {
+                const navRect = nav.getBoundingClientRect();
+                return Array.from(nav.children).some(el => {
+                    const rect = el.getBoundingClientRect();
+                    return rect.left < navRect.left || rect.right > navRect.right;
+                });
+            };
+
+            if (!isOverflowing()) {
+                return;
+            }
+
+            overflow.classList.add('visible');
+            const movable = Array.from(nav.children).filter(el => el !== overflow);
+            while (isOverflowing() && movable.length > 0) {
+                const item = movable.pop();
+                if (!item) break;
+                menu.insertBefore(item, menu.firstChild);
+            }
+
+            if (menu.children.length === 0) {
+                overflow.classList.remove('visible', 'open');
+            }
+        }
+
+        function scheduleToolbarOverflowLayout() {
+            requestAnimationFrame(() => {
+                layoutToolbarOverflow();
+                requestAnimationFrame(layoutToolbarOverflow);
+            });
+        }
 
         function setRendering(isRendering) {
             if (renderOverlay) {
@@ -944,6 +1002,7 @@ export class ViewerPanel {
                 } else {
                     counterEl.textContent = '-';
                 }
+                scheduleToolbarOverflowLayout();
             } else if (msg.type === 'pngExported') {
                 vscode.postMessage({ type: 'savePng', dataUrl: msg.dataUrl });
             } else if (msg.type === 'pngExportFailed') {
@@ -999,6 +1058,18 @@ export class ViewerPanel {
         btnPopout.addEventListener('click', () => {
             vscode.postMessage({ type: isPoppedOut ? 'restore' : 'popout' });
         });
+
+        const toolbarOverflow = document.getElementById('toolbar-overflow');
+        const btnToolbarOverflow = document.getElementById('btn-toolbar-overflow');
+        btnToolbarOverflow?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toolbarOverflow?.classList.toggle('open');
+        });
+        document.addEventListener('click', () => {
+            toolbarOverflow?.classList.remove('open');
+        });
+        window.addEventListener('resize', scheduleToolbarOverflowLayout);
+        scheduleToolbarOverflowLayout();
 
         btnNightMode.addEventListener('click', () => {
             if (!btnNightMode.hasAttribute('disabled')) {

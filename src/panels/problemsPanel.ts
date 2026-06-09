@@ -296,7 +296,11 @@ export class ProblemsPanel {
             height: 100%; text-align: center; opacity: 0.3;
         }
         .empty-state svg { width: 5em; height: 5em; margin-bottom: 16px; display: inline-block; }
-        .empty-state p { font-size: var(--vscode-font-size, 13px); line-height: 1.6; }
+        .empty-state p {
+            font-family: var(--vscode-font-family);
+            font-size: var(--vscode-font-size, 13px);
+            line-height: 1.6;
+        }
     </style>
 </head>
 <body>
