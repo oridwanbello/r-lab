@@ -708,7 +708,7 @@ tryCatch({
         .tabs::-webkit-scrollbar-thumb:active {
             background-color: var(--vscode-scrollbarSlider-activeBackground);
         }
-        .tab { padding: 8px 16px; cursor: pointer; opacity: 0.6; font-size: var(--vscode-font-size, 13px); font-weight: normal; white-space: nowrap; display: flex; align-items: center; gap: 4px; flex-shrink: 0; position: relative; }
+        .tab { padding: 8px 16px; cursor: pointer; opacity: 0.6; font-size: var(--vscode-font-size, 13px); font-weight: normal; letter-spacing: 0.3px; white-space: nowrap; display: flex; align-items: center; gap: 4px; flex-shrink: 0; position: relative; }
         .tab:not(:last-child) { border-right: 1px solid var(--vscode-editorGroup-border); }
         .tab:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
         .tab.active { opacity: 1; color: var(--vscode-foreground); }
