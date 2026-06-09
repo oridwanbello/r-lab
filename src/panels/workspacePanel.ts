@@ -686,27 +686,6 @@ tryCatch({
             display: flex; align-items: center; border-bottom: 1px solid var(--vscode-editorGroup-border);
             background: var(--vscode-editor-background); flex-shrink: 0;
             overflow-x: auto; overflow-y: hidden;
-            /* Previous attempt: WebKit height changes and removing scrollbar-width did not match native tab scrollbars. */
-            scrollbar-width: thin;
-        }
-        .tabs::-webkit-scrollbar {
-            height: 1px;
-        }
-        .tabs::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .tabs::-webkit-scrollbar-thumb {
-            background-color: transparent;
-            border-radius: 1px;
-        }
-        .tabs:hover::-webkit-scrollbar-thumb {
-            background-color: var(--vscode-scrollbarSlider-background);
-        }
-        .tabs::-webkit-scrollbar-thumb:hover {
-            background-color: var(--vscode-scrollbarSlider-hoverBackground);
-        }
-        .tabs::-webkit-scrollbar-thumb:active {
-            background-color: var(--vscode-scrollbarSlider-activeBackground);
         }
         .tab { padding: 8px 16px; cursor: pointer; opacity: 0.6; font-size: var(--vscode-font-size, 13px); font-weight: normal; letter-spacing: 0.3px; white-space: nowrap; display: flex; align-items: center; gap: 4px; flex-shrink: 0; position: relative; }
         .tab:not(:last-child) { border-right: 1px solid var(--vscode-editorGroup-border); }
@@ -927,27 +906,6 @@ tryCatch({
             overflow-x: auto;
             overflow-y: hidden;
             white-space: nowrap;
-            /* Previous attempt: WebKit height changes and removing scrollbar-width did not match native tab scrollbars. */
-            scrollbar-width: thin;
-        }
-        .pkg-toolbar::-webkit-scrollbar {
-            height: 1px;
-        }
-        .pkg-toolbar::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .pkg-toolbar::-webkit-scrollbar-thumb {
-            background-color: transparent;
-            border-radius: 1px;
-        }
-        .pkg-toolbar:hover::-webkit-scrollbar-thumb {
-            background-color: var(--vscode-scrollbarSlider-background);
-        }
-        .pkg-toolbar::-webkit-scrollbar-thumb:hover {
-            background-color: var(--vscode-scrollbarSlider-hoverBackground);
-        }
-        .pkg-toolbar::-webkit-scrollbar-thumb:active {
-            background-color: var(--vscode-scrollbarSlider-activeBackground);
         }
         .pkg-toolbar > * {
             flex-shrink: 0;
