@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { getNonce } from '../utils/webviewUtils';
+import { recordLayoutFocus } from '../layout/layoutManager';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -74,6 +75,9 @@ export class WorkspacePanel {
 
         this._panel.onDidChangeViewState(
             (e) => {
+                if (e.webviewPanel.active) {
+                    recordLayoutFocus('Workspace', e.webviewPanel.viewColumn);
+                }
                 this._updateMinimizedState();
                 if (e.webviewPanel.visible) { this._refreshWorkspace(); }
             },
@@ -119,9 +123,7 @@ export class WorkspacePanel {
                         }
                         break;
                     case 'clearWorkspace':
-                        this._sendToRConsole(
-                            'local({ p <- if (exists(".r_layout_protected_objects", envir = .GlobalEnv)) get(".r_layout_protected_objects", envir = .GlobalEnv) else "^\\\\.rlayout_|^\\\\.r_layout|^null_dev$|^\\\\.First$|^\\\\.Last$|^View$"; rm(list = grep(p, ls(envir = .GlobalEnv, all.names = TRUE), value = TRUE, invert = TRUE), envir = .GlobalEnv) })'
-                        );
+                        this._sendToRConsole('.rm(list = ls(envir = .GlobalEnv, all.names = TRUE), envir = .GlobalEnv)');
                         await this._refreshWorkspace();
                         break;
                     case 'refreshPackages':
@@ -149,8 +151,8 @@ export class WorkspacePanel {
         this._onRequestDataView = callback;
     }
 
-    public reveal(): void {
-        this._panel.reveal(undefined, true);
+    public reveal(column?: vscode.ViewColumn, preserveFocus: boolean = true): void {
+        this._panel.reveal(column, preserveFocus);
     }
 
     private _isMinimized = false;
@@ -182,7 +184,7 @@ export class WorkspacePanel {
     }
 
     // ----- Internal R variable filter -----
-    private static readonly INTERNAL_VAR_PATTERN = /^\.rlayout_|^\.r_layout|^null_dev$|^\.First$|^\.Last$|^View$/;
+    private static readonly INTERNAL_VAR_PATTERN = /^\.rlayout_|^\.r_layout|^\.rm$|^null_dev$|^\.First$|^\.Last$|^View$/;
 
     /** Filter out internal R Layout variables so they never appear in the Environment tab */
     private _filterInternalVars(variables: VariableInfo[]): VariableInfo[] {

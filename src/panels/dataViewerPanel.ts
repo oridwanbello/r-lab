@@ -6,7 +6,7 @@ import { execFile } from 'child_process';
 import { getRscriptPath } from '../utils/rPathResolver';
 import { getNonce, escapeHtml } from '../utils/webviewUtils';
 import { enforceGroup3TabOrder } from '../utils/webviewUtils';
-import { suppressGuardForPanelMove } from '../layout/layoutManager';
+import { getEffectiveWorkspaceRoot, recordLayoutFocus, suppressGuardForPanelMove } from '../layout/layoutManager';
 
 /**
  * Data Viewer Panel - displays R data.frames in a sortable HTML table.
@@ -18,6 +18,7 @@ import { suppressGuardForPanelMove } from '../layout/layoutManager';
 export class DataViewerPanel {
     public static currentPanel: DataViewerPanel | undefined;
     public static readonly viewType = 'r-layout.dataViewerPanel';
+    public static lastClosedState: { varName: string } | undefined;
 
     private readonly _panel: vscode.WebviewPanel;
     private _varName = '';
@@ -92,6 +93,9 @@ export class DataViewerPanel {
 
         this._panel.onDidChangeViewState(
             (e) => {
+                if (e.webviewPanel.active) {
+                    recordLayoutFocus('Data Viewer', e.webviewPanel.viewColumn);
+                }
                 this._render();
                 this._postPoppedState();
             },
@@ -172,13 +176,13 @@ export class DataViewerPanel {
 
     // Public API
 
-    public reveal(): void {
+    public reveal(column?: vscode.ViewColumn, preserveFocus: boolean = true): void {
         if (!this._panel.visible) {
             const activeEditor = vscode.window.activeTextEditor;
             if (activeEditor && activeEditor.viewColumn === this._panel.viewColumn) {
                 return;
             }
-            this._panel.reveal(undefined, true);
+            this._panel.reveal(column, preserveFocus);
         }
     }
 
@@ -212,7 +216,7 @@ export class DataViewerPanel {
         // The user specifically requested the tab title never change from "Data Viewer"
         this._panel.title = 'Data Viewer';
 
-        const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
+        const wf = getEffectiveWorkspaceRoot();
         const outDir = nodePath.join(wf, '.R-layout');
         const tmpMeta = nodePath.join(outDir, 'dv-meta.txt');
 
@@ -962,6 +966,7 @@ export class DataViewerPanel {
     // Cleanup
 
     dispose(): void {
+        DataViewerPanel.lastClosedState = this.saveState();
         DataViewerPanel.currentPanel = undefined;
         this._panel.dispose();
         while (this._disposables.length) {

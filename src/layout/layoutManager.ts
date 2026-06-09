@@ -62,6 +62,14 @@ export function getRConsoleTerminal(): vscode.Terminal | undefined {
     return rConsoleTerminal;
 }
 
+export function recordLayoutFocus(label: string, viewColumn: vscode.ViewColumn | undefined): void {
+    if (!isLayoutActive || activationInProgress || panelMoveInProgress || protectedPanelRestoreBusy || viewColumn === undefined) {
+        return;
+    }
+    lastActiveTabByColumn.set(viewColumn, label);
+    lastActiveGroupColumn = viewColumn;
+}
+
 const STATE_KEY = 'r-layout.layoutActive';
 
 // Registration
@@ -358,7 +366,30 @@ export function registerLayoutCommand(
                     await deactivateLayout();
                 }
             }
-            if (t === shellTerminal) { shellTerminal = undefined; }
+            if (t === shellTerminal) {
+                shellTerminal = undefined;
+                if (isLayoutActive && vscode.workspace.getConfiguration('r-layout').get<boolean>('protectLayoutTabs', true)) {
+                    await recreateProtectedShellTerminal();
+                }
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.window.onDidChangeActiveTerminal((terminal) => {
+            if (terminal === rConsoleTerminal) {
+                recordLayoutFocus('R Console', vscode.ViewColumn.Two);
+            } else if (terminal === shellTerminal) {
+                recordLayoutFocus('Terminal', vscode.ViewColumn.Two);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.window.onDidChangeActiveTextEditor((editor) => {
+            if (editor?.viewColumn !== undefined) {
+                recordLayoutFocus(editor.document.fileName, editor.viewColumn);
+            }
         })
     );
 }
@@ -873,38 +904,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         }
 
     } else {
-        const platform = os.platform() === 'win32' ? 'windows' : (os.platform() === 'darwin' ? 'osx' : 'linux');
-        const userEnv = vscode.workspace.getConfiguration('terminal.integrated.env').get<Record<string, string>>(platform) || {};
-        const shellEnvArgs: Record<string, string> = { ...process.env as any, ...userEnv };
-
-        const terminalOptions: vscode.TerminalOptions = {
-            name: 'Terminal',
-            // Do NOT use location: { viewColumn: ... } here on Windows. Creating a generic shell directly
-            // into an editor group causes intermittent blank ConPTY terminals on Windows.
-            location: os.platform() === 'win32' ? undefined : { viewColumn: vscode.ViewColumn.Two },
-            cwd: getEffectiveWorkspaceRoot(),
-        };
-
-        // strictEnv crashes the default shell on Windows, but is required on Mac/Linux
-        // to prevent PTY crashes (warning icon) during layout deactivation.
-        if (os.platform() !== 'win32') {
-            terminalOptions.env = shellEnvArgs;
-            terminalOptions.strictEnv = true;
-        }
-
-        // Create in the panel first (for Windows)
-        shellTerminal = vscode.window.createTerminal(terminalOptions);
-
-        if (os.platform() === 'win32') {
-            shellTerminal.show(true); // Must show in panel to force PTY initialization
-            await delay(500); // Give ConPTY time to fully spawn before moving
-
-            // Move to editor area (Group 2)
-            await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
-            await delay(50);
-            await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
-            await delay(100);
-        }
+        await createShellTerminalInGroup2();
     }
 
     // ProblemsPanel: dispose the anchor instance and recreate so it becomes the
@@ -947,11 +947,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         workspacePanel.reveal(); // restore Workspace as the focused tab in Group 3
     }
 
-    // Wire up: clicking "View" on a data.frame in Workspace opens it in Data Viewer
-    workspacePanel.onRequestDataView((varName) => {
-        dataPanel.loadVariable(varName);
-        dataPanel.reveal();
-    });
+    bindWorkspaceDataView(context, workspacePanel);
 
     if (!viewerWatcher) {
         const wf = getEffectiveWorkspaceRoot();
@@ -1394,10 +1390,43 @@ async function deactivateLayout(): Promise<void> {
 
 let layoutGuards: vscode.Disposable[] = [];
 let terminalGuardBusy = false;
+type ProtectedPanelKey = 'problems' | 'help' | 'workspace' | 'plots' | 'dataViewer' | 'viewer';
+
+const protectedPanelByViewType = new Map<string, ProtectedPanelKey>([
+    [ProblemsPanel.viewType, 'problems'],
+    [HelpPanel.viewType, 'help'],
+    [WorkspacePanel.viewType, 'workspace'],
+    [PlotsPanel.viewType, 'plots'],
+    [DataViewerPanel.viewType, 'dataViewer'],
+    [ViewerPanel.viewType, 'viewer'],
+]);
+
+const protectedPanelByLabel = new Map<string, ProtectedPanelKey>([
+    ['Problems', 'problems'],
+    ['R Help', 'help'],
+    ['Workspace', 'workspace'],
+    ['Plots', 'plots'],
+    ['Data Viewer', 'dataViewer'],
+    ['Viewer', 'viewer'],
+]);
+
+const pendingProtectedPanelRestores = new Set<ProtectedPanelKey>();
+interface ProtectedPanelRestoreRequest {
+    panelKey: ProtectedPanelKey;
+    viewColumn: vscode.ViewColumn;
+    activeLabel: string;
+    activeGroupColumn: vscode.ViewColumn | undefined;
+}
+
+const pendingProtectedPanelRestoreRequests = new Map<ProtectedPanelKey, ProtectedPanelRestoreRequest>();
+let protectedPanelRestoreBusy = false;
+const lastActiveTabByColumn = new Map<vscode.ViewColumn, string>();
+let lastActiveGroupColumn: vscode.ViewColumn | undefined;
 
 function registerLayoutGuards(context: vscode.ExtensionContext): void {
     for (const d of layoutGuards) { d.dispose(); }
     layoutGuards = [];
+    refreshActiveTabSnapshot();
 
     // Terminal guard
     // Two-event approach for imperceptible interception:
@@ -1439,6 +1468,15 @@ function registerLayoutGuards(context: vscode.ExtensionContext): void {
 
     const tabAndTermGuard = vscode.window.tabGroups.onDidChangeTabs(async (e) => {
         if (!isLayoutActive || activationInProgress || panelMoveInProgress) { return; }
+        if (vscode.workspace.getConfiguration('r-layout').get<boolean>('protectLayoutTabs', true)) {
+            for (const tab of e.closed) {
+                const panelKey = getProtectedPanelKey(tab);
+                if (panelKey) {
+                    scheduleProtectedPanelRestore(context, getProtectedPanelRestoreRequest(panelKey, tab));
+                }
+            }
+        }
+
         for (const tab of e.opened) {
             const group = vscode.window.tabGroups.all.find((g) => g.tabs.includes(tab));
             if (!group) {
@@ -1556,10 +1594,351 @@ function registerLayoutGuards(context: vscode.ExtensionContext): void {
                 } catch {}
             }, 80);
         }
+
     });
 
     layoutGuards.push(tabAndTermGuard, termOpenGuard);
     context.subscriptions.push(tabAndTermGuard, termOpenGuard);
+}
+
+function getProtectedPanelKey(tab: vscode.Tab): ProtectedPanelKey | undefined {
+    const byLabel = protectedPanelByLabel.get(tab.label);
+    if (byLabel) {
+        return byLabel;
+    }
+
+    if (tab.input instanceof vscode.TabInputWebview) {
+        const viewType = (tab.input as any).viewType as string | undefined;
+        return viewType ? protectedPanelByViewType.get(viewType) : undefined;
+    }
+
+    return undefined;
+}
+
+function getProtectedPanelRestoreRequest(panelKey: ProtectedPanelKey, closedTab: vscode.Tab): ProtectedPanelRestoreRequest {
+    const viewColumn = getProtectedPanelViewColumn(panelKey);
+    const activeGroupColumn = lastActiveGroupColumn ?? vscode.window.tabGroups.activeTabGroup.viewColumn;
+    const activeLabel = (closedTab.isActive ? closedTab.label : lastActiveTabByColumn.get(viewColumn))
+        ?? getActiveTabLabel(viewColumn)
+        ?? closedTab.label;
+
+    return { panelKey, viewColumn, activeLabel, activeGroupColumn };
+}
+
+function getProtectedPanelViewColumn(panelKey: ProtectedPanelKey): vscode.ViewColumn {
+    return panelKey === 'problems' || panelKey === 'help'
+        ? vscode.ViewColumn.Two
+        : vscode.ViewColumn.Three;
+}
+
+function getActiveTabLabel(viewColumn: vscode.ViewColumn): string | undefined {
+    return vscode.window.tabGroups.all
+        .find(group => group.viewColumn === viewColumn)
+        ?.activeTab
+        ?.label;
+}
+
+function refreshActiveTabSnapshot(): void {
+    lastActiveGroupColumn = vscode.window.tabGroups.activeTabGroup.viewColumn;
+    for (const group of vscode.window.tabGroups.all) {
+        const activeTab = group.activeTab;
+        if (activeTab) {
+            lastActiveTabByColumn.set(group.viewColumn, activeTab.label);
+        }
+    }
+}
+
+function scheduleProtectedPanelRestore(context: vscode.ExtensionContext, request: ProtectedPanelRestoreRequest): void {
+    pendingProtectedPanelRestores.add(request.panelKey);
+    pendingProtectedPanelRestoreRequests.set(request.panelKey, request);
+    if (protectedPanelRestoreBusy) {
+        return;
+    }
+
+    protectedPanelRestoreBusy = true;
+    setTimeout(async () => {
+        panelMoveInProgress = true;
+        let requests: ProtectedPanelRestoreRequest[] = [];
+        try {
+            requests = await restoreProtectedPanels(context);
+        } finally {
+            setTimeout(async () => {
+                try {
+                    await restoreProtectedPanelFocus(requests);
+                    await delay(175);
+                    await restoreProtectedPanelFocus(requests);
+                } finally {
+                    panelMoveInProgress = false;
+                    protectedPanelRestoreBusy = false;
+                    if (pendingProtectedPanelRestores.size > 0) {
+                        const next = pendingProtectedPanelRestores.values().next().value;
+                        if (next) {
+                            const request = pendingProtectedPanelRestoreRequests.get(next);
+                            if (request) {
+                                scheduleProtectedPanelRestore(context, request);
+                            }
+                        }
+                    }
+                }
+            }, 180);
+        }
+    }, 80);
+}
+
+async function recreateProtectedShellTerminal(): Promise<void> {
+    if (!isLayoutActive || activationInProgress || panelMoveInProgress || shellTerminal) {
+        return;
+    }
+
+    panelMoveInProgress = true;
+    try {
+        await createShellTerminalInGroup2();
+        await enforceTabOrder(vscode.ViewColumn.Two, 'Terminal', ['R Console', 'Terminal', 'Problems', 'R Help']);
+        try { await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'); } catch {}
+    } finally {
+        setTimeout(() => { panelMoveInProgress = false; }, 200);
+    }
+}
+
+async function createShellTerminalInGroup2(): Promise<void> {
+    const platform = os.platform() === 'win32' ? 'windows' : (os.platform() === 'darwin' ? 'osx' : 'linux');
+    const userEnv = vscode.workspace.getConfiguration('terminal.integrated.env').get<Record<string, string>>(platform) || {};
+    const shellEnvArgs: Record<string, string> = { ...process.env as any, ...userEnv };
+
+    const terminalOptions: vscode.TerminalOptions = {
+        name: 'Terminal',
+        // Do NOT use location: { viewColumn: ... } here on Windows. Creating a generic shell directly
+        // into an editor group causes intermittent blank ConPTY terminals on Windows.
+        location: os.platform() === 'win32' ? undefined : { viewColumn: vscode.ViewColumn.Two },
+        cwd: getEffectiveWorkspaceRoot(),
+    };
+
+    // strictEnv crashes the default shell on Windows, but is required on Mac/Linux
+    // to prevent PTY crashes (warning icon) during layout deactivation.
+    if (os.platform() !== 'win32') {
+        terminalOptions.env = shellEnvArgs;
+        terminalOptions.strictEnv = true;
+    }
+
+    shellTerminal = vscode.window.createTerminal(terminalOptions);
+
+    if (os.platform() === 'win32') {
+        shellTerminal.show(true); // Must show in panel to force PTY initialization
+        await delay(500); // Give ConPTY time to fully spawn before moving
+
+        await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+        await delay(50);
+        await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
+        await delay(100);
+    } else {
+        shellTerminal.show(false);
+        await delay(50);
+    }
+}
+
+async function restoreProtectedPanels(context: vscode.ExtensionContext): Promise<ProtectedPanelRestoreRequest[]> {
+    const restoreOrder: ProtectedPanelKey[] = ['problems', 'help', 'workspace', 'plots', 'dataViewer', 'viewer'];
+    const requested = restoreOrder.filter((panelKey) => pendingProtectedPanelRestores.delete(panelKey));
+    const requests = requested
+        .map(panelKey => pendingProtectedPanelRestoreRequests.get(panelKey))
+        .filter((request): request is ProtectedPanelRestoreRequest => !!request);
+    for (const panelKey of requested) {
+        pendingProtectedPanelRestoreRequests.delete(panelKey);
+    }
+
+    for (const panelKey of requested) {
+        switch (panelKey) {
+            case 'problems':
+                ProblemsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
+                await enforceTabOrder(vscode.ViewColumn.Two, 'Problems', ['R Console', 'Terminal', 'Problems', 'R Help']);
+                break;
+            case 'help': {
+                const panel = HelpPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
+                const state = savedHelpState ?? HelpPanel.lastClosedState;
+                if (state) { panel.loadState(state); }
+                await enforceTabOrder(vscode.ViewColumn.Two, 'R Help', ['R Console', 'Terminal', 'Problems', 'R Help']);
+                break;
+            }
+            case 'workspace': {
+                const panel = WorkspacePanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
+                bindWorkspaceDataView(context, panel);
+                await enforceTabOrder(vscode.ViewColumn.Three, 'Workspace', ['Workspace', 'Plots', 'Data Viewer', 'Viewer']);
+                setTimeout(() => WorkspacePanel.currentPanel?.forceRefresh(), 250);
+                break;
+            }
+            case 'plots': {
+                const panel = PlotsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
+                panel.syncPlots();
+                await enforceTabOrder(vscode.ViewColumn.Three, 'Plots', ['Workspace', 'Plots', 'Data Viewer', 'Viewer']);
+                break;
+            }
+            case 'dataViewer': {
+                const panel = DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
+                const state = savedDataViewerState ?? DataViewerPanel.lastClosedState;
+                if (state) { await panel.loadState(state); }
+                await enforceTabOrder(vscode.ViewColumn.Three, 'Data Viewer', ['Workspace', 'Plots', 'Data Viewer', 'Viewer']);
+                break;
+            }
+            case 'viewer': {
+                const panel = ViewerPanel.createOrShow(context.extensionUri, undefined, vscode.ViewColumn.Three);
+                const state = savedViewerState ?? ViewerPanel.lastClosedState;
+                if (state) { await panel.loadState(state); }
+                await enforceTabOrder(vscode.ViewColumn.Three, 'Viewer', ['Workspace', 'Plots', 'Data Viewer', 'Viewer']);
+                break;
+            }
+        }
+    }
+
+    return requests;
+}
+
+function bindWorkspaceDataView(context: vscode.ExtensionContext, workspacePanel: WorkspacePanel): void {
+    workspacePanel.onRequestDataView((varName) => {
+        const activeDataPanel = DataViewerPanel.currentPanel || DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
+        activeDataPanel.loadVariable(varName);
+        activeDataPanel.reveal();
+    });
+}
+
+async function restoreProtectedPanelFocus(requests: ProtectedPanelRestoreRequest[]): Promise<void> {
+    const desiredByColumn = new Map<vscode.ViewColumn, string>();
+    let activeGroupColumn = vscode.window.tabGroups.activeTabGroup.viewColumn;
+
+    for (const request of requests) {
+        desiredByColumn.set(request.viewColumn, request.activeLabel);
+        activeGroupColumn = request.activeGroupColumn ?? activeGroupColumn;
+    }
+
+    for (const [viewColumn, activeLabel] of desiredByColumn) {
+        await revealLayoutTab(activeLabel, viewColumn);
+    }
+
+    if (activeGroupColumn !== undefined) {
+        const focusCommand = groupFocusCommand(activeGroupColumn);
+        if (focusCommand) {
+            try { await vscode.commands.executeCommand(focusCommand); } catch {}
+        }
+    }
+    for (const [viewColumn, activeLabel] of desiredByColumn) {
+        lastActiveTabByColumn.set(viewColumn, activeLabel);
+    }
+    if (activeGroupColumn !== undefined) {
+        lastActiveGroupColumn = activeGroupColumn;
+    }
+}
+
+async function revealLayoutTab(label: string, viewColumn: vscode.ViewColumn): Promise<void> {
+    try {
+        switch (label) {
+            case 'R Console':
+                rConsoleTerminal?.show(false);
+                break;
+            case 'Terminal':
+                shellTerminal?.show(false);
+                break;
+            case 'Problems':
+                ProblemsPanel.currentPanel?.reveal(viewColumn, false);
+                break;
+            case 'R Help':
+                HelpPanel.currentPanel?.reveal(viewColumn, false);
+                break;
+            case 'Workspace':
+                WorkspacePanel.currentPanel?.reveal(viewColumn, false);
+                break;
+            case 'Plots':
+                PlotsPanel.currentPanel?.reveal(viewColumn, false);
+                break;
+            case 'Data Viewer':
+                DataViewerPanel.currentPanel?.reveal(viewColumn, false);
+                break;
+            case 'Viewer':
+                ViewerPanel.currentPanel?.reveal(viewColumn, false);
+                break;
+            default:
+                await focusTabByLabelFallback(viewColumn, label);
+                break;
+        }
+        await delay(40);
+    } catch {}
+}
+
+async function focusTabByLabelFallback(viewColumn: vscode.ViewColumn, label: string): Promise<void> {
+    const focusCommand = groupFocusCommand(viewColumn);
+    let group = vscode.window.tabGroups.all.find(g => g.viewColumn === viewColumn);
+    if (!focusCommand || !group) { return; }
+
+    let tabIndex = group.tabs.findIndex(tab => tab.label === label);
+    if (tabIndex === -1) { return; }
+
+    await vscode.commands.executeCommand(focusCommand);
+    await delay(20);
+    await vscode.commands.executeCommand('workbench.action.lastEditorInGroup');
+    await delay(20);
+
+    group = vscode.window.tabGroups.all.find(g => g.viewColumn === viewColumn);
+    if (!group) { return; }
+
+    tabIndex = group.tabs.findIndex(tab => tab.label === label);
+    if (tabIndex === -1) { return; }
+
+    for (let i = group.tabs.length - 1; i > tabIndex; i--) {
+        await vscode.commands.executeCommand('workbench.action.previousEditorInGroup');
+        await delay(10);
+    }
+}
+
+async function enforceTabOrder(
+    viewColumn: vscode.ViewColumn,
+    panelTitle: string,
+    strictOrder: string[]
+): Promise<void> {
+    await delay(50);
+    const focusCommand = groupFocusCommand(viewColumn);
+    if (!focusCommand) { return; }
+
+    for (let expectedIdx = 0; expectedIdx < strictOrder.length; expectedIdx++) {
+        const expectedLabel = strictOrder[expectedIdx];
+        let group = vscode.window.tabGroups.all.find(g => g.viewColumn === viewColumn);
+        if (!group) { return; }
+
+        let currentIdx = group.tabs.findIndex(tab => tab.label === expectedLabel);
+        if (currentIdx === -1) {
+            continue;
+        }
+        if (currentIdx === expectedIdx) {
+            continue;
+        }
+
+        try {
+            await vscode.commands.executeCommand(focusCommand);
+            await delay(20);
+            await vscode.commands.executeCommand('workbench.action.lastEditorInGroup');
+            await delay(20);
+
+            group = vscode.window.tabGroups.all.find(g => g.viewColumn === viewColumn);
+            if (!group) { return; }
+            currentIdx = group.tabs.findIndex(tab => tab.label === expectedLabel);
+            if (currentIdx === -1) { continue; }
+
+            for (let i = group.tabs.length - 1; i > currentIdx; i--) {
+                await vscode.commands.executeCommand('workbench.action.previousEditorInGroup');
+                await delay(10);
+            }
+
+            await vscode.commands.executeCommand('moveActiveEditor', {
+                to: 'position',
+                by: 'tab',
+                value: expectedIdx + 1,
+            });
+            await delay(30);
+        } catch {}
+    }
+
+    const group = vscode.window.tabGroups.all.find(g => g.viewColumn === viewColumn);
+    const finalLabels = group?.tabs.map(tab => tab.label) ?? [];
+    if (finalLabels.includes(panelTitle)) {
+        return;
+    }
 }
 
 
@@ -2018,7 +2397,23 @@ if (exists(".Last", envir = .GlobalEnv)) {
 
 # 5. Data Viewer export function.
 #    .rlayout_csv and .rlayout_meta are already set above - no paths needed at call time.
-.r_layout_protected_objects <- "^\\\\.rlayout_|^\\\\.r_layout|^null_dev$|^\\\\.First$|^\\\\.Last$|^View$"
+.r_layout_protected_objects <- "^\\\\.rlayout_|^\\\\.r_layout|^\\\\.rm$|^null_dev$|^\\\\.First$|^\\\\.Last$|^View$"
+
+.rm <- function(..., list = character(), pos = -1, envir = as.environment(pos), inherits = FALSE) {
+  targets <- c(as.character(substitute(list(...))[-1L]), list)
+  if (identical(envir, .GlobalEnv)) {
+    protected <- if (exists(".r_layout_protected_objects", envir = .GlobalEnv)) {
+      get(".r_layout_protected_objects", envir = .GlobalEnv)
+    } else {
+      "^\\\\.rlayout_|^\\\\.r_layout|^\\\\.rm$|^null_dev$|^\\\\.First$|^\\\\.Last$|^View$"
+    }
+    targets <- grep(protected, targets, value = TRUE, invert = TRUE)
+  }
+  if (length(targets) > 0) {
+    rm(list = targets, envir = envir, inherits = inherits)
+  }
+  invisible()
+}
 
 .r_layout_view_data <- function(varName, rowLimit = 1000) {
   .rlayout_active_df_to_export <<- varName
@@ -2270,7 +2665,7 @@ function getConfigTarget(): vscode.ConfigurationTarget {
  * otherwise falls back to the user's home directory. This ensures all features
  * (R watcher, .R-layout directory, plots, workspace panel) work in no-workspace mode.
  */
-function getEffectiveWorkspaceRoot(): string {
+export function getEffectiveWorkspaceRoot(): string {
     return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
 }
 

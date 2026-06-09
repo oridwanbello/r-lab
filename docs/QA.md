@@ -57,4 +57,5 @@ Goal: Ensure webviews can float and restore without breaking VS Code execution c
 
 - [ ] Pop-out Panel: In the Data Viewer or Plots pane, click the `Pop-out to Main Editor` button. Verify it moves to the large Group 1 pane.
 - [ ] Restore Panel: Click the `Restore to Side Panel` button. Verify it correctly returns to Group 3 *and maintains the strict architectural tab order* (`Workspace > Plots > Data Viewer > Viewer`).
+- [ ] Protected Layout Tabs: With `r-layout.protectLayoutTabs` enabled, close Problems, R Help, Workspace, Plots, Data Viewer, Viewer, and the owned shell Terminal one at a time. Verify each reappears in its correct pane and strict tab position (`R Console > Terminal > Problems > R Help`; `Workspace > Plots > Data Viewer > Viewer`). Verify source files, Settings, extension pages, and R Console remain closeable.
 - [ ] Focus Stealing Prevention: After generating a plot or popping a panel out, immediately press `Cmd+Enter` (or `Ctrl+Enter`) on a line of code. Ensure `vscode-R` executes the code and does NOT throw a "No active Text editor" error.

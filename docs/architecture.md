@@ -27,6 +27,7 @@ When a user triggers the layout:
    - Group 1 (Left): Receives the user's active source files.
    - Group 2 (Top-Right): Populated with the R Console, standard Terminal, Problems anchor, and Help panel.
    - Group 3 (Bottom-Right): Populated with the Workspace Explorer, Plots Gallery, Data Viewer, and Viewer panel.
+5. Layout Tab Protection: When `r-layout.protectLayoutTabs` is enabled, accidental closure of R Layout webview tabs and the owned shell Terminal recreates them in their architectural pane and then re-stamps the full strict tab order. R Console is excluded because closing it represents session termination.
 
 ### Deactivation Sequence
 

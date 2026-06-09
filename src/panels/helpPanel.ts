@@ -4,7 +4,7 @@ import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { getRConsoleTerminal } from '../layout/layoutManager';
+import { getRConsoleTerminal, recordLayoutFocus } from '../layout/layoutManager';
 import { getRscriptPath } from '../utils/rPathResolver';
 
 /**
@@ -17,6 +17,7 @@ import { getRscriptPath } from '../utils/rPathResolver';
 export class HelpPanel {
     public static currentPanel: HelpPanel | undefined;
     public static readonly viewType = 'r-layout.helpPanel';
+    public static lastClosedState: any | undefined;
 
     private readonly _panel: vscode.WebviewPanel;
     private _recentSearches: string[] = [];
@@ -93,6 +94,16 @@ export class HelpPanel {
         this._render();
 
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
+
+        this._panel.onDidChangeViewState(
+            (e) => {
+                if (e.webviewPanel.active) {
+                    recordLayoutFocus('R Help', e.webviewPanel.viewColumn);
+                }
+            },
+            null,
+            this._disposables
+        );
 
         this._panel.webview.onDidReceiveMessage(
             async (msg: { type: string; query?: string }) => {
@@ -327,7 +338,7 @@ export class HelpPanel {
         // Determine what to show in the main area
         let mainContent: string;
         if (this._isLoading) {
-            mainContent = `<div class="status-msg">Loading help for "${escapeHtml(this._lastQuery)}"&hellip;</div>`;
+            mainContent = `<div class="status-msg loading-msg"><span>Loading help for</span><span class="loading-var">${escapeHtml(this._lastQuery)}</span><span>&hellip;</span></div>`;
         } else if (this._helpText) {
             mainContent = `
                 <div class="help-html-content">${this._helpText}</div>`;
@@ -495,6 +506,13 @@ export class HelpPanel {
             display: flex;
             align-items: center;
             justify-content: center;
+        }
+        .loading-msg {
+            gap: 4px;
+        }
+        .loading-var {
+            color: var(--vscode-textPreformat-foreground, var(--vscode-editor-foreground));
+            font-family: var(--vscode-editor-font-family, monospace);
         }
 
 
@@ -957,6 +975,7 @@ export class HelpPanel {
     // Cleanup
 
     dispose(): void {
+        HelpPanel.lastClosedState = this.saveState();
         HelpPanel.currentPanel = undefined;
         this._panel.dispose();
         while (this._disposables.length) {

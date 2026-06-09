@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { getNonce, escapeHtml } from '../utils/webviewUtils';
+import { recordLayoutFocus } from '../layout/layoutManager';
 
 /**
  * Problems Panel - a WebviewPanel (editor tab) that mirrors
@@ -53,6 +54,16 @@ export class ProblemsPanel {
 
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
+        this._panel.onDidChangeViewState(
+            (e) => {
+                if (e.webviewPanel.active) {
+                    recordLayoutFocus('Problems', e.webviewPanel.viewColumn);
+                }
+            },
+            null,
+            this._disposables
+        );
+
         // Auto-refresh when diagnostics change
         this._diagnosticsListener = vscode.languages.onDidChangeDiagnostics(
             () => this._render()
@@ -75,6 +86,10 @@ export class ProblemsPanel {
             null,
             this._disposables
         );
+    }
+
+    public reveal(column?: vscode.ViewColumn, preserveFocus?: boolean): void {
+        this._panel.reveal(column, preserveFocus);
     }
 
     // Rendering
@@ -346,4 +361,3 @@ function severityIcon(severity: vscode.DiagnosticSeverity): string {
         default: return '<i class="codicon codicon-record"></i>';
     }
 }
-

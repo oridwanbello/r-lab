@@ -50,6 +50,11 @@
           "default": false,
           "description": "When activating the layout, restore webview panels (Plots, Workspace, etc.) to custom locations where they were dragged in the previous session. If false, activating the layout strictly re-enforces the standard 3-pane arrangement."
         },
+        "r-layout.protectLayoutTabs": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically restore R Layout webview tabs and the owned shell Terminal when they are accidentally closed while the layout is active. This does not protect R Console, source files, Settings, or extension pages."
+        },
         "r-layout.plotOutputDir": {
           "type": "string",
           "default": "",

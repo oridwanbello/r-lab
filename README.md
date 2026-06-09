@@ -32,6 +32,7 @@ Transform your editor into an RStudio-inspired 3-pane grid with a single click. 
 | `r-layout.rConsoleType` | Select console type (`Auto Detect`, `Standard R`, `Radian`) to enforce bracketed paste. |
 | `r-layout.rConsolePath` | Path or command for the R Console terminal (default: `"R"`). |
 | `r-layout.restoreCustomPanelPositions` | If true, restores panels to custom dragged locations instead of strict 3-pane. |
+| `r-layout.protectLayoutTabs` | Automatically restores accidentally closed R Layout webview tabs and the owned shell Terminal while the layout is active. Defaults to true. |
 | `r-layout.plotOutputDir` | Custom directory for R Layout plot images. Defaults to `.R-layout/plots` in the workspace or home directory. |
 | `Toggle R Layout` | Snap the editor into or out of the 3-pane grid. |
 | `Maximize Top Pane` | Expand the top-right pane; minimizes bottom panes. |

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { getNonce } from '../utils/webviewUtils';
-import { suppressGuardForPanelMove } from '../layout/layoutManager';
+import { recordLayoutFocus, suppressGuardForPanelMove } from '../layout/layoutManager';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -123,7 +123,12 @@ export class PlotsPanel {
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
         this._panel.onDidChangeViewState(
-            (e) => { this._postState(); },
+            (e) => {
+                if (e.webviewPanel.active) {
+                    recordLayoutFocus('Plots', e.webviewPanel.viewColumn);
+                }
+                this._postState();
+            },
             null,
             this._disposables
         );

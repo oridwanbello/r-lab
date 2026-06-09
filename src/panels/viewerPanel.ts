@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { enforceGroup3TabOrder } from '../utils/webviewUtils';
 import { getNonce } from '../utils/webviewUtils';
-import { suppressGuardForPanelMove } from '../layout/layoutManager';
+import { recordLayoutFocus, suppressGuardForPanelMove } from '../layout/layoutManager';
 
 /**
  * Viewer Panel - a WebviewPanel (editor tab) that intercepts and displays
@@ -17,6 +17,7 @@ import { suppressGuardForPanelMove } from '../layout/layoutManager';
 export class ViewerPanel {
     public static currentPanel: ViewerPanel | undefined;
     public static readonly viewType = 'r-layout.viewerPanel';
+    public static lastClosedState: any | undefined;
 
     private readonly _panel: vscode.WebviewPanel;
     private _disposables: vscode.Disposable[] = [];
@@ -98,7 +99,12 @@ export class ViewerPanel {
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
         this._panel.onDidChangeViewState(
-            (e) => { this._updateWebviewState(); },
+            (e) => {
+                if (e.webviewPanel.active) {
+                    recordLayoutFocus('Viewer', e.webviewPanel.viewColumn);
+                }
+                this._updateWebviewState();
+            },
             null,
             this._disposables
         );
@@ -1022,6 +1028,7 @@ export class ViewerPanel {
     }
 
     dispose(): void {
+        ViewerPanel.lastClosedState = this.saveState();
         ViewerPanel.currentPanel = undefined;
         this._panel.dispose();
 

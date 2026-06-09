@@ -67,7 +67,7 @@ vsce package
 The project has been refactored into a modular architecture to support the 3-pane layout system:
 
 - `src/extension.ts`: The main entry point.
-- `src/layout/layoutManager.ts`: The core engine that orchestrates the VS Code layout, grid groups, and terminal preservation.
+- `src/layout/layoutManager.ts`: The core engine that orchestrates the VS Code layout, grid groups, terminal preservation, and protected tab restoration.
 - `src/panels/`: Contains the WebviewPanel singletons for the layout:
   - `dataViewerPanel.ts`: Renders data frame and matrix tables.
   - `helpPanel.ts`: Displays integrated R documentation.

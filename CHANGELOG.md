@@ -10,7 +10,7 @@ All notable changes to the R Layout extension will be documented in this file.
 - HTML Viewer: Added a "Viewer" tab for R `viewer()` outputs (Shiny, htmlwidgets, package vignettes) with history navigation, delete/clear actions, dark mode, and workspace integration.
 - Plot Zoom & Pan: Added interactive zoom (scroll, pinch, buttons) and drag-to-pan support in the Plots panel.
 - Plot Export: Added export settings for PDF, SVG, EPS, PNG, and JPG with configurable width, height, and units.
-- Settings Expansion: Added `r-layout.restoreCustomPanelPositions` to preserve moved panels, and `r-layout.plotOutputDir` for explicit plot directories.
+- Settings Expansion: Added `r-layout.restoreCustomPanelPositions` to preserve moved panels, `r-layout.protectLayoutTabs` to restore accidentally closed R Layout webviews and the owned shell Terminal, and `r-layout.plotOutputDir` for explicit plot directories.
 - Console Type Selector: Added `r-layout.rConsoleType` setting (Auto Detect, Standard R, Radian) to explicitly enforce bracketed paste for Radian users utilizing shell aliases, preventing multiline execution errors.
 - QA Runbook: Added an extensive manual testing guide (`docs/QA.md`) to establish standard pre-release testing procedures.
 
