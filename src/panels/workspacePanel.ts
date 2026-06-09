@@ -683,11 +683,17 @@ tryCatch({
 
         /* Tab Bar */
         .tabs {
-            display: flex; align-items: center; border-bottom: 1px solid var(--vscode-editorGroup-border);
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            align-items: stretch;
+            border-bottom: 1px solid var(--vscode-editorGroup-border);
             background: var(--vscode-editor-background); flex-shrink: 0;
-            overflow-x: auto; overflow-y: hidden;
+            overflow: hidden;
+            min-width: 0;
         }
-        .tab { padding: 8px 16px; cursor: pointer; opacity: 0.6; font-size: var(--vscode-font-size, 13px); font-weight: normal; letter-spacing: 0.3px; white-space: nowrap; display: flex; align-items: center; gap: 4px; flex-shrink: 0; position: relative; }
+        .tab { min-width: 0; padding: 8px 10px; cursor: pointer; opacity: 0.6; font-size: var(--vscode-font-size, 13px); font-weight: normal; letter-spacing: 0.3px; white-space: nowrap; display: flex; align-items: center; justify-content: center; gap: 4px; position: relative; overflow: hidden; text-overflow: ellipsis; }
+        .tab-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tab-count { flex-shrink: 0; }
         .tab:not(:last-child) { border-right: 1px solid var(--vscode-editorGroup-border); }
         .tab:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
         .tab.active { opacity: 1; color: var(--vscode-foreground); }
@@ -699,6 +705,9 @@ tryCatch({
             bottom: 0;
             height: 3px;
             background: var(--vscode-button-background);
+        }
+        @media (max-width: 360px) {
+            .tab-count { display: none; }
         }
 
         /* Content Panels */
@@ -1075,9 +1084,9 @@ tryCatch({
 <body>
     <div id="tooltip" class="tooltip"></div>
     <div class="tabs">
-        <div class="tab active" data-target="tab-env">Global Environment <span id="count-env"></span></div>
-        <div class="tab" data-target="tab-packages">Packages <span id="count-packages"></span></div>
-        <div class="tab" data-target="tab-attached">Attached Objects <span id="count-attached"></span></div>
+        <div class="tab active" data-target="tab-env"><span class="tab-label">Global Env</span> <span id="count-env" class="tab-count"></span></div>
+        <div class="tab" data-target="tab-packages"><span class="tab-label">Packages</span> <span id="count-packages" class="tab-count"></span></div>
+        <div class="tab" data-target="tab-attached"><span class="tab-label">Attached Objects</span> <span id="count-attached" class="tab-count"></span></div>
     </div>
 
     <div id="tab-env" class="content active">
