@@ -22,9 +22,16 @@ interface PackageInfo {
     status: 'attached' | 'loaded' | 'none';
 }
 
+export type WorkspaceTab = 'env' | 'packages' | 'attached';
+
+export interface WorkspaceState {
+    activeTab?: WorkspaceTab;
+}
+
 export class WorkspacePanel {
     public static currentPanel: WorkspacePanel | undefined;
     public static readonly viewType = 'r-layout.workspacePanel';
+    public static lastClosedState: WorkspaceState | undefined;
 
     private readonly _panel: vscode.WebviewPanel;
     private _variables: VariableInfo[] = [];
@@ -37,6 +44,7 @@ export class WorkspacePanel {
     private _disposables: vscode.Disposable[] = [];
     private _onRequestDataView?: (varName: string) => void;
     private _htmlSet = false;
+    private _activeTab: WorkspaceTab = 'env';
 
     public static createOrShow(
         extensionUri: vscode.Uri,
@@ -86,10 +94,21 @@ export class WorkspacePanel {
         );
 
         this._panel.webview.onDidReceiveMessage(
-            async (msg: { type: string; varName?: string; pkgName?: string }) => {
+            async (msg: { type: string; varName?: string; pkgName?: string; tab?: WorkspaceTab }) => {
                 switch (msg.type) {
+                    case 'switchTab':
+                        if (msg.tab === 'env' || msg.tab === 'packages' || msg.tab === 'attached') {
+                            this._activeTab = msg.tab;
+                        }
+                        break;
                     case 'ready':
                         this._updateMinimizedState();
+                        if (this._activeTab !== 'env') {
+                            this._panel.webview.postMessage({
+                                command: 'restoreTab',
+                                activeTab: this._activeTab
+                            });
+                        }
                         await this._refreshWorkspace();
                         if (this._packages.length === 0) {
                             this._fetchInstalledPackages();
@@ -149,6 +168,17 @@ export class WorkspacePanel {
 
     public onRequestDataView(callback: (varName: string) => void): void {
         this._onRequestDataView = callback;
+    }
+
+    public saveState(): WorkspaceState {
+        return {
+            activeTab: this._activeTab
+        };
+    }
+
+    public loadState(state: WorkspaceState | undefined): void {
+        if (!state) { return; }
+        this._activeTab = state.activeTab === 'packages' ? 'packages' : (state.activeTab === 'attached' ? 'attached' : 'env');
     }
 
     public reveal(column?: vscode.ViewColumn, preserveFocus: boolean = true): void {
@@ -1132,7 +1162,12 @@ tryCatch({
                     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
                     document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
                     tab.classList.add('active');
-                    document.getElementById(tab.getAttribute('data-target')).classList.add('active');
+                    const targetId = tab.getAttribute('data-target');
+                    document.getElementById(targetId).classList.add('active');
+                    let tabName = 'env';
+                    if (targetId === 'tab-packages') tabName = 'packages';
+                    if (targetId === 'tab-attached') tabName = 'attached';
+                    vscode.postMessage({ type: 'switchTab', tab: tabName });
                 });
             });
 
@@ -1144,6 +1179,19 @@ tryCatch({
             // Update Handler
             window.addEventListener('message', event => {
                 const msg = event.data;
+                if (msg.command === 'restoreTab') {
+                    if (msg.activeTab) {
+                        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                        document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+                        let targetId = 'tab-env';
+                        if (msg.activeTab === 'packages') targetId = 'tab-packages';
+                        if (msg.activeTab === 'attached') targetId = 'tab-attached';
+                        const tab = document.querySelector('.tab[data-target="' + targetId + '"]');
+                        if (tab) tab.classList.add('active');
+                        const content = document.getElementById(targetId);
+                        if (content) content.classList.add('active');
+                    }
+                }
                 if (msg.command === 'update') {
                     syncPendingDeletes(msg);
                     renderEnvironment(msg);
@@ -1411,6 +1459,7 @@ tryCatch({
     }
 
     public dispose(): void {
+        WorkspacePanel.lastClosedState = this.saveState();
         WorkspacePanel.currentPanel = undefined;
         if (this._autoRefreshInterval) {
             clearInterval(this._autoRefreshInterval);

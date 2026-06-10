@@ -952,6 +952,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     //     Create Workspace first, then Visuals, then Data Viewer.
     //     Reveal Workspace at the end to make it the active/focused tab.
     const workspacePanel = WorkspacePanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three, !restoreCustom);
+    if (WorkspacePanel.lastClosedState) { workspacePanel.loadState(WorkspacePanel.lastClosedState); }
     // Note: forceRefresh() is deferred (see end of activation) to give the webview
     // time to fully render before the message is posted.
     const visualsPanel = VisualsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three, !restoreCustom);
@@ -1115,7 +1116,8 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
             panel.loadState(savedHelpState ?? ToolsPanel.lastClosedState);
         }
         if (panelPositions['workspace'] && panelPositions['workspace'] !== vscode.ViewColumn.Three) {
-            WorkspacePanel.createOrShow(context.extensionUri, panelPositions['workspace']);
+            const panel = WorkspacePanel.createOrShow(context.extensionUri, panelPositions['workspace']);
+            if (WorkspacePanel.lastClosedState) { panel.loadState(WorkspacePanel.lastClosedState); }
         }
         const visualsColumn = panelPositions['visuals'] ?? panelPositions['visualizations'] ?? panelPositions['plots'] ?? panelPositions['viewer'];
         if (visualsColumn && visualsColumn !== vscode.ViewColumn.Three) {
@@ -1794,6 +1796,7 @@ async function restoreProtectedPanels(context: vscode.ExtensionContext): Promise
             }
             case 'workspace': {
                 const panel = WorkspacePanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
+                if (WorkspacePanel.lastClosedState) { panel.loadState(WorkspacePanel.lastClosedState); }
                 bindWorkspaceDataView(context, panel);
                 await enforceTabOrder(vscode.ViewColumn.Three, 'Workspace', ['Workspace', 'Visuals', 'Data Viewer']);
                 setTimeout(() => WorkspacePanel.currentPanel?.forceRefresh(), 250);
