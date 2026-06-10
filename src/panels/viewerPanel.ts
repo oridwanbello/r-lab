@@ -183,7 +183,7 @@ export class ViewerPanel {
                         setTimeout(async () => {
                             await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
                         }, 150);
-                        this._updateWebviewState();
+                        this._updateWebviewState(true);
                         break;
                     case 'restore':
                         this._isPoppedOut = false;
@@ -195,7 +195,7 @@ export class ViewerPanel {
                             await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
                         }, 150);
                         enforceGroup3TabOrder('Viewer');
-                        this._updateWebviewState();
+                        this._updateWebviewState(false);
                         break;
                 }
             },
@@ -543,8 +543,10 @@ export class ViewerPanel {
         } catch (e) {}
     }
 
-    private _updateWebviewState(): void {
-        if (this._panel.viewColumn !== undefined) {
+    private _updateWebviewState(overrideIsPoppedOut?: boolean): void {
+        if (overrideIsPoppedOut !== undefined) {
+            this._isPoppedOut = overrideIsPoppedOut;
+        } else if (this._panel.viewColumn !== undefined) {
             this._isPoppedOut = this._panel.viewColumn !== vscode.ViewColumn.Three;
         }
         const actualMinimized = this._isPoppedOut ? false : this._isMinimized;

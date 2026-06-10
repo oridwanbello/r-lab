@@ -219,6 +219,10 @@ export class VisualizationsPanel {
                         break;
                     case 'hostedMessage':
                         if (message.target === 'plots' || message.target === 'viewer') {
+                            const hostedType = (message.message as { type?: string } | undefined)?.type;
+                            if (hostedType === 'popout' || hostedType === 'restore') {
+                                this._setActiveTarget(message.target);
+                            }
                             this._hostedWebviews[message.target]?.receive(message.message);
                         }
                         break;
@@ -523,8 +527,13 @@ export class VisualizationsPanel {
                     } else if (lowerSelector.startsWith('@keyframes') || lowerSelector.startsWith('@font-face') || lowerSelector.startsWith('@page')) {
                         output += selector + ' {' + body + '}';
                     } else {
-                        const scopedSelector = splitSelectors(selector).map(scopeSelector).join(', ');
-                        output += scopedSelector + ' {' + body + '}';
+                        const selectors = splitSelectors(selector);
+                        const hasRootSelector = selectors.some(part => /^(body|html|:root)(?=$|[\s.#:[>+~])/u.test(part));
+                        const scopedSelector = selectors.map(scopeSelector).join(', ');
+                        const scopedBody = hasRootSelector
+                            ? body.replace(/\bheight\s*:\s*100vh\s*;/giu, 'height: 100%;')
+                            : body;
+                        output += scopedSelector + ' {' + scopedBody + '}';
                     }
                     cursor = close + 1;
                 }
