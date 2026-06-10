@@ -251,6 +251,7 @@ export class VisualsPanel {
     public setMinimized(minimized: boolean): void {
         PlotsPanel.currentPanel?.setMinimized(minimized);
         ViewerPanel.currentPanel?.setMinimized(minimized);
+        this._panel.webview.postMessage({ type: 'setMinimized', minimized });
     }
 
     public restoreActivePlotlyWidgetAfterPaneSplit(): void {
@@ -389,6 +390,7 @@ export class VisualsPanel {
             height: 100%;
             overflow: hidden;
         }
+        body.minimized > * { visibility: hidden !important; pointer-events: none !important; }
         .tabs {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -639,6 +641,8 @@ export class VisualsPanel {
             } else if (msg.type === 'nudgeActiveSurface') {
                 window.dispatchEvent(new Event('resize'));
                 window.postMessage({ target: active.target, type: 'restorePaneSplit' }, '*');
+            } else if (msg.type === 'setMinimized') {
+                document.body.classList.toggle('minimized', msg.minimized);
             }
         });
 
