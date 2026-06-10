@@ -1155,7 +1155,11 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     // 15. Ensure bottom panel is closed since we opened terminals
     try { await vscode.commands.executeCommand('workbench.action.closePanel'); } catch {}
 
-    // 16. Set final tab focus:
+    // 16. The layout is not complete unless the R Console is visible in Group 2.
+    await ensureRConsoleInGroup2(context, strictEnvArgs);
+    await enforceTabOrder(vscode.ViewColumn.Two, 'R Console', ['R Console', 'Terminal', 'Tools']);
+
+    // 17. Set final tab focus:
     //     - R Console  -> first tab in Group 2 (top-right)
     //     - Workspace  -> first tab in Group 3 (bottom-right)
     //     Done LAST so nothing steals the focus back.
@@ -1772,6 +1776,84 @@ async function createShellTerminalInGroup2(): Promise<void> {
     } else {
         shellTerminal.show(false);
         await delay(50);
+    }
+}
+
+function getTerminalTabGroup(label: string, viewColumn?: vscode.ViewColumn): vscode.TabGroup | undefined {
+    return vscode.window.tabGroups.all.find(group =>
+        (viewColumn === undefined || group.viewColumn === viewColumn) &&
+        group.tabs.some(tab =>
+            tab.input instanceof vscode.TabInputTerminal &&
+            tab.label.includes(label)
+        )
+    );
+}
+
+async function ensureRConsoleInGroup2(
+    context: vscode.ExtensionContext,
+    rEnv: Record<string, string>
+): Promise<void> {
+    if (getTerminalTabGroup('R Console', vscode.ViewColumn.Two)) {
+        return;
+    }
+
+    if (!rConsoleTerminal) {
+        rConsoleTerminal = vscode.window.terminals.find(t => t.name === 'R Console');
+    }
+
+    if (rConsoleTerminal) {
+        const rConsoleEditorGroup = getTerminalTabGroup('R Console');
+        if (rConsoleEditorGroup) {
+            await focusTabByLabelFallback(rConsoleEditorGroup.viewColumn, 'R Console');
+            await delay(80);
+            if (getTerminalTabGroup('R Console', vscode.ViewColumn.Two)) {
+                return;
+            }
+            try {
+                await vscode.commands.executeCommand('workbench.action.moveEditorToSecondGroup');
+                await delay(120);
+                if (getTerminalTabGroup('R Console', vscode.ViewColumn.Two)) {
+                    return;
+                }
+            } catch {}
+            if (getTerminalTabGroup('R Console')) {
+                return;
+            }
+        } else {
+            rConsoleTerminal.show(true);
+            await delay(120);
+            await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+            await delay(50);
+            await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
+            await delay(120);
+            if (getTerminalTabGroup('R Console', vscode.ViewColumn.Two)) {
+                return;
+            }
+        }
+    }
+
+    const isWindows = os.platform() === 'win32';
+    rConsoleTerminal = vscode.window.createTerminal({
+        name: 'R Console',
+        shellPath: getRPath(),
+        shellArgs: getRArgs(),
+        location: isWindows ? undefined : { viewColumn: vscode.ViewColumn.Two },
+        env: rEnv,
+        strictEnv: !isWindows,
+        cwd: getEffectiveWorkspaceRoot(),
+        iconPath: vscode.Uri.joinPath(context.extensionUri, 'resources', 'r_logo.svg'),
+    });
+
+    if (isWindows) {
+        rConsoleTerminal.show(true);
+        await delay(500);
+        await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+        await delay(50);
+        await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
+        await delay(120);
+    } else {
+        rConsoleTerminal.show(false);
+        await delay(80);
     }
 }
 

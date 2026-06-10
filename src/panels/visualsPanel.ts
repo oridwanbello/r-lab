@@ -280,11 +280,17 @@ export class VisualsPanel {
 
     public async loadState(state: any): Promise<void> {
         if (!state) { return; }
-        this._activeTarget = state.activeTarget === 'viewer' ? 'viewer' : 'plots';
+        let hasActiveTarget = false;
+        if (state.activeTarget === 'plots' || state.activeTarget === 'viewer') {
+            this._activeTarget = state.activeTarget;
+            hasActiveTarget = true;
+        }
         if (state.viewerState) {
             await ViewerPanel.currentPanel?.loadState(state.viewerState);
         }
-        this._setActiveTarget(this._activeTarget);
+        if (hasActiveTarget) {
+            this._setActiveTarget(this._activeTarget);
+        }
     }
 
     public setHostedHtml(target: VizTarget, html: string): void {
