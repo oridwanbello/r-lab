@@ -329,6 +329,9 @@ export class ToolsPanel {
     <style nonce="${nonce}">
         * { margin: 0; padding: 0; box-sizing: border-box; }
         ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
+        html, body {
+            height: 100%;
+        }
         body {
             font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
             font-weight: 400;
@@ -337,7 +340,7 @@ export class ToolsPanel {
             background: var(--vscode-editor-background);
             display: flex;
             flex-direction: column;
-            height: 100vh;
+            height: 100%;
             overflow: hidden;
         }
         .tabs {

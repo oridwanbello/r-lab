@@ -173,6 +173,9 @@ export class ProblemsPanel {
     <style nonce="${nonce}">
         * { margin: 0; padding: 0; box-sizing: border-box; }
         ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
+        html, body {
+            height: 100%;
+        }
         body {
             font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
             font-size: var(--vscode-editor-font-size, var(--vscode-font-size, 13px));
@@ -180,7 +183,7 @@ export class ProblemsPanel {
             background: var(--vscode-editor-background);
             display: flex;
             flex-direction: column;
-            height: 100vh;
+            height: 100%;
             overflow: hidden;
         }
         .toolbar {

@@ -422,6 +422,9 @@ export class HelpPanel {
         body.vscode-dark .token.operator { color: #d4d4d4; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
+        html, body {
+            height: 100%;
+        }
         body {
             font-family: var(--vscode-font-family);
             font-size: var(--vscode-font-size, 13px);
@@ -429,7 +432,7 @@ export class HelpPanel {
             background: var(--vscode-editor-background);
             display: flex;
             flex-direction: column;
-            height: 100vh;
+            height: 100%;
             overflow: hidden;
         }
         .toolbar {

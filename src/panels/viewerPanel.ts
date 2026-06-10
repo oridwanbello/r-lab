@@ -592,6 +592,7 @@ export class ViewerPanel {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style nonce="${nonce}">
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; }
         body {
             font-family: var(--vscode-font-family);
             font-size: var(--vscode-font-size, 13px);
@@ -599,7 +600,7 @@ export class ViewerPanel {
             background: var(--vscode-editor-background);
             display: flex;
             flex-direction: column;
-            height: 100vh;
+            height: 100%;
             overflow: hidden;
         }
         body.minimized > * {
