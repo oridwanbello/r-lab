@@ -1655,9 +1655,12 @@ function getProtectedPanelKey(tab: vscode.Tab): ProtectedPanelKey | undefined {
 function getProtectedPanelRestoreRequest(panelKey: ProtectedPanelKey, closedTab: vscode.Tab): ProtectedPanelRestoreRequest {
     const viewColumn = getProtectedPanelViewColumn(panelKey);
     const activeGroupColumn = lastActiveGroupColumn ?? vscode.window.tabGroups.activeTabGroup.viewColumn;
-    const activeLabel = (closedTab.isActive ? closedTab.label : lastActiveTabByColumn.get(viewColumn))
+    let activeLabel = (closedTab.isActive ? closedTab.label : lastActiveTabByColumn.get(viewColumn))
         ?? getActiveTabLabel(viewColumn)
         ?? closedTab.label;
+    if (panelKey === 'plots') {
+        activeLabel = 'Visuals';
+    }
 
     return { panelKey, viewColumn, activeLabel, activeGroupColumn };
 }
