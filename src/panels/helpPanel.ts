@@ -484,9 +484,13 @@ export class HelpPanel {
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border, transparent);
             padding: 5px 10px; border-radius: 6px; font-size: var(--vscode-font-size, 13px); outline: none;
+            font-family: var(--vscode-editor-font-family, monospace);
         }
         .search-bar input:focus { border-color: var(--vscode-focusBorder); }
-        .search-bar input::placeholder { color: var(--vscode-input-placeholderForeground); }
+        .search-bar input::placeholder {
+            color: var(--vscode-input-placeholderForeground);
+            font-family: var(--vscode-font-family);
+        }
         .search-bar button {
             background: var(--vscode-button-background); color: var(--vscode-button-foreground);
             border: none; padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 1.1em; font-weight: 600;
@@ -554,6 +558,7 @@ export class HelpPanel {
             opacity: 0.7;
             margin-bottom: 0.75em;
             font-weight: 600;
+            font-family: var(--vscode-editor-font-family, monospace);
         }
         pre.package-index, pre.package-description {
             background: transparent !important;
