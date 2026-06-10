@@ -598,6 +598,20 @@ export class VisualsPanel {
             });
         }
 
+        function syncThemeClasses() {
+            const classes = Array.from(document.body.classList).filter(c => c.startsWith('vscode-') || c === 'night-mode');
+            for (const key of Object.keys(roots)) {
+                for (const c of Array.from(roots[key].classList)) {
+                    if (c.startsWith('vscode-') || c === 'night-mode') {
+                        roots[key].classList.remove(c);
+                    }
+                }
+                for (const c of classes) {
+                    roots[key].classList.add(c);
+                }
+            }
+        }
+
         function installHostedContent(target, fragment) {
             const root = roots[target];
             const generation = ++generations[target];
@@ -624,6 +638,7 @@ export class VisualsPanel {
                 const fn = new Function('root', 'hostDocument', 'hostWindow', 'hostVscode', 'CSS', 'ResizeObserver', 'MutationObserver', 'Event', 'URL', 'setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame', 'acquireVsCodeApi', body);
                 fn(root, docProxy, winProxy, api, CSS, ResizeObserver, MutationObserver, Event, URL, setTimeout, clearTimeout, requestAnimationFrame, cancelAnimationFrame, () => api);
             }
+            syncThemeClasses();
         }
 
         for (const key of Object.keys(tabs)) {
@@ -645,6 +660,10 @@ export class VisualsPanel {
                 document.body.classList.toggle('minimized', msg.minimized);
             }
         });
+
+        syncThemeClasses();
+        const themeObserver = new MutationObserver(syncThemeClasses);
+        themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
         vscode.postMessage({ type: 'ready' });
     </script>
