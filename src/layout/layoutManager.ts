@@ -959,7 +959,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     PlotsPanel.currentPanel?.syncPlots(); // catch up on any plots created while layout was closed
     const dataPanel = DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three, !restoreCustom);
     const visualsState = VisualsPanel.lastClosedState ?? (savedViewerState ? { viewerState: savedViewerState } : undefined);
-    if (visualsState) { await visualsPanel.loadState(visualsState); }
+    if (visualsState) { visualsPanel.loadState(visualsState); }
     await vscode.commands.executeCommand('r-layout.syncWidgetPlaceholder');
 
     if (!restoreCustom) {

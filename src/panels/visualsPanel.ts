@@ -212,11 +212,13 @@ export class VisualsPanel {
                     case 'ready':
                         this._ready = true;
                         this._flushHostedHtml();
+                        this._panel.webview.postMessage({ type: 'restoreTarget', target: this._activeTarget });
                         this._setActiveTarget(this._activeTarget);
                         break;
                     case 'switchTarget':
                         if (message.target === 'plots' || message.target === 'viewer') {
                             this._setActiveTarget(message.target);
+                            VisualsPanel.lastClosedState = this.saveState();
                         }
                         break;
                     case 'hostedMessage':
@@ -651,7 +653,7 @@ export class VisualsPanel {
                 installHostedContent(msg.target, msg.fragment);
             } else if (msg.type === 'postHostedMessage') {
                 window.postMessage(msg.message, '*');
-            } else if (msg.type === 'setActiveTarget') {
+            } else if (msg.type === 'setActiveTarget' || msg.type === 'restoreTarget') {
                 setActiveTarget(msg.target);
             } else if (msg.type === 'nudgeActiveSurface') {
                 window.dispatchEvent(new Event('resize'));
