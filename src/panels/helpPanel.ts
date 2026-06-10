@@ -181,7 +181,7 @@ export class HelpPanel {
             `options(help_type = "text")`,
             `query <- ${rQuery}`,
             `print_pkg <- function(h) {`,
-            `  cat(paste0("<h2>Package '", h$name, "'</h2>\\n"))`,
+            `  cat(paste0("<h2>Package '<span class='package-name'>", h$name, "</span>'</h2>\\n"))`,
             `  if (length(h$info) >= 1) {`,
             `    cat("<h3>Description</h3><pre class='package-description'>\\n")`,
             `    cat(paste0(h$info[[1]], collapse="\\n"), "</pre>\\n")`,
@@ -552,6 +552,10 @@ export class HelpPanel {
             font-weight: 700;
             margin-bottom: 0.75em;
             color: var(--vscode-editor-foreground);
+        }
+        .package-name {
+            font-family: var(--vscode-editor-font-family, monospace);
+            font-weight: inherit;
         }
         .help-top-title {
             font-size: 0.9em;
