@@ -72,6 +72,11 @@ export class PlotsPanel {
         PlotsPanel.currentPanel = new PlotsPanel(panel, extensionUri);
     }
 
+    public static createHosted(panel: vscode.WebviewPanel, extensionUri: vscode.Uri): PlotsPanel {
+        PlotsPanel.currentPanel = new PlotsPanel(panel, extensionUri);
+        return PlotsPanel.currentPanel;
+    }
+
     public static resetSessionState(): void {
         PlotsPanel._sessionCustomPlotDir = undefined;
         PlotsPanel._sessionLastDirAction = undefined;

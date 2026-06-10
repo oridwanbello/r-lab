@@ -79,6 +79,11 @@ export class ViewerPanel {
         return ViewerPanel.currentPanel;
     }
 
+    public static createHosted(panel: vscode.WebviewPanel, extensionUri: vscode.Uri): ViewerPanel {
+        ViewerPanel.currentPanel = new ViewerPanel(panel, extensionUri);
+        return ViewerPanel.currentPanel;
+    }
+
     public reveal(column?: vscode.ViewColumn, preserveFocus?: boolean): void {
         if (!this._panel.visible) {
             const activeEditor = vscode.window.activeTextEditor;

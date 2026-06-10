@@ -9,6 +9,7 @@ import { ToolsPanel } from '../panels/toolsPanel';
 import { WorkspacePanel } from '../panels/workspacePanel';
 import { DataViewerPanel } from '../panels/dataViewerPanel';
 import { ViewerPanel } from '../panels/viewerPanel';
+import { VisualizationsPanel } from '../panels/visualizationsPanel';
 import { getRPath, getRArgs } from '../utils/rPathResolver';
 
 /**
@@ -110,7 +111,11 @@ export function registerLayoutCommand(
 
     context.subscriptions.push(
         vscode.commands.registerCommand("r-layout.focusViewer", () => {
-            ViewerPanel.currentPanel?.reveal();
+            if (VisualizationsPanel.currentPanel) {
+                VisualizationsPanel.currentPanel.revealTarget('viewer');
+            } else {
+                ViewerPanel.currentPanel?.reveal();
+            }
         })
     );
 
@@ -279,9 +284,8 @@ export function registerLayoutCommand(
             // Hide Group 3 content before shrinking it. This prevents thumbnails
             // and webview canvases from visibly compressing during the layout change.
             WorkspacePanel.currentPanel?.setMinimized(true);
-            PlotsPanel.currentPanel?.setMinimized(true);
+            VisualizationsPanel.currentPanel?.setMinimized(true);
             DataViewerPanel.currentPanel?.setMinimized(true);
-            ViewerPanel.currentPanel?.setMinimized(true);
             await delay(80);
 
             try {
@@ -302,9 +306,8 @@ export function registerLayoutCommand(
                 await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', true);
             } catch {
                 WorkspacePanel.currentPanel?.setMinimized(false);
-                PlotsPanel.currentPanel?.setMinimized(false);
+                VisualizationsPanel.currentPanel?.setMinimized(false);
                 DataViewerPanel.currentPanel?.setMinimized(false);
-                ViewerPanel.currentPanel?.setMinimized(false);
                 await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', false);
             }
         }),
@@ -354,13 +357,12 @@ export function registerLayoutCommand(
             } finally {
                 // Never leave Group 3 webviews invisible if the layout command fails midway.
                 WorkspacePanel.currentPanel?.setMinimized(false);
-                PlotsPanel.currentPanel?.setMinimized(false);
+                VisualizationsPanel.currentPanel?.setMinimized(false);
                 DataViewerPanel.currentPanel?.setMinimized(false);
-                ViewerPanel.currentPanel?.setMinimized(false);
             }
 
             // Restore webview content only after the split has real dimensions.
-            ViewerPanel.currentPanel?.restoreActivePlotlyWidgetAfterPaneSplit();
+            VisualizationsPanel.currentPanel?.restoreActivePlotlyWidgetAfterPaneSplit();
 
             await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', false);
         })
@@ -655,11 +657,14 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     // If the layout was closed prematurely or tabs were deleted in a previous session,
     // the saved panelPositions might be broken (e.g. missing core panels, or panels stuck in Group 1).
     let missingCorePanels = 0;
-    const corePanels = ['workspace', 'plots', 'viewer', 'tools'];
+    const corePanels = ['workspace', 'tools'];
     for (const p of corePanels) {
         if (!panelPositions[p]) {
             missingCorePanels++;
         }
+    }
+    if (!panelPositions['visualizations'] && !panelPositions['plots'] && !panelPositions['viewer']) {
+        missingCorePanels++;
     }
 
     // If layout state is severely broken (panels in Group 1, or missing too many panels), ignore custom positions
@@ -686,9 +691,9 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     for (const group of vscode.window.tabGroups.all) {
         for (const tab of group.tabs) {
-            const disposablePanels = ['Workspace', 'Plots', 'Data Viewer', 'Viewer', 'Problems', 'R Help', 'Tools'];
+            const disposablePanels = ['Workspace', 'Visualizations', 'Plots', 'Data Viewer', 'Viewer', 'Problems', 'R Help', 'Tools'];
             if (disposablePanels.includes(tab.label)) {
-                if (!restoreCustom || tab.label === 'Problems' || tab.label === 'R Help' || tab.label === 'Tools') {
+                if (!restoreCustom || tab.label === 'Problems' || tab.label === 'R Help' || tab.label === 'Tools' || tab.label === 'Plots' || tab.label === 'Viewer') {
                     try { await vscode.window.tabGroups.close(tab); } catch {}
                 }
             }
@@ -943,17 +948,17 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         await vscode.commands.executeCommand('workbench.action.firstEditorInGroup');
     } catch {}
 
-    // 11. Group 3 (bottom-right): Workspace -> Plots -> Data Viewer -> Viewer (Workspace FIRST, Workspace FOCUSED)
-    //     Create Workspace first (leftmost tab), then Plots, then Data Viewer, then Viewer.
+    // 11. Group 3 (bottom-right): Workspace -> Visualizations -> Data Viewer (Workspace FIRST, Workspace FOCUSED)
+    //     Create Workspace first, then Visualizations, then Data Viewer.
     //     Reveal Workspace at the end to make it the active/focused tab.
     const workspacePanel = WorkspacePanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three, !restoreCustom);
     // Note: forceRefresh() is deferred (see end of activation) to give the webview
     // time to fully render before the message is posted.
-    const plotsPanel = PlotsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three, !restoreCustom);
-    plotsPanel.syncPlots(); // catch up on any plots created while layout was closed
+    const visualizationsPanel = VisualizationsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three, !restoreCustom);
+    PlotsPanel.currentPanel?.syncPlots(); // catch up on any plots created while layout was closed
     const dataPanel = DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three, !restoreCustom);
-    const viewerPanel = ViewerPanel.createOrShow(context.extensionUri, undefined, vscode.ViewColumn.Three, !restoreCustom);
-    if (savedViewerState) { await viewerPanel.loadState(savedViewerState); }
+    const visualizationsState = VisualizationsPanel.lastClosedState ?? (savedViewerState ? { viewerState: savedViewerState } : undefined);
+    if (visualizationsState) { await visualizationsPanel.loadState(visualizationsState); }
     await vscode.commands.executeCommand('r-layout.syncWidgetPlaceholder');
 
     if (!restoreCustom) {
@@ -999,15 +1004,16 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                     const newLines = lines.slice(lastViewerLineCount);
                     lastViewerLineCount = lines.length;
 
-                    let vp = ViewerPanel.currentPanel;
-                    if (!vp) {
-                        vp = ViewerPanel.createOrShow(context.extensionUri, undefined, vscode.ViewColumn.Three);
+                    if (!ViewerPanel.currentPanel) {
+                        VisualizationsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
                     }
+                    const vp = ViewerPanel.currentPanel;
+                    if (!vp) { return; }
 
                     for (const url of newLines) {
                         await vp.loadUrl(url.trim());
                     }
-                    vp.reveal();
+                    VisualizationsPanel.currentPanel?.revealTarget('viewer');
                 }
             } catch {}
         };
@@ -1111,14 +1117,12 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         if (panelPositions['workspace'] && panelPositions['workspace'] !== vscode.ViewColumn.Three) {
             WorkspacePanel.createOrShow(context.extensionUri, panelPositions['workspace']);
         }
-        if (panelPositions['plots'] && panelPositions['plots'] !== vscode.ViewColumn.Three) {
-            PlotsPanel.createOrShow(context.extensionUri, panelPositions['plots']);
+        const visualizationsColumn = panelPositions['visualizations'] ?? panelPositions['plots'] ?? panelPositions['viewer'];
+        if (visualizationsColumn && visualizationsColumn !== vscode.ViewColumn.Three) {
+            VisualizationsPanel.createOrShow(context.extensionUri, visualizationsColumn);
         }
         if (panelPositions['dataViewer'] && panelPositions['dataViewer'] !== vscode.ViewColumn.Three) {
             DataViewerPanel.createOrShow(context.extensionUri, panelPositions['dataViewer']);
-        }
-        if (panelPositions['viewer'] && panelPositions['viewer'] !== vscode.ViewColumn.Three) {
-            ViewerPanel.createOrShow(context.extensionUri, undefined, panelPositions['viewer']);
         }
 
         // Reposition text files
@@ -1247,17 +1251,19 @@ async function deactivateLayout(): Promise<void> {
                 textFilePositions[tab.input.uri.fsPath] = group.viewColumn;
             } else if (tab.input instanceof vscode.TabInputWebview) {
                 if (tab.label === 'Plots') {
-                    panelPositions['plots'] = group.viewColumn;
+                    panelPositions['visualizations'] = group.viewColumn;
                 } else if (tab.label === 'R Help') {
                     panelPositions['help'] = group.viewColumn;
                 } else if (tab.label === 'Tools') {
                     panelPositions['tools'] = group.viewColumn;
+                } else if (tab.label === 'Visualizations') {
+                    panelPositions['visualizations'] = group.viewColumn;
                 } else if (tab.label === 'Workspace') {
                     panelPositions['workspace'] = group.viewColumn;
                 } else if (tab.label === 'Data Viewer') {
                     panelPositions['dataViewer'] = group.viewColumn;
                 } else if (tab.label === 'Viewer') {
-                    panelPositions['viewer'] = group.viewColumn;
+                    panelPositions['visualizations'] = group.viewColumn;
                 } else if (tab.label === 'Problems') {
                     panelPositions['problems'] = group.viewColumn;
                 }
@@ -1285,7 +1291,13 @@ async function deactivateLayout(): Promise<void> {
         await extensionContext.workspaceState.update('r-layout.dataViewerState', undefined);
     }
 
-    // Save Viewer state to in-memory variable before disposing
+    // Save Viewer/Visualizations state to in-memory variable before disposing
+    if (VisualizationsPanel.currentPanel) {
+        const visualizationsState = VisualizationsPanel.currentPanel.saveState();
+        savedViewerState = visualizationsState.viewerState;
+        VisualizationsPanel.lastClosedState = visualizationsState;
+        await extensionContext.workspaceState.update('r-layout.viewerState', undefined);
+    }
     if (ViewerPanel.currentPanel) {
         savedViewerState = ViewerPanel.currentPanel.saveState();
         await extensionContext.workspaceState.update('r-layout.viewerState', undefined);
@@ -1300,6 +1312,7 @@ async function deactivateLayout(): Promise<void> {
     // activeTextEditor after any individual webview closes, so restore the text
     // focus between disposals when needed.
     await disposePanelWithTextFocus(() => HelpPanel.currentPanel?.dispose(), sourceFiles);
+    await disposePanelWithTextFocus(() => VisualizationsPanel.currentPanel?.dispose(), sourceFiles);
     await disposePanelWithTextFocus(() => PlotsPanel.currentPanel?.dispose(), sourceFiles);
     await disposePanelWithTextFocus(() => ViewerPanel.currentPanel?.dispose(), sourceFiles);
     await disposePanelWithTextFocus(() => ProblemsPanel.currentPanel?.dispose(), sourceFiles);
@@ -1407,22 +1420,24 @@ async function deactivateLayout(): Promise<void> {
 
 let layoutGuards: vscode.Disposable[] = [];
 let terminalGuardBusy = false;
-type ProtectedPanelKey = 'tools' | 'workspace' | 'plots' | 'dataViewer' | 'viewer';
+type ProtectedPanelKey = 'tools' | 'workspace' | 'plots' | 'dataViewer';
 
 const protectedPanelByViewType = new Map<string, ProtectedPanelKey>([
     [ToolsPanel.viewType, 'tools'],
     [WorkspacePanel.viewType, 'workspace'],
+    [VisualizationsPanel.viewType, 'plots'],
     [PlotsPanel.viewType, 'plots'],
     [DataViewerPanel.viewType, 'dataViewer'],
-    [ViewerPanel.viewType, 'viewer'],
+    [ViewerPanel.viewType, 'plots'],
 ]);
 
 const protectedPanelByLabel = new Map<string, ProtectedPanelKey>([
     ['Tools', 'tools'],
     ['Workspace', 'workspace'],
+    ['Visualizations', 'plots'],
     ['Plots', 'plots'],
     ['Data Viewer', 'dataViewer'],
-    ['Viewer', 'viewer'],
+    ['Viewer', 'plots'],
 ]);
 
 const pendingProtectedPanelRestores = new Set<ProtectedPanelKey>();
@@ -1475,9 +1490,8 @@ function registerLayoutGuards(context: vscode.ExtensionContext): void {
     ]);
     const allowedGroup3ViewTypes = new Set([
         'r-layout.workspacePanel',
-        'r-layout.plotsPanel',
+        VisualizationsPanel.viewType,
         'r-layout.dataViewerPanel',
-        'r-layout.viewerPanel',
     ]);
 
     const tabAndTermGuard = vscode.window.tabGroups.onDidChangeTabs(async (e) => {
@@ -1757,7 +1771,7 @@ async function createShellTerminalInGroup2(): Promise<void> {
 }
 
 async function restoreProtectedPanels(context: vscode.ExtensionContext): Promise<ProtectedPanelRestoreRequest[]> {
-    const restoreOrder: ProtectedPanelKey[] = ['tools', 'workspace', 'plots', 'dataViewer', 'viewer'];
+    const restoreOrder: ProtectedPanelKey[] = ['tools', 'workspace', 'plots', 'dataViewer'];
     const requested = restoreOrder.filter((panelKey) => pendingProtectedPanelRestores.delete(panelKey));
     const requests = requested
         .map(panelKey => pendingProtectedPanelRestoreRequests.get(panelKey))
@@ -1778,28 +1792,23 @@ async function restoreProtectedPanels(context: vscode.ExtensionContext): Promise
             case 'workspace': {
                 const panel = WorkspacePanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
                 bindWorkspaceDataView(context, panel);
-                await enforceTabOrder(vscode.ViewColumn.Three, 'Workspace', ['Workspace', 'Plots', 'Data Viewer', 'Viewer']);
+                await enforceTabOrder(vscode.ViewColumn.Three, 'Workspace', ['Workspace', 'Visualizations', 'Data Viewer']);
                 setTimeout(() => WorkspacePanel.currentPanel?.forceRefresh(), 250);
                 break;
             }
             case 'plots': {
-                const panel = PlotsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
-                panel.syncPlots();
-                await enforceTabOrder(vscode.ViewColumn.Three, 'Plots', ['Workspace', 'Plots', 'Data Viewer', 'Viewer']);
+                const panel = VisualizationsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
+                const state = VisualizationsPanel.lastClosedState ?? (savedViewerState ? { viewerState: savedViewerState } : undefined);
+                if (state) { await panel.loadState(state); }
+                PlotsPanel.currentPanel?.syncPlots();
+                await enforceTabOrder(vscode.ViewColumn.Three, 'Visualizations', ['Workspace', 'Visualizations', 'Data Viewer']);
                 break;
             }
             case 'dataViewer': {
                 const panel = DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three);
                 const state = savedDataViewerState ?? DataViewerPanel.lastClosedState;
                 if (state) { await panel.loadState(state); }
-                await enforceTabOrder(vscode.ViewColumn.Three, 'Data Viewer', ['Workspace', 'Plots', 'Data Viewer', 'Viewer']);
-                break;
-            }
-            case 'viewer': {
-                const panel = ViewerPanel.createOrShow(context.extensionUri, undefined, vscode.ViewColumn.Three);
-                const state = savedViewerState ?? ViewerPanel.lastClosedState;
-                if (state) { await panel.loadState(state); }
-                await enforceTabOrder(vscode.ViewColumn.Three, 'Viewer', ['Workspace', 'Plots', 'Data Viewer', 'Viewer']);
+                await enforceTabOrder(vscode.ViewColumn.Three, 'Data Viewer', ['Workspace', 'Visualizations', 'Data Viewer']);
                 break;
             }
         }
@@ -1864,14 +1873,17 @@ async function revealLayoutTab(label: string, viewColumn: vscode.ViewColumn): Pr
             case 'Workspace':
                 WorkspacePanel.currentPanel?.reveal(viewColumn, false);
                 break;
+            case 'Visualizations':
+                VisualizationsPanel.currentPanel?.reveal(viewColumn, false);
+                break;
             case 'Plots':
-                PlotsPanel.currentPanel?.reveal(viewColumn, false);
+                VisualizationsPanel.currentPanel?.revealTarget('plots', viewColumn, false);
                 break;
             case 'Data Viewer':
                 DataViewerPanel.currentPanel?.reveal(viewColumn, false);
                 break;
             case 'Viewer':
-                ViewerPanel.currentPanel?.reveal(viewColumn, false);
+                VisualizationsPanel.currentPanel?.revealTarget('viewer', viewColumn, false);
                 break;
             default:
                 await focusTabByLabelFallback(viewColumn, label);

@@ -14,7 +14,8 @@ export function escapeHtml(text: string): string {
 }
 
 export async function enforceGroup3TabOrder(panelTitle: string): Promise<void> {
-    const GROUP3_ORDER = ['Workspace', 'Plots', 'Data Viewer', 'Viewer'];
+    const GROUP3_ORDER = ['Workspace', 'Visualizations', 'Data Viewer'];
+    const targetTitle = (panelTitle === 'Plots' || panelTitle === 'Viewer') ? 'Visualizations' : panelTitle;
     
     // Give VS Code a moment to update the tab arrays after a reveal/move
     await new Promise(resolve => setTimeout(resolve, 50));
@@ -24,8 +25,8 @@ export async function enforceGroup3TabOrder(panelTitle: string): Promise<void> {
     if (group) {
         const presentTabs = group.tabs.map(t => t.label);
         const expectedOrder = GROUP3_ORDER.filter(label => presentTabs.includes(label));
-        const currentIdx = presentTabs.indexOf(panelTitle);
-        const expectedIdx = expectedOrder.indexOf(panelTitle);
+        const currentIdx = presentTabs.indexOf(targetTitle);
+        const expectedIdx = expectedOrder.indexOf(targetTitle);
         
         // If the tab is out of order, move it to the expected position
         if (currentIdx !== expectedIdx && currentIdx !== -1 && expectedIdx !== -1) {
