@@ -70,10 +70,10 @@ The project has been refactored into a modular architecture to support the 3-pan
 - `src/layout/layoutManager.ts`: The core engine that orchestrates the VS Code layout, grid groups, terminal preservation, and protected tab restoration.
 - `src/panels/`: Contains the WebviewPanel singletons for the layout:
   - `dataViewerPanel.ts`: Renders data frame and matrix tables.
-  - `helpPanel.ts`: Displays integrated R documentation.
-  - `plotsPanel.ts`: Watches for and renders plot images.
-  - `problemsPanel.ts`: Visualizes workspace diagnostics with native Codicons.
-  - `viewerPanel.ts`: Displays HTML widgets, Shiny apps, and other `viewer()` outputs.
+  - `toolsPanel.ts`: Hosts R Help and Problems in the top-right pane.
+  - `visualsPanel.ts`: Hosts Plots and Viewer in the bottom-right pane.
+  - `plotsPanel.ts`: Implements plot history, export, comparison, and plot image watching inside Visuals.
+  - `viewerPanel.ts`: Implements HTML widgets, Shiny apps, and other `viewer()` outputs inside Visuals.
   - `workspacePanel.ts`: Renders Global Environment, Packages, and Attached Objects tabs.
 - `src/utils/`: Helper utilities for webviews and R path resolution.
 
@@ -108,9 +108,9 @@ To maintain a clean, readable, and verified Git history, we use specific merge s
 
 | Merge Path                         | Strategy             | Why?                                                                                                                                                     |
 | :--------------------------------- | :------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Feature $\rightarrow$ `dev`        | Squash and Merge     | Keeps `dev` history atomic (one commit per feature), hides messy intermediate commits, and allows GitHub to automatically sign the final bundled commit. |
-| `dev` $\rightarrow$ `staging`      | Rebase and Merge     | Promotes the exact, clean history from `dev` directly into `staging`.                                                                                    |
-| `staging` $\rightarrow$ `main`     | Rebase and Merge     | Ensures `main` matches `staging` exactly.                                                                                                                |
+| Feature -> `dev`        | Squash and Merge     | Keeps `dev` history atomic (one commit per feature), hides messy intermediate commits, and allows GitHub to automatically sign the final bundled commit. |
+| `dev` -> `staging`      | Rebase and Merge     | Promotes the exact, clean history from `dev` directly into `staging`.                                                                                    |
+| `staging` -> `main`     | Rebase and Merge     | Ensures `main` matches `staging` exactly.                                                                                                                |
 
 _Note: Set your GitHub Squash merge message preference to "Pull request title and description" to ensure context is preserved in the commit body._
 

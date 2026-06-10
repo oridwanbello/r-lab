@@ -9,15 +9,15 @@ An RStudio-inspired multi-pane layout orchestrator for VS Code.
 > [!NOTE]
 > This extension is currently in preview. We are actively refining the layout and feature set. Please report any issues on GitHub!
 
-Transform your editor into an RStudio-inspired 3-pane grid with a single click. Optimized for data science, it includes a live variable explorer, interactive plot gallery, and high-performance data viewer.
+Transform your editor into an RStudio-inspired 3-pane grid with a single click. Optimized for data science, it includes a live variable explorer, a combined Visuals tab for plots and viewer output, and a high-performance data viewer.
 
 ## Core Features
 
-- Instant Layout: Snaps your editor into a 3-pane grid (Source Editor, Terminal/Console, and Workspace/Plots).
+- Instant Layout: Snaps your editor into a 3-pane grid (Source Editor, Terminal/Console/Tools, and Workspace/Visuals/Data Viewer).
 - Workspace & Package Manager: Live variable inspector, dictionary-style object previews, and a 1-click interactive data frame viewer. Includes a dedicated tab to search, attach, and detach R packages.
-- Plot Gallery & Export: Interactive plot navigation (scroll/pinch zoom, pan) with advanced export settings (PDF, SVG, EPS, PNG, JPG) and smart file size estimation.
-- HTML Widget Viewer: Sandboxed layout tab for R `viewer()` outputs (Shiny apps, `htmlwidgets`, Quarto previews, vignettes).
-- Integrated R Help & Smart Execution: KaTeX math rendering, cross-reference linking, and dynamic code execution (Run Source / Run Selection).
+- Visuals: Combined Plots and Viewer subtabs for plot navigation, export, comparison, R `viewer()` output, Shiny apps, `htmlwidgets`, Quarto previews, and vignettes.
+- Plot Export: Advanced export settings for PDF, SVG, EPS, PNG, and JPG with smart file size estimation.
+- Tools & Smart Execution: Combined R Help and Problems tab, KaTeX help rendering, cross-reference linking, and dynamic code execution (Run Source / Run Selection).
 
 ## Getting Started
 
@@ -43,8 +43,8 @@ Interested in building the layout, fixing bugs, or reviewing our architecture? S
 
 ## Trademarks & License
 
-- R Logo: © The R Foundation (CC-BY-SA 4.0)
+- R Logo: Copyright The R Foundation (CC-BY-SA 4.0)
 - Tidyverse: Trademark of Posit Software, PBC.
 - Bioconductor: Trademark of the Bioconductor Project.
-- RDocumentation: © DataCamp, Inc.
+- RDocumentation: Copyright DataCamp, Inc.
 - License: [MIT License](LICENSE.txt)
