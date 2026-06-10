@@ -5,6 +5,7 @@ import * as os from 'os';
 import { PlotsPanel } from '../panels/plotsPanel';
 import { HelpPanel } from '../panels/helpPanel';
 import { ProblemsPanel } from '../panels/problemsPanel';
+import { ToolsPanel } from '../panels/toolsPanel';
 import { WorkspacePanel } from '../panels/workspacePanel';
 import { DataViewerPanel } from '../panels/dataViewerPanel';
 import { ViewerPanel } from '../panels/viewerPanel';
@@ -283,21 +284,29 @@ export function registerLayoutCommand(
             ViewerPanel.currentPanel?.setMinimized(true);
             await delay(80);
 
-            await vscode.commands.executeCommand('vscode.setEditorLayout', {
-                orientation: 0,
-                groups: [
-                    { size: 0.60 },
-                    {
-                        size: 0.40,
-                        groups: [
-                            { size: 0.9 },
-                            { size: 0.1 }
-                        ]
-                    }
-                ]
-            });
+            try {
+                await vscode.commands.executeCommand('vscode.setEditorLayout', {
+                    orientation: 0,
+                    groups: [
+                        { size: 0.60 },
+                        {
+                            size: 0.40,
+                            groups: [
+                                { size: 0.9 },
+                                { size: 0.1 }
+                            ]
+                        }
+                    ]
+                });
 
-            await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', true);
+                await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', true);
+            } catch {
+                WorkspacePanel.currentPanel?.setMinimized(false);
+                PlotsPanel.currentPanel?.setMinimized(false);
+                DataViewerPanel.currentPanel?.setMinimized(false);
+                ViewerPanel.currentPanel?.setMinimized(false);
+                await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', false);
+            }
         }),
         vscode.commands.registerCommand('r-layout.restoreRightSplit', async () => {
             if (!isLayoutActive) {
@@ -314,39 +323,43 @@ export function registerLayoutCommand(
             //    proportional-resize behavior so all panes grow/shrink
             //    together when the window is resized.
             try {
-                const current: any = await vscode.commands.executeCommand('vscode.getEditorLayout');
-                const subGroups = current?.groups?.[1]?.groups;
-                if (subGroups?.length === 2 && typeof subGroups[0].size === 'number' && typeof subGroups[1].size === 'number') {
-                    const avg = (subGroups[0].size + subGroups[1].size) / 2;
-                    subGroups[0].size = avg;
-                    subGroups[1].size = avg;
+                try {
+                    const current: any = await vscode.commands.executeCommand('vscode.getEditorLayout');
+                    const subGroups = current?.groups?.[1]?.groups;
+                    if (subGroups?.length === 2 && typeof subGroups[0].size === 'number' && typeof subGroups[1].size === 'number') {
+                        const avg = (subGroups[0].size + subGroups[1].size) / 2;
+                        subGroups[0].size = avg;
+                        subGroups[1].size = avg;
+                    }
+                    await vscode.commands.executeCommand('vscode.setEditorLayout', current);
+                } catch {
+                    // ignore; step 2 below will handle it
                 }
-                await vscode.commands.executeCommand('vscode.setEditorLayout', current);
-            } catch {
-                // ignore; step 2 below will handle it
+
+                // Step 2: proportional re-stamp
+                await vscode.commands.executeCommand('vscode.setEditorLayout', {
+                    orientation: 0,
+                    groups: [
+                        { size: 0.60 },
+                        {
+                            size: 0.40,
+                            groups: [
+                                { size: 0.5 },
+                                { size: 0.5 }
+                            ]
+                        }
+                    ]
+                });
+                await delay(80);
+            } finally {
+                // Never leave Group 3 webviews invisible if the layout command fails midway.
+                WorkspacePanel.currentPanel?.setMinimized(false);
+                PlotsPanel.currentPanel?.setMinimized(false);
+                DataViewerPanel.currentPanel?.setMinimized(false);
+                ViewerPanel.currentPanel?.setMinimized(false);
             }
 
-            // Step 2: proportional re-stamp
-            await vscode.commands.executeCommand('vscode.setEditorLayout', {
-                orientation: 0,
-                groups: [
-                    { size: 0.60 },
-                    {
-                        size: 0.40,
-                        groups: [
-                            { size: 0.5 },
-                            { size: 0.5 }
-                        ]
-                    }
-                ]
-            });
-            await delay(80);
-
             // Restore webview content only after the split has real dimensions.
-            WorkspacePanel.currentPanel?.setMinimized(false);
-            PlotsPanel.currentPanel?.setMinimized(false);
-            DataViewerPanel.currentPanel?.setMinimized(false);
-            ViewerPanel.currentPanel?.setMinimized(false);
             ViewerPanel.currentPanel?.restoreActivePlotlyWidgetAfterPaneSplit();
 
             await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', false);
@@ -642,7 +655,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     // If the layout was closed prematurely or tabs were deleted in a previous session,
     // the saved panelPositions might be broken (e.g. missing core panels, or panels stuck in Group 1).
     let missingCorePanels = 0;
-    const corePanels = ['workspace', 'plots', 'viewer', 'problems'];
+    const corePanels = ['workspace', 'plots', 'viewer', 'tools'];
     for (const p of corePanels) {
         if (!panelPositions[p]) {
             missingCorePanels++;
@@ -673,9 +686,9 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     for (const group of vscode.window.tabGroups.all) {
         for (const tab of group.tabs) {
-            const disposablePanels = ['Workspace', 'Plots', 'Data Viewer', 'Viewer', 'Problems'];
+            const disposablePanels = ['Workspace', 'Plots', 'Data Viewer', 'Viewer', 'Problems', 'R Help', 'Tools'];
             if (disposablePanels.includes(tab.label)) {
-                if (!restoreCustom || tab.label === 'Problems') {
+                if (!restoreCustom || tab.label === 'Problems' || tab.label === 'R Help' || tab.label === 'Tools') {
                     try { await vscode.window.tabGroups.close(tab); } catch {}
                 }
             }
@@ -784,10 +797,10 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     // viewColumn or moveToEditor + immediate Group 1 restore instead.
     await delay(10);
 
-    // 9. Group 2 (bottom-left): R Console -> Terminal -> Problems
+    // 9. Group 2 (bottom-left): R Console -> Terminal -> Tools
     //
     //    Strategy for existing terminals (session retention):
-    //      a) Create ProblemsPanel in ViewColumn.Two FIRST - this anchors Group 2
+    //      a) Create ToolsPanel in ViewColumn.Two FIRST - this anchors Group 2
     //         as a real, focusable editor group before any terminal is moved.
     //      b) Focus Group 2 (it now has content so focus sticks).
     //      c) Call terminal.show(false) to make the terminal the active one
@@ -796,8 +809,8 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     //         currently focused editor group (Group 2).
     //
     //    For NEW terminals, createTerminal with location.viewColumn is reliable.
-    // 9a. Anchor Group 2 with ProblemsPanel before any terminal placement.
-    ProblemsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
+    // 9a. Anchor Group 2 with ToolsPanel before any terminal placement.
+    ToolsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
     await delay(150); // Ensure Group 2 is fully mounted in the UI before spawning PTYs
 
     // Only delete stale workspace data if we are creating a BRAND-NEW R session.
@@ -913,20 +926,13 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         await createShellTerminalInGroup2();
     }
 
-    // ProblemsPanel: dispose the anchor instance and recreate so it becomes the
-    // LAST tab in Group 2, giving order: R Console -> Terminal -> Problems.
+    // ToolsPanel: dispose the anchor instance and recreate so it becomes the
+    // LAST tab in Group 2, giving order: R Console -> Terminal -> Tools.
     await delay(10);
-    ProblemsPanel.currentPanel?.dispose();
+    ToolsPanel.currentPanel?.dispose();
     await delay(10);
-    ProblemsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
-    await delay(10);
-
-
-
-    // 10. HelpPanel: Appended to Group 2 (Top-Right) so it becomes the 4th tab
-    //     Order in Group 2: R Console -> Terminal -> Problems -> Help
-    const helpPanel = HelpPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
-    if (savedHelpState) { helpPanel.loadState(savedHelpState); }
+    const toolsPanel = ToolsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
+    toolsPanel.loadState(savedHelpState ?? ToolsPanel.lastClosedState);
     await delay(10);
 
     // Focus Group 2 and activate R Console (which is usually the 1st or 2nd tab)
@@ -1089,19 +1095,18 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         await dvPanel.loadState(savedDataViewerState);
     }
 
-    // 13. Create Problems if it was open (RESTORATION)
-    if (panelPositions['problems'] === vscode.ViewColumn.Two) {
-        ProblemsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
+    // 13. Keep Tools present if it was open in the saved layout.
+    if (panelPositions['tools'] === vscode.ViewColumn.Two || panelPositions['problems'] === vscode.ViewColumn.Two || panelPositions['help'] === vscode.ViewColumn.Two) {
+        const panel = ToolsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
+        panel.loadState(savedHelpState ?? ToolsPanel.lastClosedState);
     }
 
     // Reposition custom panels
     const restoreCustomPositions = vscode.workspace.getConfiguration('r-layout').get<boolean>('restoreCustomPanelPositions', false);
     if (restoreCustomPositions) {
-        if (panelPositions['problems'] && panelPositions['problems'] !== vscode.ViewColumn.Two) {
-            ProblemsPanel.createOrShow(context.extensionUri, panelPositions['problems']);
-        }
-        if (panelPositions['help'] && panelPositions['help'] !== vscode.ViewColumn.Two) {
-            HelpPanel.createOrShow(context.extensionUri, panelPositions['help']);
+        if (panelPositions['tools'] && panelPositions['tools'] !== vscode.ViewColumn.Two) {
+            const panel = ToolsPanel.createOrShow(context.extensionUri, panelPositions['tools']);
+            panel.loadState(savedHelpState ?? ToolsPanel.lastClosedState);
         }
         if (panelPositions['workspace'] && panelPositions['workspace'] !== vscode.ViewColumn.Three) {
             WorkspacePanel.createOrShow(context.extensionUri, panelPositions['workspace']);
@@ -1174,8 +1179,8 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     // Force xterm.js to recalculate terminal viewport dimensions (including top padding)
     // by re-applying the editor layout. When terminals are moved from the bottom panel
-    // to the editor during restoration, subsequent Group 2 mutations (ProblemsPanel
-    // dispose/recreate, HelpPanel creation) cause xterm.js to lose its container padding.
+    // to the editor during restoration, subsequent Group 2 mutations can cause
+    // xterm.js to lose its container padding.
     // Re-applying the layout forces a container resize event that triggers a full reflow.
     const reapplyLayout = async () => {
         try {
@@ -1243,8 +1248,10 @@ async function deactivateLayout(): Promise<void> {
             } else if (tab.input instanceof vscode.TabInputWebview) {
                 if (tab.label === 'Plots') {
                     panelPositions['plots'] = group.viewColumn;
-                } else if (tab.label === 'Help') {
+                } else if (tab.label === 'R Help') {
                     panelPositions['help'] = group.viewColumn;
+                } else if (tab.label === 'Tools') {
+                    panelPositions['tools'] = group.viewColumn;
                 } else if (tab.label === 'Workspace') {
                     panelPositions['workspace'] = group.viewColumn;
                 } else if (tab.label === 'Data Viewer') {
@@ -1263,9 +1270,11 @@ async function deactivateLayout(): Promise<void> {
     await extensionContext.workspaceState.update('r-layout.panelPositions', panelPositions);
 
     // Save Help state to in-memory variable before disposing
-    if (HelpPanel.currentPanel) {
+    if (ToolsPanel.currentPanel) {
+        savedHelpState = ToolsPanel.currentPanel.saveState();
+        await extensionContext.workspaceState.update('r-layout.helpState', undefined);
+    } else if (HelpPanel.currentPanel) {
         savedHelpState = HelpPanel.currentPanel.saveState();
-        // Clear workspaceState in case it was used previously
         await extensionContext.workspaceState.update('r-layout.helpState', undefined);
     }
 
@@ -1294,6 +1303,7 @@ async function deactivateLayout(): Promise<void> {
     await disposePanelWithTextFocus(() => PlotsPanel.currentPanel?.dispose(), sourceFiles);
     await disposePanelWithTextFocus(() => ViewerPanel.currentPanel?.dispose(), sourceFiles);
     await disposePanelWithTextFocus(() => ProblemsPanel.currentPanel?.dispose(), sourceFiles);
+    await disposePanelWithTextFocus(() => ToolsPanel.currentPanel?.dispose(), sourceFiles);
     await disposePanelWithTextFocus(() => WorkspacePanel.currentPanel?.dispose(), sourceFiles);
     await disposePanelWithTextFocus(() => DataViewerPanel.currentPanel?.dispose(), sourceFiles);
 
@@ -1397,11 +1407,10 @@ async function deactivateLayout(): Promise<void> {
 
 let layoutGuards: vscode.Disposable[] = [];
 let terminalGuardBusy = false;
-type ProtectedPanelKey = 'problems' | 'help' | 'workspace' | 'plots' | 'dataViewer' | 'viewer';
+type ProtectedPanelKey = 'tools' | 'workspace' | 'plots' | 'dataViewer' | 'viewer';
 
 const protectedPanelByViewType = new Map<string, ProtectedPanelKey>([
-    [ProblemsPanel.viewType, 'problems'],
-    [HelpPanel.viewType, 'help'],
+    [ToolsPanel.viewType, 'tools'],
     [WorkspacePanel.viewType, 'workspace'],
     [PlotsPanel.viewType, 'plots'],
     [DataViewerPanel.viewType, 'dataViewer'],
@@ -1409,8 +1418,7 @@ const protectedPanelByViewType = new Map<string, ProtectedPanelKey>([
 ]);
 
 const protectedPanelByLabel = new Map<string, ProtectedPanelKey>([
-    ['Problems', 'problems'],
-    ['R Help', 'help'],
+    ['Tools', 'tools'],
     ['Workspace', 'workspace'],
     ['Plots', 'plots'],
     ['Data Viewer', 'dataViewer'],
@@ -1463,8 +1471,7 @@ function registerLayoutGuards(context: vscode.ExtensionContext): void {
     // Anything not in this set (and not a terminal we own) is stray and
     // gets moved to Group 1.
     const allowedGroup2ViewTypes = new Set([
-        'r-layout.problemsPanel',
-        'r-layout.helpPanel',
+        ToolsPanel.viewType,
     ]);
     const allowedGroup3ViewTypes = new Set([
         'r-layout.workspacePanel',
@@ -1633,7 +1640,7 @@ function getProtectedPanelRestoreRequest(panelKey: ProtectedPanelKey, closedTab:
 }
 
 function getProtectedPanelViewColumn(panelKey: ProtectedPanelKey): vscode.ViewColumn {
-    return panelKey === 'problems' || panelKey === 'help'
+    return panelKey === 'tools'
         ? vscode.ViewColumn.Two
         : vscode.ViewColumn.Three;
 }
@@ -1700,8 +1707,14 @@ async function recreateProtectedShellTerminal(): Promise<void> {
     panelMoveInProgress = true;
     try {
         await createShellTerminalInGroup2();
-        await enforceTabOrder(vscode.ViewColumn.Two, 'Terminal', ['R Console', 'Terminal', 'Problems', 'R Help']);
-        try { await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup'); } catch {}
+        await enforceTabOrder(vscode.ViewColumn.Two, 'Terminal', ['R Console', 'Terminal', 'Tools']);
+        const restoredTerminal = shellTerminal as vscode.Terminal | undefined;
+        restoredTerminal?.show(false);
+        setTimeout(() => {
+            if (restoredTerminal && isLayoutActive && getActiveTabLabel(vscode.ViewColumn.Two) === 'Terminal') {
+                restoredTerminal.show(false);
+            }
+        }, 400);
     } finally {
         setTimeout(() => { panelMoveInProgress = false; }, 200);
     }
@@ -1744,7 +1757,7 @@ async function createShellTerminalInGroup2(): Promise<void> {
 }
 
 async function restoreProtectedPanels(context: vscode.ExtensionContext): Promise<ProtectedPanelRestoreRequest[]> {
-    const restoreOrder: ProtectedPanelKey[] = ['problems', 'help', 'workspace', 'plots', 'dataViewer', 'viewer'];
+    const restoreOrder: ProtectedPanelKey[] = ['tools', 'workspace', 'plots', 'dataViewer', 'viewer'];
     const requested = restoreOrder.filter((panelKey) => pendingProtectedPanelRestores.delete(panelKey));
     const requests = requested
         .map(panelKey => pendingProtectedPanelRestoreRequests.get(panelKey))
@@ -1755,15 +1768,11 @@ async function restoreProtectedPanels(context: vscode.ExtensionContext): Promise
 
     for (const panelKey of requested) {
         switch (panelKey) {
-            case 'problems':
-                ProblemsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
-                await enforceTabOrder(vscode.ViewColumn.Two, 'Problems', ['R Console', 'Terminal', 'Problems', 'R Help']);
-                break;
-            case 'help': {
-                const panel = HelpPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
-                const state = savedHelpState ?? HelpPanel.lastClosedState;
+            case 'tools': {
+                const panel = ToolsPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Two);
+                const state = savedHelpState ?? ToolsPanel.lastClosedState;
                 if (state) { panel.loadState(state); }
-                await enforceTabOrder(vscode.ViewColumn.Two, 'R Help', ['R Console', 'Terminal', 'Problems', 'R Help']);
+                await enforceTabOrder(vscode.ViewColumn.Two, 'Tools', ['R Console', 'Terminal', 'Tools']);
                 break;
             }
             case 'workspace': {
@@ -1844,10 +1853,13 @@ async function revealLayoutTab(label: string, viewColumn: vscode.ViewColumn): Pr
                 shellTerminal?.show(false);
                 break;
             case 'Problems':
-                ProblemsPanel.currentPanel?.reveal(viewColumn, false);
+                ToolsPanel.currentPanel?.revealTool('problems', viewColumn, false);
                 break;
             case 'R Help':
-                HelpPanel.currentPanel?.reveal(viewColumn, false);
+                ToolsPanel.currentPanel?.revealTool('help', viewColumn, false);
+                break;
+            case 'Tools':
+                ToolsPanel.currentPanel?.reveal(viewColumn, false);
                 break;
             case 'Workspace':
                 WorkspacePanel.currentPanel?.reveal(viewColumn, false);
