@@ -841,6 +841,23 @@ export class ViewerPanel {
         let isPoppedOut = false;
         let wasMinimized = false;
 
+        function addInstantListener(btn, handler) {
+            if (!btn) return;
+            let lastEventTime = 0;
+            const wrapped = (e) => {
+                const now = Date.now();
+                if (now - lastEventTime < 300) return;
+                lastEventTime = now;
+                handler(e);
+            };
+            btn.addEventListener('mousedown', (e) => {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                wrapped(e);
+            });
+            btn.addEventListener('click', wrapped);
+        }
+
         function layoutToolbarOverflow() {
             const nav = document.querySelector('.nav-controls');
             const overflow = document.getElementById('toolbar-overflow');
@@ -1018,20 +1035,20 @@ export class ViewerPanel {
             }
         });
 
-        btnRefresh.addEventListener('click', () => {
+        addInstantListener(btnRefresh, () => {
             if (!btnRefresh.hasAttribute('disabled') && currentUrl) {
                 setRendering(true);
                 frame.src = frame.src;
             }
         });
 
-        btnPrev.addEventListener('click', () => {
+        addInstantListener(btnPrev, () => {
             if (!btnPrev.hasAttribute('disabled')) {
                 vscode.postMessage({ type: 'navigatePrev' });
             }
         });
 
-        btnNext.addEventListener('click', () => {
+        addInstantListener(btnNext, () => {
             if (!btnNext.hasAttribute('disabled')) {
                 vscode.postMessage({ type: 'navigateNext' });
             }
@@ -1051,26 +1068,26 @@ export class ViewerPanel {
             }
         });
 
-        btnSnapshot.addEventListener('click', () => {
+        addInstantListener(btnSnapshot, () => {
             if (!btnSnapshot.hasAttribute('disabled')) {
                 frame.contentWindow.postMessage({ command: 'exportPng' }, '*');
             }
         });
 
-        btnExternal.addEventListener('click', () => {
+        addInstantListener(btnExternal, () => {
             if (!btnExternal.hasAttribute('disabled')) {
                 vscode.postMessage({ type: 'openExternal' });
             }
         });
 
-        btnPopout.addEventListener('click', () => {
+        addInstantListener(btnPopout, () => {
             vscode.postMessage({ type: isPoppedOut ? 'restore' : 'popout' });
         });
 
         const toolbarOverflow = document.getElementById('toolbar-overflow');
         const btnToolbarOverflow = document.getElementById('btn-toolbar-overflow');
-        btnToolbarOverflow?.addEventListener('click', (e) => {
-            e.stopPropagation();
+        addInstantListener(btnToolbarOverflow, (e) => {
+            if (e && e.stopPropagation) e.stopPropagation();
             toolbarOverflow?.classList.toggle('open');
         });
         document.addEventListener('click', () => {
@@ -1079,17 +1096,17 @@ export class ViewerPanel {
         window.addEventListener('resize', scheduleToolbarOverflowLayout);
         scheduleToolbarOverflowLayout();
 
-        btnNightMode.addEventListener('click', () => {
+        addInstantListener(btnNightMode, () => {
             if (!btnNightMode.hasAttribute('disabled')) {
                 vscode.postMessage({ type: 'toggleNightMode' });
             }
         });
-        btnDelete.addEventListener('click', () => {
+        addInstantListener(btnDelete, () => {
             if (!btnDelete.hasAttribute('disabled')) {
                 vscode.postMessage({ type: 'deleteCurrent' });
             }
         });
-        btnClear.addEventListener('click', () => {
+        addInstantListener(btnClear, () => {
             if (!btnClear.hasAttribute('disabled')) {
                 vscode.postMessage({ type: 'clearAll' });
             }

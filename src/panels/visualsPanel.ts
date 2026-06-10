@@ -22,7 +22,7 @@ class HostedWebview {
     public readonly cspSource: string;
 
     public constructor(
-        private readonly _owner: VisualizationsPanel,
+        private readonly _owner: VisualsPanel,
         private readonly _target: VizTarget,
         private readonly _parentWebview: vscode.Webview
     ) {
@@ -82,7 +82,7 @@ class HostedPanel {
     private _viewStateHandlers: Array<(event: { webviewPanel: HostedPanel }) => any> = [];
 
     public constructor(
-        private readonly _owner: VisualizationsPanel,
+        private readonly _owner: VisualsPanel,
         private readonly _target: VizTarget,
         private readonly _parentPanel: vscode.WebviewPanel
     ) {
@@ -137,9 +137,10 @@ class HostedPanel {
     }
 }
 
-export class VisualizationsPanel {
-    public static currentPanel: VisualizationsPanel | undefined;
-    public static readonly viewType = 'r-layout.visualizationsPanel';
+export class VisualsPanel {
+    public static currentPanel: VisualsPanel | undefined;
+    public static readonly viewType = 'r-layout.visualsPanel';
+    public static readonly legacyViewType = 'r-layout.visualizationsPanel';
     public static lastClosedState: any | undefined;
 
     private readonly _panel: vscode.WebviewPanel;
@@ -154,29 +155,30 @@ export class VisualizationsPanel {
         extensionUri: vscode.Uri,
         column: vscode.ViewColumn = vscode.ViewColumn.Three,
         forceReveal: boolean = true
-    ): VisualizationsPanel {
-        if (VisualizationsPanel.currentPanel) {
+    ): VisualsPanel {
+        if (VisualsPanel.currentPanel) {
+            VisualsPanel.currentPanel._panel.title = 'Visuals';
             if (forceReveal) {
-                VisualizationsPanel.currentPanel._panel.reveal(column, true);
+                VisualsPanel.currentPanel._panel.reveal(column, true);
             }
-            return VisualizationsPanel.currentPanel;
+            return VisualsPanel.currentPanel;
         }
 
         const panel = vscode.window.createWebviewPanel(
-            VisualizationsPanel.viewType,
-            'Visualizations',
+            VisualsPanel.viewType,
+            'Visuals',
             { viewColumn: column, preserveFocus: true },
             {
                 enableScripts: true,
                 retainContextWhenHidden: true,
-                localResourceRoots: VisualizationsPanel._defaultResourceRoots(extensionUri),
+                localResourceRoots: VisualsPanel._defaultResourceRoots(extensionUri),
                 portMapping: []
             }
         );
         panel.iconPath = vscode.Uri.joinPath(extensionUri, 'resources', 'blank.svg');
 
-        VisualizationsPanel.currentPanel = new VisualizationsPanel(panel, extensionUri);
-        return VisualizationsPanel.currentPanel;
+        VisualsPanel.currentPanel = new VisualsPanel(panel, extensionUri);
+        return VisualsPanel.currentPanel;
     }
 
     private static _defaultResourceRoots(extensionUri: vscode.Uri): vscode.Uri[] {
@@ -197,7 +199,7 @@ export class VisualizationsPanel {
         this._panel.onDidChangeViewState(
             (event) => {
                 if (event.webviewPanel.active) {
-                    recordLayoutFocus('Visualizations', event.webviewPanel.viewColumn);
+                    recordLayoutFocus('Visuals', event.webviewPanel.viewColumn);
                 }
             },
             null,
@@ -295,7 +297,7 @@ export class VisualizationsPanel {
     public updateHostedResourceRoots(target: VizTarget, roots: readonly vscode.Uri[]): void {
         this._hostedResourceRoots[target] = [...roots];
         const merged = new Map<string, vscode.Uri>();
-        for (const uri of VisualizationsPanel._defaultResourceRoots(this._extensionUri)) {
+        for (const uri of VisualsPanel._defaultResourceRoots(this._extensionUri)) {
             merged.set(uri.toString(), uri);
         }
         for (const uri of [...this._hostedResourceRoots.plots, ...this._hostedResourceRoots.viewer]) {
@@ -308,8 +310,8 @@ export class VisualizationsPanel {
     }
 
     public dispose(): void {
-        VisualizationsPanel.lastClosedState = this.saveState();
-        VisualizationsPanel.currentPanel = undefined;
+        VisualsPanel.lastClosedState = this.saveState();
+        VisualsPanel.currentPanel = undefined;
         if (PlotsPanel.currentPanel) {
             PlotsPanel.currentPanel.dispose();
         }
@@ -343,6 +345,7 @@ export class VisualizationsPanel {
 
     private _setActiveTarget(target: VizTarget): void {
         this._activeTarget = target;
+        this._panel.title = 'Visuals';
         if (!this._ready) { return; }
         this._panel.webview.postMessage({ type: 'setActiveTarget', target });
     }

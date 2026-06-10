@@ -14,8 +14,8 @@ export function escapeHtml(text: string): string {
 }
 
 export async function enforceGroup3TabOrder(panelTitle: string): Promise<void> {
-    const GROUP3_ORDER = ['Workspace', 'Visualizations', 'Data Viewer'];
-    const targetTitle = (panelTitle === 'Plots' || panelTitle === 'Viewer') ? 'Visualizations' : panelTitle;
+    const GROUP3_ORDER = ['Workspace', 'Visuals', 'Data Viewer'];
+    const targetTitle = (panelTitle === 'Plots' || panelTitle === 'Viewer' || panelTitle === 'Visualizations') ? 'Visuals' : panelTitle;
     
     // Give VS Code a moment to update the tab arrays after a reveal/move
     await new Promise(resolve => setTimeout(resolve, 50));
