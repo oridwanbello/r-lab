@@ -150,6 +150,7 @@ export class VisualsPanel {
     private readonly _hostedResourceRoots: Record<VizTarget, vscode.Uri[]> = { plots: [], viewer: [] };
     private _activeTarget: VizTarget = 'plots';
     private _ready = false;
+    private _lastViewColumn?: vscode.ViewColumn;
 
     public static createOrShow(
         extensionUri: vscode.Uri,
@@ -195,11 +196,20 @@ export class VisualsPanel {
         this._render();
         this._createHostedPanels();
 
+        this._lastViewColumn = panel.viewColumn;
+
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
         this._panel.onDidChangeViewState(
             (event) => {
                 if (event.webviewPanel.active) {
                     recordLayoutFocus('Visuals', event.webviewPanel.viewColumn);
+                }
+                const currentViewColumn = event.webviewPanel.viewColumn;
+                if (currentViewColumn !== this._lastViewColumn) {
+                    this._lastViewColumn = currentViewColumn;
+                    const isPoppedOut = (currentViewColumn !== vscode.ViewColumn.Three && currentViewColumn !== undefined);
+                    this._hostedWebviews.plots?.receive({ type: 'syncPopoutState', isPoppedOut });
+                    this._hostedWebviews.viewer?.receive({ type: 'syncPopoutState', isPoppedOut });
                 }
             },
             null,

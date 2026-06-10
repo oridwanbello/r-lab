@@ -126,6 +126,9 @@ export class ViewerPanel {
         this._panel.webview.onDidReceiveMessage(
             (msg: { type: string; dataUrl?: string; error?: string }) => {
                 switch (msg.type) {
+                    case 'syncPopoutState':
+                        this._updateWebviewState(false, (msg as any).isPoppedOut);
+                        break;
                     case 'ready':
                         this._updateWebviewState();
                         if (this._focusPending) {
@@ -543,27 +546,31 @@ export class ViewerPanel {
         } catch (e) {}
     }
 
-    private _updateWebviewState(overrideIsPoppedOut?: boolean): void {
-        if (overrideIsPoppedOut !== undefined) {
-            this._isPoppedOut = overrideIsPoppedOut;
-        } else if (this._panel.viewColumn !== undefined) {
-            this._isPoppedOut = this._panel.viewColumn !== vscode.ViewColumn.Three;
-        }
-        const actualMinimized = this._isPoppedOut ? false : this._isMinimized;
-        this._panel.webview.postMessage({
-            type: 'updateState',
-            state: {
-                url: this._currentUrl,
-                minimized: actualMinimized,
-                isNightMode: this._isNightMode,
-                isPoppedOut: this._isPoppedOut,
-                hasPrev: this._currentIndex > 0,
-                hasNext: this._currentIndex >= 0 && this._currentIndex < this._history.length - 1,
-                currentIndex: this._currentIndex,
-                totalHistory: this._history.length,
-                canSnapshot: !!(this._currentUrl && this._currentUrl.startsWith('http://127.0.0.1:') && !this._currentUrl.includes('/doc/') && !this._currentUrl.includes('/library/'))
+    private _updateWebviewState(renderHtml: boolean = true, overrideIsPoppedOut?: boolean): void {
+        if (!this._panel.webview.html && renderHtml) {
+            this._panel.webview.html = this._getHtml();
+        } else {
+            if (overrideIsPoppedOut !== undefined) {
+                this._isPoppedOut = overrideIsPoppedOut;
+            } else if (this._panel.viewColumn !== undefined) {
+                this._isPoppedOut = this._panel.viewColumn !== vscode.ViewColumn.Three;
             }
-        });
+            const actualMinimized = this._isPoppedOut ? false : this._isMinimized;
+            this._panel.webview.postMessage({
+                type: 'updateState',
+                state: {
+                    url: this._currentUrl,
+                    minimized: actualMinimized,
+                    isNightMode: this._isNightMode,
+                    isPoppedOut: this._isPoppedOut,
+                    hasPrev: this._currentIndex > 0,
+                    hasNext: this._currentIndex >= 0 && this._currentIndex < this._history.length - 1,
+                    currentIndex: this._currentIndex,
+                    totalHistory: this._history.length,
+                    canSnapshot: !!(this._currentUrl && this._currentUrl.startsWith('http://127.0.0.1:') && !this._currentUrl.includes('/doc/') && !this._currentUrl.includes('/library/'))
+                }
+            });
+        }
     }
 
     private _getHtml(): string {

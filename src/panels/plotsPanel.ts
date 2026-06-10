@@ -142,6 +142,9 @@ export class PlotsPanel {
         this._panel.webview.onDidReceiveMessage(
             (msg: { type: string }) => {
                 switch (msg.type) {
+                    case 'syncPopoutState':
+                        this._postState((msg as any).isPoppedOut);
+                        break;
                     case 'ready':
                         this._postState();
                         if (this._focusPending) {
