@@ -835,6 +835,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         const rProfileEnv: Record<string, string> = {};
         if (watcherPath) {
             rProfileEnv['R_PROFILE_USER'] = watcherPath;
+            rProfileEnv['R_LAYOUT_SESSION'] = '1';
             const existing = process.env['R_PROFILE_USER'];
             if (existing) { rProfileEnv['R_PROFILE_USER_ORIG'] = existing; }
         }
@@ -1841,7 +1842,7 @@ async function ensureRConsoleInGroup2(
         shellPath: getRPath(),
         shellArgs: getRArgs(),
         location: isWindows ? undefined : { viewColumn: vscode.ViewColumn.Two },
-        env: rEnv,
+        env: { ...rEnv, R_LAYOUT_SESSION: '1' },
         strictEnv: !isWindows,
         cwd: getEffectiveWorkspaceRoot(),
         iconPath: vscode.Uri.joinPath(context.extensionUri, 'resources', 'r_logo.svg'),
@@ -2373,6 +2374,23 @@ function _buildWatcherRprofile(): string | undefined {
 
     const rCode = `
 # R Layout workspace watcher - auto-loaded via R_PROFILE_USER
+#
+# Only the interactive R Layout console should install these hooks. If this
+# profile is inherited by vscode-R, languageserver, callr, Rscript, or package
+# child processes, restore normal user-profile behavior and stop here.
+.rlayout_is_console <- identical(Sys.getenv("R_LAYOUT_SESSION", unset = ""), "1") && interactive()
+if (!isTRUE(.rlayout_is_console)) {
+  local({
+    orig <- Sys.getenv("R_PROFILE_USER_ORIG", unset = "")
+    if (nchar(orig) > 0 && file.exists(orig)) {
+      try(source(orig, echo = FALSE), silent = TRUE)
+    } else {
+      home_prof <- path.expand("~/.Rprofile")
+      if (file.exists(home_prof)) try(source(home_prof, echo = FALSE), silent = TRUE)
+    }
+  })
+  rm(.rlayout_is_console)
+} else {
 
 # 1. Source the standard user profile (~/.Rprofile).
 #    R_PROFILE_USER overrides it, so we must source it explicitly.
@@ -2735,6 +2753,7 @@ invisible(local({
     if (file.exists(.has_later_file)) unlink(.has_later_file)
   }
 }))
+}
 `;
     fs.writeFileSync(scriptPath, rCode, 'utf8');
     return scriptPath.replace(/\\/g, '/');
