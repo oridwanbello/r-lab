@@ -1,9 +1,10 @@
 import * as vscode from 'vscode';
+import { getNonce, escapeHtml } from '../utils/webviewUtils';
 import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { getRConsoleTerminal } from '../layout/layoutManager';
+import { getRConsoleTerminal, recordLayoutFocus } from '../layout/layoutManager';
 import { getRscriptPath } from '../utils/rPathResolver';
 
 /**
@@ -15,7 +16,8 @@ import { getRscriptPath } from '../utils/rPathResolver';
  */
 export class HelpPanel {
     public static currentPanel: HelpPanel | undefined;
-    public static readonly viewType = 'r-layout.helpPanel';
+    public static readonly viewType = 'r-lab.helpPanel';
+    public static lastClosedState: any | undefined;
 
     private readonly _panel: vscode.WebviewPanel;
     private _recentSearches: string[] = [];
@@ -53,7 +55,13 @@ export class HelpPanel {
     }
 
     public reveal(column?: vscode.ViewColumn, preserveFocus?: boolean): void {
-        this._panel.reveal(column, preserveFocus);
+        if (!this._panel.visible) {
+            const activeEditor = vscode.window.activeTextEditor;
+            if (activeEditor && activeEditor.viewColumn === this._panel.viewColumn) {
+                return;
+            }
+            this._panel.reveal(column, preserveFocus);
+        }
     }
 
     // State Serialization
@@ -86,6 +94,16 @@ export class HelpPanel {
         this._render();
 
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
+
+        this._panel.onDidChangeViewState(
+            (e) => {
+                if (e.webviewPanel.active) {
+                    recordLayoutFocus('R Help', e.webviewPanel.viewColumn);
+                }
+            },
+            null,
+            this._disposables
+        );
 
         this._panel.webview.onDidReceiveMessage(
             async (msg: { type: string; query?: string }) => {
@@ -142,7 +160,7 @@ export class HelpPanel {
         // Use intToUtf8(c(...)) to safely inject arbitrary strings into R script
         // without risking Windows command line quoting nightmares.
         const toRString = (str: string) => {
-            if (!str) return '""';
+            if (!str) {return '""';}
             const codes = Array.from(str).map(c => c.charCodeAt(0)).join(',');
             return `intToUtf8(c(${codes}))`;
         };
@@ -163,7 +181,7 @@ export class HelpPanel {
             `options(help_type = "text")`,
             `query <- ${rQuery}`,
             `print_pkg <- function(h) {`,
-            `  cat(paste0("<h2>Package '", h$name, "'</h2>\\n"))`,
+            `  cat(paste0("<h2>Package '<span class='package-name'>", h$name, "</span>'</h2>\\n"))`,
             `  if (length(h$info) >= 1) {`,
             `    cat("<h3>Description</h3><pre class='package-description'>\\n")`,
             `    cat(paste0(h$info[[1]], collapse="\\n"), "</pre>\\n")`,
@@ -320,7 +338,7 @@ export class HelpPanel {
         // Determine what to show in the main area
         let mainContent: string;
         if (this._isLoading) {
-            mainContent = `<div class="status-msg">⏳ Loading help for "${escapeHtml(this._lastQuery)}"…</div>`;
+            mainContent = `<div class="status-msg loading-msg"><span>Loading help for</span><span class="loading-var">${escapeHtml(this._lastQuery)}</span><span>&hellip;</span></div>`;
         } else if (this._helpText) {
             mainContent = `
                 <div class="help-html-content">${this._helpText}</div>`;
@@ -404,6 +422,9 @@ export class HelpPanel {
         body.vscode-dark .token.operator { color: #d4d4d4; }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
+        html, body {
+            height: 100%;
+        }
         body {
             font-family: var(--vscode-font-family);
             font-size: var(--vscode-font-size, 13px);
@@ -411,7 +432,7 @@ export class HelpPanel {
             background: var(--vscode-editor-background);
             display: flex;
             flex-direction: column;
-            height: 100vh;
+            height: 100%;
             overflow: hidden;
         }
         .toolbar {
@@ -422,8 +443,33 @@ export class HelpPanel {
             background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             flex-shrink: 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
         }
-        .pane-title { font-weight: 600; letter-spacing: 0.5px; opacity: 0.7; }
+        .toolbar::-webkit-scrollbar {
+            height: 2px;
+        }
+        .toolbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .toolbar::-webkit-scrollbar-thumb {
+            background-color: transparent;
+            border-radius: 2px;
+        }
+        .toolbar:hover::-webkit-scrollbar-thumb {
+            background-color: var(--vscode-scrollbarSlider-background);
+        }
+        .toolbar::-webkit-scrollbar-thumb:hover {
+            background-color: var(--vscode-scrollbarSlider-hoverBackground);
+        }
+        .toolbar::-webkit-scrollbar-thumb:active {
+            background-color: var(--vscode-scrollbarSlider-activeBackground);
+        }
+        .toolbar > * {
+            flex-shrink: 0;
+        }
+        .pane-title { font-weight: 600; opacity: 0.7; }
         .search-bar {
             display: flex; gap: 6px; padding: 8px 12px;
             background: var(--vscode-editor-background);
@@ -433,13 +479,18 @@ export class HelpPanel {
         }
         .search-bar input {
             flex: 1;
+            min-width: 0;
             background: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border, transparent);
             padding: 5px 10px; border-radius: 6px; font-size: var(--vscode-font-size, 13px); outline: none;
+            font-family: var(--vscode-editor-font-family, monospace);
         }
         .search-bar input:focus { border-color: var(--vscode-focusBorder); }
-        .search-bar input::placeholder { color: var(--vscode-input-placeholderForeground); }
+        .search-bar input::placeholder {
+            color: var(--vscode-input-placeholderForeground);
+            font-family: var(--vscode-font-family);
+        }
         .search-bar button {
             background: var(--vscode-button-background); color: var(--vscode-button-foreground);
             border: none; padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 1.1em; font-weight: 600;
@@ -454,7 +505,22 @@ export class HelpPanel {
         .btn-home:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground) !important; }
         .btn-home svg { width: 16px; height: 16px; display: block; }
         .content { flex: 1; overflow: auto; }
-        .status-msg { padding: 20px; text-align: center; opacity: 0.6; }
+        .status-msg {
+            min-height: 100%;
+            padding: 20px;
+            text-align: center;
+            opacity: 0.6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .loading-msg {
+            gap: 4px;
+        }
+        .loading-var {
+            color: var(--vscode-textPreformat-foreground, var(--vscode-editor-foreground));
+            font-family: var(--vscode-editor-font-family, monospace);
+        }
 
 
         .help-html-content {
@@ -487,11 +553,16 @@ export class HelpPanel {
             margin-bottom: 0.75em;
             color: var(--vscode-editor-foreground);
         }
+        .package-name {
+            font-family: var(--vscode-editor-font-family, monospace);
+            font-weight: inherit;
+        }
         .help-top-title {
             font-size: 0.9em;
             opacity: 0.7;
             margin-bottom: 0.75em;
             font-weight: 600;
+            font-family: var(--vscode-editor-font-family, monospace);
         }
         pre.package-index, pre.package-description {
             background: transparent !important;
@@ -888,6 +959,9 @@ export class HelpPanel {
                 el.addEventListener('mouseleave', () => {
                     tooltip.style.display = 'none';
                 });
+                el.addEventListener('click', () => {
+                    tooltip.style.display = 'none';
+                });
             });
 
             // Process KaTeX Mathematics
@@ -913,6 +987,7 @@ export class HelpPanel {
     // Cleanup
 
     dispose(): void {
+        HelpPanel.lastClosedState = this.saveState();
         HelpPanel.currentPanel = undefined;
         this._panel.dispose();
         while (this._disposables.length) {
@@ -928,15 +1003,15 @@ export class HelpPanel {
  * Strips terminal overstrike sequences from R's Rd2txt output.
  *
  * R uses two overstrike conventions:
- *   Bold:      char + \b + char  →  e.g. "L\bL" displays as bold L
- *   Underline: _ + \b + char     →  e.g. "_\bL" displays as underlined L
+ *   Bold:      char + \b + char  -> e.g. "L\bL" displays as bold L
+ *   Underline: _ + \b + char     -> e.g. "_\bL" displays as underlined L
  *              (headers show as _L_o_a_d when \b is lost in pipe capture)
  *
  * We strip both forms and also remove any remaining bare ANSI escape codes.
  */
 function stripTerminalFormatting(text: string): string {
     return text
-        // Remove overstrike: "X\bX" (bold) → "X"
+        // Remove overstrike: "X\bX" (bold) -> "X"
         .replace(/.\x08/g, '')
         // Remove underscore-letter overstrike remnants: "_L" style headers
         // Pattern: repeated _CHAR sequence like _L_o_a_d_i_n_g
@@ -948,17 +1023,4 @@ function stripTerminalFormatting(text: string): string {
         .replace(/\x1b\[[0-9;]*m/g, '')
         // Normalize any remaining stray backspaces
         .replace(/\x08/g, '');
-}
-
-function escapeHtml(text: string): string {
-    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function getNonce(): string {
-    let text = '';
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    for (let i = 0; i < 32; i++) {
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
-    }
-    return text;
 }

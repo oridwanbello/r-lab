@@ -24,7 +24,7 @@ export function getRscriptPath(): string {
 }
 
 export async function initializeRPathResolver(): Promise<void> {
-    const config = vscode.workspace.getConfiguration('r-layout');
+    const config = vscode.workspace.getConfiguration('r-lab');
     
     // 1. Check our own setting first
     const ours = config.get<string>('rConsolePath', '');
@@ -48,14 +48,14 @@ export async function initializeRPathResolver(): Promise<void> {
 
     const rTerm = rConfig.get<string>(`rterm.${osSuffix}`, '');
     if (rTerm) {
-        console.log(`[R Layout] Using R extension's r.rterm.${osSuffix}: ${rTerm}`);
+        console.log(`[R Lab] Using R extension's r.rterm.${osSuffix}: ${rTerm}`);
         _setPaths(rTerm);
         return;
     }
 
     const rPath = rConfig.get<string>(`rpath.${osSuffix}`, '');
     if (rPath) {
-        console.log(`[R Layout] Using R extension's r.rpath.${osSuffix}: ${rPath}`);
+        console.log(`[R Lab] Using R extension's r.rpath.${osSuffix}: ${rPath}`);
         _setPaths(rPath);
         return;
     }
@@ -65,12 +65,12 @@ export async function initializeRPathResolver(): Promise<void> {
         try {
             const regPath = await getWindowsRegistryRPath();
             if (regPath) {
-                console.log(`[R Layout] Found R via Windows Registry: ${regPath}`);
+                console.log(`[R Lab] Found R via Windows Registry: ${regPath}`);
                 _setPaths(regPath);
                 return;
             }
         } catch (e) {
-            console.error('[R Layout] Windows Registry lookup failed:', e);
+            console.error('[R Lab] Windows Registry lookup failed:', e);
         }
     }
 
@@ -84,7 +84,7 @@ export async function initializeRPathResolver(): Promise<void> {
         // as Windows users typically don't have R in PATH.
         if (platform === 'win32') {
             vscode.window.showWarningMessage(
-                "R Layout couldn't find your R installation. If 'R' is not in your system PATH, please configure 'r-layout.rConsolePath' in your VS Code settings."
+                "R Lab couldn't find your R installation. If 'R' is not in your system PATH, please configure 'r-lab.rConsolePath' in your VS Code settings."
             );
         }
     }

@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { getNonce } from '../utils/webviewUtils';
+import { recordLayoutFocus } from '../layout/layoutManager';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -20,9 +22,16 @@ interface PackageInfo {
     status: 'attached' | 'loaded' | 'none';
 }
 
+export type WorkspaceTab = 'env' | 'packages' | 'attached';
+
+export interface WorkspaceState {
+    activeTab?: WorkspaceTab;
+}
+
 export class WorkspacePanel {
     public static currentPanel: WorkspacePanel | undefined;
-    public static readonly viewType = 'r-layout.workspacePanel';
+    public static readonly viewType = 'r-lab.workspacePanel';
+    public static lastClosedState: WorkspaceState | undefined;
 
     private readonly _panel: vscode.WebviewPanel;
     private _variables: VariableInfo[] = [];
@@ -35,13 +44,17 @@ export class WorkspacePanel {
     private _disposables: vscode.Disposable[] = [];
     private _onRequestDataView?: (varName: string) => void;
     private _htmlSet = false;
+    private _activeTab: WorkspaceTab = 'env';
 
     public static createOrShow(
         extensionUri: vscode.Uri,
-        column: vscode.ViewColumn = vscode.ViewColumn.Three
+        column: vscode.ViewColumn = vscode.ViewColumn.Three,
+        forceReveal: boolean = true
     ): WorkspacePanel {
         if (WorkspacePanel.currentPanel) {
-            WorkspacePanel.currentPanel._panel.reveal(column, true);
+            if (forceReveal) {
+                WorkspacePanel.currentPanel._panel.reveal(column, true);
+            }
             return WorkspacePanel.currentPanel;
         }
 
@@ -69,15 +82,33 @@ export class WorkspacePanel {
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
         this._panel.onDidChangeViewState(
-            (e) => { if (e.webviewPanel.visible) { this._refreshWorkspace(); } },
+            (e) => {
+                if (e.webviewPanel.active) {
+                    recordLayoutFocus('Workspace', e.webviewPanel.viewColumn);
+                }
+                this._updateMinimizedState();
+                if (e.webviewPanel.visible) { this._refreshWorkspace(); }
+            },
             null,
             this._disposables
         );
 
         this._panel.webview.onDidReceiveMessage(
-            async (msg: { type: string; varName?: string; pkgName?: string }) => {
+            async (msg: { type: string; varName?: string; pkgName?: string; tab?: WorkspaceTab }) => {
                 switch (msg.type) {
+                    case 'switchTab':
+                        if (msg.tab === 'env' || msg.tab === 'packages' || msg.tab === 'attached') {
+                            this._activeTab = msg.tab;
+                        }
+                        break;
                     case 'ready':
+                        this._updateMinimizedState();
+                        if (this._activeTab !== 'env') {
+                            this._panel.webview.postMessage({
+                                command: 'restoreTab',
+                                activeTab: this._activeTab
+                            });
+                        }
                         await this._refreshWorkspace();
                         if (this._packages.length === 0) {
                             this._fetchInstalledPackages();
@@ -92,10 +123,27 @@ export class WorkspacePanel {
                         }
                         break;
                     case 'attachPackage':
-                        if (msg.pkgName) { this._sendToRConsole(`library(${msg.pkgName})`); }
+                        if (msg.pkgName) { this._sendToRConsole(`library(${JSON.stringify(msg.pkgName)}, character.only = TRUE)`); }
                         break;
                     case 'detachPackage':
-                        if (msg.pkgName) { this._sendToRConsole(`detach("package:${msg.pkgName}", unload = TRUE)`); }
+                        if (msg.pkgName) {
+                            const packageName = JSON.stringify(`package:${msg.pkgName}`);
+                            if (msg.pkgName === 'later') {
+                                this._sendToRConsole(`detach(${packageName})`);
+                            } else {
+                                this._sendToRConsole(`detach(${packageName}, unload = TRUE)`);
+                            }
+                        }
+                        break;
+                    case 'removeVariable':
+                        if (msg.varName) {
+                            this._sendToRConsole(`rm(list = ${JSON.stringify(msg.varName)}, envir = .GlobalEnv)`);
+                            await this._refreshWorkspace();
+                        }
+                        break;
+                    case 'clearWorkspace':
+                        this._sendToRConsole('.rm(list = ls(envir = .GlobalEnv, all.names = TRUE), envir = .GlobalEnv)');
+                        await this._refreshWorkspace();
                         break;
                     case 'refreshPackages':
                         await this._fetchInstalledPackages();
@@ -122,12 +170,32 @@ export class WorkspacePanel {
         this._onRequestDataView = callback;
     }
 
-    public reveal(): void {
-        this._panel.reveal(undefined, true);
+    public saveState(): WorkspaceState {
+        return {
+            activeTab: this._activeTab
+        };
     }
 
+    public loadState(state: WorkspaceState | undefined): void {
+        if (!state) { return; }
+        this._activeTab = state.activeTab === 'packages' ? 'packages' : (state.activeTab === 'attached' ? 'attached' : 'env');
+    }
+
+    public reveal(column?: vscode.ViewColumn, preserveFocus: boolean = true): void {
+        this._panel.reveal(column, preserveFocus);
+    }
+
+    private _isMinimized = false;
+
     public setMinimized(minimized: boolean): void {
-        this._panel.webview.postMessage({ command: 'setMinimized', minimized });
+        this._isMinimized = minimized;
+        this._updateMinimizedState();
+    }
+
+    private _updateMinimizedState(): void {
+        const isPoppedOut = this._panel.viewColumn !== vscode.ViewColumn.Three && this._panel.viewColumn !== undefined;
+        const actualMinimized = isPoppedOut ? false : this._isMinimized;
+        this._panel.webview.postMessage({ command: 'setMinimized', minimized: actualMinimized });
     }
 
     public forceRefresh(): void {
@@ -146,9 +214,9 @@ export class WorkspacePanel {
     }
 
     // ----- Internal R variable filter -----
-    private static readonly INTERNAL_VAR_PATTERN = /^\.rlayout_|^\.r_layout|^null_dev$|^\.First$|^\.Last$/;
+    private static readonly INTERNAL_VAR_PATTERN = /^\.rlab_|^\.r_lab|^\.rm$|^null_dev$|^\.First$|^\.Last$|^View$/;
 
-    /** Filter out internal R Layout variables so they never appear in the Environment tab */
+    /** Filter out internal R Lab variables so they never appear in the Environment tab */
     private _filterInternalVars(variables: VariableInfo[]): VariableInfo[] {
         return variables.filter(v => !WorkspacePanel.INTERNAL_VAR_PATTERN.test(v.name));
     }
@@ -204,14 +272,72 @@ tryCatch({
         sz <- sub("Mb|MB", "MB", sz)
         sz <- sub("Gb|GB", "GB", sz)
         preview <- tryCatch({
-            if (is.data.frame(obj) || is.matrix(obj)) paste0(nrow(obj), " obs. of ", ncol(obj), " variables")
-            else if (is.list(obj)) paste0("List of ", length(obj))
-            else if (is.function(obj)) "function"
-            else if (is.character(obj) && length(obj) == 1) paste0('"', substr(obj, 1, 60), '"')
-            else if (is.numeric(obj) && length(obj) <= 6) paste(head(obj, 6), collapse = " ")
-            else paste(head(obj, 3), collapse = " ")
+            get_type <- function(x) {
+                if (is.data.frame(x)) "df" else if (is.list(x)) "list" else {
+                    t <- typeof(x)
+                    if (t == "double") "num" else if (t == "integer") "int" else if (t == "character") "chr" else if (t == "logical") "logi" else t
+                }
+            }
+            if (is.data.frame(obj)) {
+                base_str <- paste0(nrow(obj), " obs. of ", ncol(obj), " variables")
+                if (length(obj) == 0) base_str else {
+                    nm_names <- names(obj)
+                    if (!is.null(nm_names) && length(nm_names) > 0 && any(nm_names != "")) {
+                        nm_valid <- nm_names[nm_names != ""]
+                        n_show <- if (length(nm_valid) > 3) 3 else length(nm_valid)
+                        types <- vapply(obj[1:n_show], get_type, character(1))
+                        paste0(base_str, " {", paste0("$", head(nm_valid, n_show), ": ", types, collapse=", "), if(length(nm_valid)>3) ", ...}" else "}")
+                    } else {
+                        n_show <- if (length(obj) > 3) 3 else length(obj)
+                        types <- vapply(obj[1:n_show], get_type, character(1))
+                        paste0(base_str, " {", paste(paste0(": ", types), collapse=", "), if(length(obj)>3) ", ...}" else "}")
+                    }
+                }
+            } else if (is.array(obj)) {
+                type_lbl <- typeof(obj)
+                if (type_lbl == "double") type_lbl <- "num" else if (type_lbl == "integer") type_lbl <- "int" else if (type_lbl == "character") type_lbl <- "chr" else if (type_lbl == "logical") type_lbl <- "logi"
+                dim_ranges <- paste0("1:", dim(obj), collapse = ", ")
+                n_show <- if (length(obj) > 3) 3 else length(obj)
+                flat_vals <- as.vector(head(as.vector(obj), n_show))
+                if (typeof(obj) == "character") flat_vals <- paste0('"', flat_vals, '"')
+                vals_str <- paste(flat_vals, collapse = " ")
+                if (length(obj) > 3) vals_str <- paste0(vals_str, " ...")
+                paste0(type_lbl, " [", dim_ranges, "] ", vals_str)
+            } else if (is.list(obj)) {
+                if (length(obj) == 0) "List of 0" else {
+                    nm_names <- names(obj)
+                    if (!is.null(nm_names) && length(nm_names) > 0 && any(nm_names != "")) {
+                        nm_valid <- nm_names[nm_names != ""]
+                        n_show <- if (length(nm_valid) > 3) 3 else length(nm_valid)
+                        types <- vapply(obj[1:n_show], get_type, character(1))
+                        paste0("List of ", length(obj), " {", paste0("$", head(nm_valid, n_show), ": ", types, collapse=", "), if(length(nm_valid)>3) ", ...}" else "}")
+                    } else {
+                        n_show <- if (length(obj) > 3) 3 else length(obj)
+                        types <- vapply(obj[1:n_show], get_type, character(1))
+                        paste0("List of ", length(obj), " {", paste(paste0(": ", types), collapse=", "), if(length(obj)>3) ", ...}" else "}")
+                    }
+                }
+            } else if (is.function(obj)) {
+                "function"
+            } else if (is.vector(obj)) {
+                if (length(obj) == 1) {
+                    if (is.character(obj)) paste0('"', obj, '"') else as.character(obj)
+                } else {
+                    type_lbl <- typeof(obj)
+                    if (type_lbl == "double") type_lbl <- "num" else if (type_lbl == "integer") type_lbl <- "int" else if (type_lbl == "character") type_lbl <- "chr" else if (type_lbl == "logical") type_lbl <- "logi"
+                    dim_range <- paste0("1:", length(obj))
+                    n_show <- if (length(obj) > 3) 3 else length(obj)
+                    flat_vals <- as.vector(head(obj, n_show))
+                    if (typeof(obj) == "character") flat_vals <- paste0('"', flat_vals, '"')
+                    vals_str <- paste(flat_vals, collapse = " ")
+                    if (length(obj) > 3) vals_str <- paste0(vals_str, " ...")
+                    paste0(type_lbl, " [", dim_range, "] ", vals_str)
+                }
+            } else {
+                substr(paste(as.character(obj), collapse = " "), 1, 60)
+            }
         }, error = function(e) "?")
-        list(name = nm, type = cls, size = paste0(dims, " (", sz, ")"), preview = preview, isDataFrame = is.data.frame(obj))
+        list(name = nm, type = cls, size = paste0(dims, " (", sz, ")"), preview = preview, isDataFrame = is.data.frame(obj) || is.matrix(obj) || (is.array(obj) && length(dim(obj)) == 3))
     })
     cat(jsonlite::toJSON(list(variables = info, loadedNamespaces = loadedNamespaces(), attachedNamespaces = search()), auto_unbox = TRUE))
 }, error = function(e) {
@@ -324,10 +450,16 @@ tryCatch({
     } | null {
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
 
-        const outDir = path.join(wf, '.r_layout');
+        const outDir = path.join(wf, '.R-lab');
+        const metaFile = path.join(outDir, '.workspace_meta.txt');
         const varsFile = path.join(outDir, '.workspace_vars.tsv');
         const loadedFile = path.join(outDir, '.workspace_loaded.tsv');
         const attachedFile = path.join(outDir, '.workspace_attached.tsv');
+
+        // Check for the atomic signal file first. If it's missing, R is actively writing the TSVs.
+        if (!fs.existsSync(metaFile)) {
+            return null;
+        }
 
         if (!fs.existsSync(varsFile) && !fs.existsSync(loadedFile) && !fs.existsSync(attachedFile)) {
             return null;
@@ -382,10 +514,10 @@ tryCatch({
         attachedNamespaces: string[];
     } | null {
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        if (!wf) return null;
+        if (!wf) {return null;}
 
         const vsRDir = path.join(wf, '.vscode', 'vscode-R');
-        if (!fs.existsSync(vsRDir)) return null;
+        if (!fs.existsSync(vsRDir)) {return null;}
 
         try {
             const activeJsonPath = path.join(vsRDir, 'active.json');
@@ -410,7 +542,7 @@ tryCatch({
                 }
             }
 
-            if (!sessionDir || !fs.existsSync(sessionDir)) return null;
+            if (!sessionDir || !fs.existsSync(sessionDir)) {return null;}
 
             const variables: VariableInfo[] = [];
             const globalEnvPath = path.join(sessionDir, 'globalenv.json');
@@ -425,7 +557,7 @@ tryCatch({
                         type: item.class ? (Array.isArray(item.class) ? item.class.join(', ') : item.class) : 'unknown',
                         size: item.dim ? item.dim.join(' x ') : (item.length ? String(item.length) : '1'),
                         preview: item.str || '',
-                        isDataFrame: item.class && item.class.includes('data.frame')
+                        isDataFrame: item.class && (item.class.includes('data.frame') || item.class.includes('matrix') || (item.class.includes('array') && item.dim && item.dim.length === 3))
                     });
                 }
             }
@@ -549,6 +681,9 @@ tryCatch({
         // Eye icon (pristine Feather Icons)
         const EYE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
 
+        const TRASH_ICON = '<svg viewBox="0 0 16 16"><path fill="none" d="M9.25,2H6.75a0.25,0.25,0,0,0-0.25,0.25V3h3V2.25A0.25,0.25,0,0,0,9.25,2Z"/><path fill="currentColor" d="M13.5,3H10.5V2.25A1.25,1.25,0,0,0,9.25,1H6.75A1.25,1.25,0,0,0,5.5,2.25V3H2.5a0.5,0.5,0,0,0,0,1H3L3.63,13.53C3.67,14.37,4.31,15,5.13,15h5.75c0.82,0,1.45-.62,1.5-1.47L13,4h0.5a0.5,0.5,0,0,0,0-1ZM6,13H6a0.5,0.5,0,0,1-.5-.48l-0.25-7a0.5,0.5,0,1,1,1-.04l0.25,7A0.5,0.5,0,0,1,6,13ZM8.5,12.5a0.5,0.5,0,0,1-1,0V5.5a0.5,0.5,0,0,1,1,0ZM9.5,3H6.5V2.25a0.25,0.25,0,0,1,.25-.25h2.5a0.25,0.25,0,0,1,.25.25Zm1,9.55a0.5,0.5,0,0,1-.5.45H10a0.5,0.5,0,0,1-.5-.52l0.25-7a0.5,0.5,0,1,1,1,.04Z"/></svg>';
+        const BROOM_ICON = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.91,1.81L13.85,2.76L10.04,6.57C10.75,7.59 10.85,8.83 10.25,9.63L6.04,5.41C6.84,4.81 8.07,4.91 9.1,5.63L12.91,1.81M3.95,11.71C2.61,10.37 1.79,8.77 1.57,7.28L4.82,5.89L9.78,10.85L8.39,14.1C6.89,13.87 5.29,13.05 3.95,11.71Z"/></svg>';
+
         // Paperclip icon (pristine Feather Icons) for attached objects
         const PAPERCLIP_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-paperclip"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
 
@@ -564,36 +699,62 @@ tryCatch({
     <style nonce="${nonce}">
         * { margin: 0; padding: 0; box-sizing: border-box; }
         ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
+        html, body {
+            height: 100%;
+        }
         body {
             font-family: var(--vscode-font-family);
-            font-weight: 400; font-size: var(--vscode-font-size, 13px); letter-spacing: 0.3px;
+            font-weight: 400; font-size: var(--vscode-font-size, 13px);
             color: var(--vscode-editor-foreground);
             background: var(--vscode-editor-background);
             display: flex;
             flex-direction: column;
-            height: 100vh;
+            height: 100%;
             overflow: hidden;
         }
-        body.minimized > * { display: none !important; }
+        body.minimized > * { visibility: hidden !important; pointer-events: none !important; }
 
-        /* ── Tab Bar ── */
-        .tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--vscode-editorGroup-border); background: var(--vscode-editor-background); flex-shrink: 0; }
-        .tab { padding: 8px 12px; cursor: pointer; opacity: 0.6; font-weight: 600; letter-spacing: 0.5px; border-bottom: 2px solid transparent; white-space: nowrap; }
+        /* Tab Bar */
+        .tabs {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            align-items: stretch;
+            border-bottom: 1px solid var(--vscode-editorGroup-border);
+            background: var(--vscode-editor-background); flex-shrink: 0;
+            overflow: hidden;
+            min-width: 0;
+        }
+        .tab { min-width: 0; padding: 8px 10px; cursor: pointer; opacity: 0.6; font-size: var(--vscode-font-size, 13px); font-weight: normal; letter-spacing: 0.3px; white-space: nowrap; display: flex; align-items: center; justify-content: center; gap: 4px; position: relative; overflow: hidden; text-overflow: ellipsis; }
+        .tab-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tab-count { flex-shrink: 0; }
+        .tab:not(:last-child) { border-right: 1px solid var(--vscode-editorGroup-border); }
         .tab:hover { opacity: 1; background: var(--vscode-list-hoverBackground); }
-        .tab.active { opacity: 1; border-bottom: 2px solid var(--vscode-textLink-foreground); color: var(--vscode-textLink-foreground); }
+        .tab.active { opacity: 1; color: var(--vscode-foreground); }
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 3px;
+            background: var(--vscode-button-background);
+        }
+        @media (max-width: 360px) {
+            .tab-count { display: none; }
+        }
 
-        /* ── Content Panels ── */
+        /* Content Panels */
         .content { flex: 1; overflow: hidden; display: none; flex-direction: column; }
         .content.active { display: flex; }
 
-        /* ── Table Scroll Wrapper ── */
+        /* Table Scroll Wrapper */
         .table-scroll-wrapper {
             flex: 1;
             overflow: auto;
             position: relative;
         }
 
-        /* ── Tables ── */
+        /* Tables */
         table { width: 100%; border-collapse: collapse; }
         thead th {
             position: sticky; top: 0; z-index: 2;
@@ -601,8 +762,8 @@ tryCatch({
             text-align: left;
             font-weight: 600;
             font-style: italic;
+            letter-spacing: 0.5px;
             text-transform: none;
-            letter-spacing: 0.3px;
             background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             vertical-align: middle;
@@ -620,7 +781,7 @@ tryCatch({
             background: color-mix(in srgb, var(--vscode-list-hoverBackground) 100%, var(--vscode-editor-background));
         }
 
-        /* ── Frozen first column ── */
+        /* Frozen first column */
         thead th.frozen-col, .var-row td.frozen-col {
             position: sticky;
             left: 0;
@@ -632,7 +793,7 @@ tryCatch({
             background: linear-gradient(var(--vscode-list-hoverBackground), var(--vscode-list-hoverBackground)), var(--vscode-editor-background);
         }
 
-        /* ── Column styles ── */
+        /* Column styles */
         .name-col { width: 1%; white-space: nowrap; padding-right: 16px !important; }
         .var-name {
             font-family: var(--vscode-editor-font-family, monospace);
@@ -652,12 +813,13 @@ tryCatch({
         }
         .preview-col {
             width: auto;
+            white-space: nowrap;
             font-family: var(--vscode-editor-font-family, monospace);
             opacity: 0.8;
             vertical-align: middle;
         }
 
-        /* ── View Button (Eye) ── */
+        /* View Button */
         .view-btn {
             display: inline-flex;
             align-items: center;
@@ -675,11 +837,65 @@ tryCatch({
         .view-btn:hover { opacity: 1; }
         .view-btn svg { display: block; }
 
-        /* ── Status Messages ── */
-        .status-msg { padding: 20px; text-align: center; opacity: 0.6; }
+        /* Remove and Clear Buttons */
+        .remove-btn, .clear-all-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+            color: var(--vscode-foreground);
+            opacity: 0.5;
+            vertical-align: middle;
+            flex-shrink: 0;
+        }
+        .remove-btn { margin-right: 6px; width: 14px; height: 14px; }
+        .remove-btn svg { display: block; width: 14px; height: 14px; }
+        .clear-all-btn { margin-right: 6px; width: 14px; height: 14px; }
+        .clear-all-btn svg { display: block; width: 14px; height: 14px; }
+        .remove-btn[disabled], .clear-all-btn[disabled] {
+            cursor: default;
+            opacity: 0.75;
+        }
+
+        .remove-btn:hover, .clear-all-btn:hover {
+            opacity: 1;
+            color: var(--vscode-problemsErrorIcon-foreground, #DC3545);
+        }
+        .remove-btn[disabled]:hover, .clear-all-btn[disabled]:hover {
+            color: var(--vscode-foreground);
+        }
+        .icon-spinner {
+            width: 12px;
+            height: 12px;
+            border: 2px solid currentColor;
+            border-right-color: transparent;
+            border-radius: 50%;
+            animation: rlab-spin 0.65s linear infinite;
+            box-sizing: border-box;
+        }
+        @keyframes rlab-spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .name-header-col { white-space: nowrap; }
+
+        /* Status Messages */
+        .status-msg {
+            flex: 1;
+            min-height: 100%;
+            padding: 20px;
+            text-align: center;
+            opacity: 0.6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
         .status-msg.error { color: var(--vscode-errorForeground); opacity: 0.9; white-space: pre-wrap; }
 
-        /* ── Empty State ── */
+        /* Empty State */
         .empty-state {
             display: flex; flex-direction: column; align-items: center;
             justify-content: center; height: 100%; text-align: center; opacity: 0.3;
@@ -693,8 +909,13 @@ tryCatch({
             border-radius: 6px;
             font-size: 0.9em;
         }
+        .attached-empty code {
+            background: none;
+            padding: 0;
+            border-radius: 0;
+        }
 
-        /* ── Custom Instant Tooltip ── */
+        /* Custom Instant Tooltip */
         .tooltip {
             position: fixed;
             background: var(--vscode-editorHoverWidget-background, #252526);
@@ -711,7 +932,7 @@ tryCatch({
             white-space: nowrap;
         }
 
-        /* ══════════ PACKAGES TAB ══════════ */
+        /* Packages Tab */
 
         .pkg-toolbar {
             display: flex;
@@ -724,9 +945,16 @@ tryCatch({
             position: sticky;
             top: 0;
             z-index: 5;
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
+        }
+        .pkg-toolbar > * {
+            flex-shrink: 0;
         }
         .pkg-search {
             flex: 1;
+            min-width: 0;
             background: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
             border: 1px solid var(--vscode-input-border, transparent);
@@ -784,7 +1012,7 @@ tryCatch({
         }
         .pkg-refresh-btn svg { width: 14px; height: 14px; display: block; }
 
-        /* ── Package Table ── */
+        /* Package Table */
         .pkg-table-wrapper {
             flex: 1;
             overflow: auto;
@@ -849,7 +1077,6 @@ tryCatch({
             text-align: left;
             font-weight: 600;
             font-style: italic;
-            letter-spacing: 0.3px;
             background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
         }
@@ -862,7 +1089,7 @@ tryCatch({
             left: 36px;
         }
 
-        /* ── Attached Objects List ── */
+        /* Attached Objects List */
         .attached-list { list-style: none; padding: 0; margin: 0; }
         .attached-list li {
             padding: 4px 16px;
@@ -890,9 +1117,9 @@ tryCatch({
 <body>
     <div id="tooltip" class="tooltip"></div>
     <div class="tabs">
-        <div class="tab active" data-target="tab-env">Global Environment <span id="count-env"></span></div>
-        <div class="tab" data-target="tab-packages">Packages <span id="count-packages"></span></div>
-        <div class="tab" data-target="tab-attached">Attached Objects <span id="count-attached"></span></div>
+        <div class="tab active" data-target="tab-env"><span class="tab-label">Global Env</span> <span id="count-env" class="tab-count"></span></div>
+        <div class="tab" data-target="tab-packages"><span class="tab-label">Packages</span> <span id="count-packages" class="tab-count"></span></div>
+        <div class="tab" data-target="tab-attached"><span class="tab-label">Attached Objects</span> <span id="count-attached" class="tab-count"></span></div>
     </div>
 
     <div id="tab-env" class="content active">
@@ -919,18 +1146,28 @@ tryCatch({
             const ICON_ATTACHED = '${ICON_ATTACHED.replace(/'/g, "\\'")}';
             const ICON_LOADED = '${ICON_LOADED.replace(/'/g, "\\'")}';
             const EYE_ICON = '${EYE_ICON.replace(/'/g, "\\'")}';
+            const TRASH_ICON = '${TRASH_ICON.replace(/'/g, "\\'")}';
+            const BROOM_ICON = '${BROOM_ICON.replace(/'/g, "\\'")}';
+            const SPINNER_ICON = '<span class="icon-spinner"></span>';
+            const pendingRemovals = new Set();
+            let pendingClear = false;
             const PAPERCLIP_ICON = '${PAPERCLIP_ICON.replace(/'/g, "\\'")}';
 
             let currentFilter = 'all';
             let currentSearch = '';
 
-            // ── Tab Switching ──
+            // Tab Switching
             document.querySelectorAll('.tab').forEach(tab => {
                 tab.addEventListener('click', () => {
                     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
                     document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
                     tab.classList.add('active');
-                    document.getElementById(tab.getAttribute('data-target')).classList.add('active');
+                    const targetId = tab.getAttribute('data-target');
+                    document.getElementById(targetId).classList.add('active');
+                    let tabName = 'env';
+                    if (targetId === 'tab-packages') tabName = 'packages';
+                    if (targetId === 'tab-attached') tabName = 'attached';
+                    vscode.postMessage({ type: 'switchTab', tab: tabName });
                 });
             });
 
@@ -939,10 +1176,24 @@ tryCatch({
                 return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
             }
 
-            // ── Update Handler ──
+            // Update Handler
             window.addEventListener('message', event => {
                 const msg = event.data;
+                if (msg.command === 'restoreTab') {
+                    if (msg.activeTab) {
+                        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                        document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+                        let targetId = 'tab-env';
+                        if (msg.activeTab === 'packages') targetId = 'tab-packages';
+                        if (msg.activeTab === 'attached') targetId = 'tab-attached';
+                        const tab = document.querySelector('.tab[data-target="' + targetId + '"]');
+                        if (tab) tab.classList.add('active');
+                        const content = document.getElementById(targetId);
+                        if (content) content.classList.add('active');
+                    }
+                }
                 if (msg.command === 'update') {
+                    syncPendingDeletes(msg);
                     renderEnvironment(msg);
                     renderPackages(msg);
                     renderAttached(msg);
@@ -952,19 +1203,32 @@ tryCatch({
                 }
             });
 
-            // ── Environment Rendering ──
+            function syncPendingDeletes(msg) {
+                if (msg.errorMessage) {
+                    pendingRemovals.clear();
+                    pendingClear = false;
+                    return;
+                }
+                const names = new Set((msg.variables || []).map(v => v.name));
+                pendingRemovals.forEach(name => {
+                    if (!names.has(name)) pendingRemovals.delete(name);
+                });
+                if (pendingClear && names.size === 0) pendingClear = false;
+            }
+
+            // Environment Rendering
             function renderEnvironment(msg) {
                 const el = document.getElementById('env-scroll');
                 const cEnv = document.getElementById('count-env');
                 cEnv.textContent = msg.variables && msg.variables.length > 0 ? '(' + msg.variables.length + ')' : '';
 
                 if (msg.isLoading && !msg.errorMessage && (!msg.variables || msg.variables.length === 0)) {
-                    el.innerHTML = '<div class="status-msg">⏳ Refreshing…</div>';
+                    el.innerHTML = '<div class="status-msg">Refreshing&hellip;</div>';
                     return;
                 }
 
                 if (msg.errorMessage) {
-                    el.innerHTML = '<div class="status-msg error">⚠ ' + escapeHtml(msg.errorMessage) + '</div>';
+                    el.innerHTML = '<div class="status-msg error">Error: ' + escapeHtml(msg.errorMessage) + '</div>';
                     return;
                 }
 
@@ -977,14 +1241,18 @@ tryCatch({
                     const btn = v.isDataFrame
                         ? '<button class="view-btn" data-var="' + escapeHtml(v.name) + '" data-tooltip="View in Data Viewer">' + EYE_ICON + '</button>'
                         : '';
+                    const isRemoving = pendingClear || pendingRemovals.has(v.name);
+                    const removeBtn = '<button class="remove-btn" data-var="' + escapeHtml(v.name) + '" data-tooltip="Remove Variable"'
+                        + (isRemoving ? ' disabled' : '') + '>' + (isRemoving ? SPINNER_ICON : TRASH_ICON) + '</button>';
                     return '<tr class="var-row">'
-                        + '<td class="name-col frozen-col"><span class="var-name">' + escapeHtml(v.name) + '</span>' + btn + '</td>'
+                        + '<td class="name-col frozen-col">' + removeBtn + '<span class="var-name">' + escapeHtml(v.name) + '</span>' + btn + '</td>'
                         + '<td class="type-col">' + escapeHtml(v.type) + '</td>'
                         + '<td class="size-col">' + escapeHtml(v.size) + '</td>'
                         + '<td class="preview-col">' + escapeHtml(v.preview) + '</td>'
                         + '</tr>';
                 }).join('');
-                el.innerHTML = '<table><thead><tr><th class="frozen-col">Name</th><th>Type</th><th>Size</th><th>Value</th></tr></thead><tbody>' + rows + '</tbody></table>';
+                el.innerHTML = '<table><thead><tr><th class="frozen-col name-header-col"><button class="clear-all-btn" id="btn-clear-env" data-tooltip="Clear All Variables"'
+                    + (pendingClear ? ' disabled' : '') + '>' + (pendingClear ? SPINNER_ICON : BROOM_ICON) + '</button><span>Name</span></th><th>Class</th><th>Size</th><th>Value</th></tr></thead><tbody>' + rows + '</tbody></table>';
 
                 attachViewListeners();
             }
@@ -997,9 +1265,37 @@ tryCatch({
                         if (varName) vscode.postMessage({ type: 'viewData', varName });
                     });
                 });
+                document.querySelectorAll('.remove-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        if (btn.hasAttribute('disabled')) return;
+                        const varName = btn.getAttribute('data-var');
+                        if (varName) {
+                            pendingRemovals.add(varName);
+                            btn.setAttribute('disabled', 'true');
+                            btn.innerHTML = SPINNER_ICON;
+                            vscode.postMessage({ type: 'removeVariable', varName });
+                        }
+                    });
+                });
+                const clearBtn = document.getElementById('btn-clear-env');
+                if (clearBtn) {
+                    clearBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        if (clearBtn.hasAttribute('disabled')) return;
+                        pendingClear = true;
+                        clearBtn.setAttribute('disabled', 'true');
+                        clearBtn.innerHTML = SPINNER_ICON;
+                        document.querySelectorAll('.remove-btn').forEach(btn => {
+                            btn.setAttribute('disabled', 'true');
+                            btn.innerHTML = SPINNER_ICON;
+                        });
+                        vscode.postMessage({ type: 'clearWorkspace' });
+                    });
+                }
             }
 
-            // ── Packages Rendering ──
+            // Packages Rendering
             function renderPackages(msg) {
                 const el = document.getElementById('pkg-scroll');
                 const cPkg = document.getElementById('count-packages');
@@ -1027,7 +1323,7 @@ tryCatch({
                     );
                 }
 
-                // Sort: attached first, then loaded, then none — alphabetical within each
+                // Sort: attached first, then loaded, then none; alphabetical within each
                 filtered.sort((a, b) => {
                     const order = { attached: 0, loaded: 1, none: 2 };
                     const diff = order[a.status] - order[b.status];
@@ -1076,7 +1372,7 @@ tryCatch({
                 });
             }
 
-            // ── Attached Objects Rendering ──
+            // Attached Objects Rendering
             function renderAttached(msg) {
                 const el = document.getElementById('tab-attached');
                 const cAttached = document.getElementById('count-attached');
@@ -1084,14 +1380,14 @@ tryCatch({
                 cAttached.textContent = items.length > 0 ? '(' + items.length + ')' : '';
 
                 if (items.length === 0) {
-                    el.innerHTML = '<div class="empty-state">' + PAPERCLIP_ICON + '<p>No attached objects.<br/>Use <code>attach(data)</code> to add objects<br/>to the search path.</p></div>';
+                    el.innerHTML = '<div class="empty-state attached-empty">' + PAPERCLIP_ICON + '<p>No attached objects.<br/>Use <code>attach(data)</code> to add objects<br/>to the search path.</p></div>';
                     return;
                 }
 
                 el.innerHTML = '<ul class="attached-list">' + items.map(n => '<li>' + PAPERCLIP_ICON + '<span class="attached-name">' + escapeHtml(n) + '</span></li>').join('') + '</ul>';
             }
 
-            // ── Package Search & Filter ──
+            // Package Search and Filter
             document.getElementById('pkg-search')?.addEventListener('input', (e) => {
                 currentSearch = e.target.value;
                 // Re-render packages with current state by requesting a refresh message
@@ -1121,7 +1417,7 @@ tryCatch({
                 }
             });
 
-            // ── Instant Tooltip Controller ──
+            // Instant Tooltip Controller
             const tooltip = document.getElementById('tooltip');
             function setupTooltips() {
                 document.querySelectorAll('[data-tooltip]').forEach(el => {
@@ -1146,6 +1442,9 @@ tryCatch({
                     el.addEventListener('mouseleave', () => {
                         tooltip.style.display = 'none';
                     });
+                    el.addEventListener('click', () => {
+                        tooltip.style.display = 'none';
+                    });
                 });
             }
             setupTooltips();
@@ -1160,6 +1459,7 @@ tryCatch({
     }
 
     public dispose(): void {
+        WorkspacePanel.lastClosedState = this.saveState();
         WorkspacePanel.currentPanel = undefined;
         if (this._autoRefreshInterval) {
             clearInterval(this._autoRefreshInterval);
@@ -1170,13 +1470,4 @@ tryCatch({
             if (d) { d.dispose(); }
         }
     }
-}
-
-function getNonce(): string {
-    let text = '';
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    for (let i = 0; i < 32; i++) {
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
-    }
-    return text;
 }

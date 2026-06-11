@@ -1,9 +1,10 @@
 import * as vscode from 'vscode';
 import { registerLayoutCommand, resetStaleLayout, fireImmediateLayoutReset, collapseLayoutForShutdown } from './layout/layoutManager';
 import { initializeRPathResolver } from './utils/rPathResolver';
+import { PlotsPanel } from './panels/plotsPanel';
 
 export async function activate(context: vscode.ExtensionContext) {
-    console.log('R Layout extension is now active.');
+    console.log('R Lab extension is now active.');
 
     // Immediate layout guard (fire-and-forget)
     fireImmediateLayoutReset(context);
@@ -14,7 +15,7 @@ export async function activate(context: vscode.ExtensionContext) {
     // Re-resolve if R configuration changes
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration(e => {
-            if (e.affectsConfiguration('r-layout.rConsolePath') || e.affectsConfiguration('r')) {
+            if (e.affectsConfiguration('r-lab.rConsolePath') || e.affectsConfiguration('r')) {
                 initializeRPathResolver();
             }
         })
@@ -22,6 +23,13 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Register commands & status bar
     registerLayoutCommand(context);
+
+    // Register Webview Serializers to support tearing off tabs into native OS floating windows
+    vscode.window.registerWebviewPanelSerializer(PlotsPanel.viewType, {
+        async deserializeWebviewPanel(webviewPanel: vscode.WebviewPanel, state: any) {
+            PlotsPanel.revive(webviewPanel, context.extensionUri);
+        }
+    });
 
     // Full async stale layout cleanup
     resetStaleLayout(context);

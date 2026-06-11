@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import { getNonce, escapeHtml } from '../utils/webviewUtils';
+import { recordLayoutFocus } from '../layout/layoutManager';
 
 /**
  * Problems Panel - a WebviewPanel (editor tab) that mirrors
@@ -10,7 +12,7 @@ import * as vscode from 'vscode';
  */
 export class ProblemsPanel {
     public static currentPanel: ProblemsPanel | undefined;
-    public static readonly viewType = 'r-layout.problemsPanel';
+    public static readonly viewType = 'r-lab.problemsPanel';
 
     private readonly _panel: vscode.WebviewPanel;
     private _diagnosticsListener?: vscode.Disposable;
@@ -52,6 +54,16 @@ export class ProblemsPanel {
 
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
+        this._panel.onDidChangeViewState(
+            (e) => {
+                if (e.webviewPanel.active) {
+                    recordLayoutFocus('Problems', e.webviewPanel.viewColumn);
+                }
+            },
+            null,
+            this._disposables
+        );
+
         // Auto-refresh when diagnostics change
         this._diagnosticsListener = vscode.languages.onDidChangeDiagnostics(
             () => this._render()
@@ -74,6 +86,10 @@ export class ProblemsPanel {
             null,
             this._disposables
         );
+    }
+
+    public reveal(column?: vscode.ViewColumn, preserveFocus?: boolean): void {
+        this._panel.reveal(column, preserveFocus);
     }
 
     // Rendering
@@ -157,6 +173,9 @@ export class ProblemsPanel {
     <style nonce="${nonce}">
         * { margin: 0; padding: 0; box-sizing: border-box; }
         ::selection { background: var(--vscode-editor-selectionBackground); color: var(--vscode-editor-selectionForeground); }
+        html, body {
+            height: 100%;
+        }
         body {
             font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
             font-size: var(--vscode-editor-font-size, var(--vscode-font-size, 13px));
@@ -164,7 +183,7 @@ export class ProblemsPanel {
             background: var(--vscode-editor-background);
             display: flex;
             flex-direction: column;
-            height: 100vh;
+            height: 100%;
             overflow: hidden;
         }
         .toolbar {
@@ -176,10 +195,44 @@ export class ProblemsPanel {
             background: var(--vscode-editor-background);
             border-bottom: 1px solid var(--vscode-editorGroup-border);
             flex-shrink: 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
         }
-        .pane-title { font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7; }
+        .toolbar::-webkit-scrollbar {
+            height: 2px;
+        }
+        .toolbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .toolbar::-webkit-scrollbar-thumb {
+            background-color: transparent;
+            border-radius: 2px;
+        }
+        .toolbar:hover::-webkit-scrollbar-thumb {
+            background-color: var(--vscode-scrollbarSlider-background);
+        }
+        .toolbar::-webkit-scrollbar-thumb:hover {
+            background-color: var(--vscode-scrollbarSlider-hoverBackground);
+        }
+        .toolbar::-webkit-scrollbar-thumb:active {
+            background-color: var(--vscode-scrollbarSlider-activeBackground);
+        }
+        .toolbar > * {
+            flex-shrink: 0;
+        }
+        .pane-title { font-weight: 600; text-transform: uppercase; opacity: 0.7; }
         .summary { opacity: 0.7; }
         .content { flex: 1; overflow: auto; }
+        .status-msg {
+            min-height: 100%;
+            padding: 20px;
+            text-align: center;
+            opacity: 0.6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
         .file-group { margin-bottom: 2px; }
         .file-header {
             display: flex;
@@ -246,7 +299,11 @@ export class ProblemsPanel {
             height: 100%; text-align: center; opacity: 0.3;
         }
         .empty-state svg { width: 5em; height: 5em; margin-bottom: 16px; display: inline-block; }
-        .empty-state p { font-size: var(--vscode-font-size, 13px); line-height: 1.6; }
+        .empty-state p {
+            font-family: var(--vscode-font-family);
+            font-size: var(--vscode-font-size, 13px);
+            line-height: 1.6;
+        }
     </style>
 </head>
 <body>
@@ -310,17 +367,4 @@ function severityIcon(severity: vscode.DiagnosticSeverity): string {
         case vscode.DiagnosticSeverity.Hint: return '<i class="codicon codicon-lightbulb icon-info"></i>';
         default: return '<i class="codicon codicon-record"></i>';
     }
-}
-
-function escapeHtml(text: string): string {
-    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function getNonce(): string {
-    let text = '';
-    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    for (let i = 0; i < 32; i++) {
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
-    }
-    return text;
 }

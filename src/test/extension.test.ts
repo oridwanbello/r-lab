@@ -8,8 +8,14 @@ import * as vscode from 'vscode';
 suite('Extension Test Suite', () => {
 	vscode.window.showInformationMessage('Start all tests.');
 
-	test('Sample test', () => {
-		assert.strictEqual(-1, [1, 2, 3].indexOf(5));
-		assert.strictEqual(-1, [1, 2, 3].indexOf(0));
+	test('Extension should be present', () => {
+		assert.ok(vscode.extensions.getExtension('oridwanbello.r-layout'));
+	});
+
+	test('Extension should activate without errors', async () => {
+		const ext = vscode.extensions.getExtension('oridwanbello.r-layout');
+		assert.ok(ext, 'Extension not found');
+		await ext.activate();
+		assert.strictEqual(ext.isActive, true);
 	});
 });
