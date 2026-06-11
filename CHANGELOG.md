@@ -2,10 +2,13 @@
 
 All notable changes to the R Lab extension will be documented in this file.
 
-## [0.3.7] - 2026-06-09
+## [0.4.0] - 2026-06-11
 
 ### Added
 
+- Rebranded the extension from **R Layout** to **R Lab**.
+- Restored terminal detection on startup to prevent duplicate R Console instances.
+- Sequential terminal loading logic to guarantee the `R Console -> Terminal -> Tools` tab order on slow Windows ConPTY engines.
 - Plot Export Size Estimate: Added real-time estimated file sizes for plot exports in the preview window.
 - Visuals Viewer: Added a Viewer subtab inside the combined Visuals tab for R `viewer()` outputs (Shiny, htmlwidgets, package vignettes) with history navigation, delete/clear actions, dark mode, and workspace integration.
 - Plot Zoom & Pan: Added interactive zoom (scroll, pinch, buttons) and drag-to-pan support in the Visuals tab's Plots subtab.
@@ -16,6 +19,8 @@ All notable changes to the R Lab extension will be documented in this file.
 
 ### Changed
 
+- Refactored all configuration settings to the `r-lab.*` namespace.
+- Normalized path verification in the local viewer proxy server case-insensitively on Windows to resolve the blank viewer pages.
 - Unobtrusive Notifications: Moved plot export and copy-to-clipboard success messages to the VS Code status bar instead of persistent popups.
 - UI Refinements: Refined responsive gap and padding alignment in the Plot Export sidebar.
 - Widget Placeholder: Adjusted the interactive widget placeholder text size and alignment for better visual balance.

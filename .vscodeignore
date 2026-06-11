@@ -12,7 +12,7 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
-.r_layout/**
+.R-lab/**
 .tmp/**
 resources/r_lab_showcase.png
 resources/archive/**

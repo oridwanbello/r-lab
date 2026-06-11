@@ -8,8 +8,8 @@ This document outlines the essential manual testing steps that should be perform
 
 Goal: Ensure the 3-pane layout activates, restores, and deactivates correctly without leaving stray terminals or crashing.
 
-- [ ] Fresh Activation: Open a completely empty workspace. Trigger `Toggle R Layout`. Verify the 3-pane split occurs cleanly without stealing focus from the text editor.
-- [ ] Deactivation: Trigger `Toggle R Layout` again. Ensure all custom panels close and terminals return to the standard bottom panel.
+- [ ] Fresh Activation: Open a completely empty workspace. Trigger `Toggle R Lab`. Verify the 3-pane split occurs cleanly without stealing focus from the text editor.
+- [ ] Deactivation: Trigger `Toggle R Lab` again. Ensure all custom panels close and terminals return to the standard bottom panel.
 - [ ] Layout Restoration (Padding Check): Re-activate the layout. Check the R Console and Terminal in the top-right pane. Ensure they have proper top padding and aren't squished directly against the tab bar.
 - [ ] Windows ConPTY Check: (On Windows) Ensure that when the layout activates, the terminal tabs do not render as completely blank or unresponsive screens.
 
