@@ -740,7 +740,6 @@ tryCatch({
         this._watcher.onDidChange(() => {
             // Re-render current plot to pick up the updated file content
             this._render();
-            this._revealWithoutStealingContext();
         });
         this._watcher.onDidDelete((uri) => {
             const idx = this._plots.findIndex(p => p.fsPath === uri.fsPath);

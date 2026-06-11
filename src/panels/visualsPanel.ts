@@ -328,7 +328,14 @@ export class VisualsPanel {
         };
     }
 
+    private _isDisposed = false;
+
     public dispose(): void {
+        if (this._isDisposed) {
+            return;
+        }
+        this._isDisposed = true;
+
         VisualsPanel.lastClosedState = this.saveState();
         VisualsPanel.currentPanel = undefined;
         if (PlotsPanel.currentPanel) {

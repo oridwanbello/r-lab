@@ -431,7 +431,7 @@ export class ViewerPanel {
                             }
                             /* Add scrollable breathing room to interactive tables ONLY in narrow panels.
                                This preserves perfect margin centering when moved to the wide editor. */
-                            @media (max-width: 1024px) {
+                            @media (max-width: 834px) {
                                 .dataTables_wrapper table.dataTable,
                                 .reactable .rt-table {
                                     border-right: 40px solid transparent !important;
@@ -708,11 +708,23 @@ export class ViewerPanel {
             align-items: center;
             justify-content: center;
             position: relative;
-            padding: 0 8px 0 8px;
             background: var(--vscode-editor-background);
+            overflow: hidden;
+        }
+
+        .iframe-container {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 8px;
+            right: 8px;
+            overflow: visible;
         }
 
         iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
             border: 1px solid var(--vscode-editorGroup-border);
@@ -721,6 +733,7 @@ export class ViewerPanel {
             display: none;
             overflow: hidden;
             box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            transform-origin: top left;
         }
 
         .render-overlay {
@@ -819,7 +832,9 @@ export class ViewerPanel {
             <p>No content to display.</p>
             <p style="font-size: 0.85em; opacity: 0.8; margin-top: 8px;">Run an HTML widget or Shiny app to view it here.</p>
         </div>
-        <iframe id="viewer-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"></iframe>
+        <div class="iframe-container" id="iframe-container">
+            <iframe id="viewer-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"></iframe>
+        </div>
         <div id="render-overlay" class="render-overlay">Rendering&hellip;</div>
     </div>
 
@@ -833,6 +848,40 @@ export class ViewerPanel {
         const frame = document.getElementById('viewer-frame');
         const emptyState = document.getElementById('empty-state');
         const renderOverlay = document.getElementById('render-overlay');
+        const iframeContainer = document.getElementById('iframe-container');
+        
+        function updateZoom() {
+            if (!iframeContainer || !frame) return;
+            
+            const contentWidth = iframeContainer.clientWidth;
+            const contentHeight = iframeContainer.clientHeight;
+            
+            if (contentWidth <= 0 || contentHeight <= 0) return;
+            
+            // Lowering the virtual canvas size ensures the zoom scale is less extreme 
+            // on narrow viewports, resulting in significantly larger and more readable text.
+            const minWidth = 560;
+            const minHeight = 380;
+            
+            const scaleX = contentWidth / Math.max(contentWidth, minWidth);
+            const scaleY = contentHeight / Math.max(contentHeight, minHeight);
+            const scale = Math.min(scaleX, scaleY);
+            
+            if (scale < 1) {
+                const layoutWidth = contentWidth / scale;
+                const layoutHeight = contentHeight / scale;
+                frame.style.width = layoutWidth + 'px';
+                frame.style.height = layoutHeight + 'px';
+                frame.style.transform = 'scale(' + scale + ')';
+            } else {
+                frame.style.width = '100%';
+                frame.style.height = '100%';
+                frame.style.transform = 'none';
+            }
+        }
+        
+        const ro = new ResizeObserver(() => updateZoom());
+        if (iframeContainer) ro.observe(iframeContainer);
         const btnRefresh = document.getElementById('btn-refresh');
         const btnSnapshot = document.getElementById('btn-snapshot');
         const btnExternal = document.getElementById('btn-external');
@@ -1152,7 +1201,14 @@ export class ViewerPanel {
 </html>`;
     }
 
+    private _isDisposed = false;
+
     dispose(): void {
+        if (this._isDisposed) {
+            return;
+        }
+        this._isDisposed = true;
+
         ViewerPanel.lastClosedState = this.saveState();
         ViewerPanel.currentPanel = undefined;
         this._panel.dispose();
@@ -1163,8 +1219,8 @@ export class ViewerPanel {
         }
 
         while (this._disposables.length) {
-            const d = this._disposables.pop();
-            if (d) { d.dispose(); }
+            const disposable = this._disposables.pop();
+            disposable?.dispose();
         }
     }
 }
