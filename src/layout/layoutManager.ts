@@ -3145,24 +3145,31 @@ if (!isTRUE(.rlab_is_console)) {
     if (nchar(orig) > 0 && file.exists(orig)) {
       try(source(orig, echo = FALSE), silent = TRUE)
     } else {
-      home_prof <- path.expand("~/.Rprofile")
-      if (file.exists(home_prof)) try(source(home_prof, echo = FALSE), silent = TRUE)
+      if (file.exists(".Rprofile")) {
+        try(source(".Rprofile", echo = FALSE), silent = TRUE)
+      } else {
+        home_prof <- path.expand("~/.Rprofile")
+        if (file.exists(home_prof)) try(source(home_prof, echo = FALSE), silent = TRUE)
+      }
     }
   })
   rm(.rlab_is_console)
 } else {
 
-# 1. Source the standard user profile (~/.Rprofile).
-#    R_PROFILE_USER overrides it, so we must source it explicitly.
-local({
-  home_prof <- path.expand("~/.Rprofile")
-  if (file.exists(home_prof)) source(home_prof, echo = FALSE)
-})
-
-# 2. Chain to any previously set R_PROFILE_USER (unlikely, but safe).
+# 1. Source the project profile if it exists, otherwise the home profile.
+#    R_PROFILE_USER overrides them, so we must source them explicitly.
 local({
   orig <- Sys.getenv("R_PROFILE_USER_ORIG", unset = "")
-  if (nchar(orig) > 0 && file.exists(orig)) source(orig, echo = FALSE)
+  if (nchar(orig) > 0 && file.exists(orig)) {
+    source(orig, echo = FALSE)
+  } else {
+    if (file.exists(".Rprofile")) {
+      source(".Rprofile", echo = FALSE)
+    } else {
+      home_prof <- path.expand("~/.Rprofile")
+      if (file.exists(home_prof)) source(home_prof, echo = FALSE)
+    }
+  }
 })
 
 # 3. Pre-set fixed Data Viewer temp paths (absolute paths injected by extension).
