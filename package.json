@@ -42,7 +42,7 @@
                         "Radian"
                     ],
                     "default": "Auto Detect",
-                    "description": "Select the type of R console you are using. 'Auto Detect' will guess based on the path. Set explicitly to 'Radian' to enforce bracketed paste (required if you use shell aliases)."
+                    "description": "Select the type of R console you are using. 'Auto Detect' will check vscode-R's native 'r.bracketedPaste' setting and guess based on the path. Set explicitly to 'Radian' to enforce bracketed paste."
                 },
                 "r-lab.rConsolePath": {
                     "type": "string",
