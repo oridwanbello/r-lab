@@ -12,16 +12,18 @@ Goal: Ensure the 3-pane layout activates, restores, and deactivates correctly wi
 - [ ] Deactivation: Trigger `Toggle R Lab` again. Ensure all custom panels close and terminals return to the standard bottom panel.
 - [ ] Layout Restoration (Padding Check): Re-activate the layout. Check the R Console and Terminal in the top-right pane. Ensure they have proper top padding and aren't squished directly against the tab bar.
 - [ ] Windows ConPTY Check: (On Windows) Ensure that when the layout activates, the terminal tabs do not render as completely blank or unresponsive screens.
+- [ ] No-Workspace Folder Check: Open VS Code with no workspace folder open. Toggle the layout on and off. Verify that no yellow caution symbols appear on the R Console or Terminal and no relaunch requests occur.
 
 ### 2. Plot Gallery & Device Capture
 
 Goal: Verify R graphics are captured correctly and the UI functions work.
 
 - [ ] First Plot on Windows: Run a simple `plot(1:10)`. Ensure the very first plot shows up and is NOT a blank white screen.
-- [ ] Layered Graphics: Run `plot(1:10)`, then `lines(10:1)`. Ensure only *one* plot shows in the gallery, and it contains both layers (no duplicates).
+- [ ] Layered Graphics: Run `plot(1:10)`, then `lines(10:1)`. Ensure only _one_ plot shows in the gallery, and it contains both layers (no duplicates).
 - [ ] Responsive Resizing: Resize the Visuals pane while the Plots subtab is active. Ensure the plot re-renders automatically to fit the new dimensions without distortion.
 - [ ] Interactivity: Test click-and-drag panning and scroll-wheel zooming on a plot.
-- [ ] Export Options: Export a plot as `PNG`, `SVG`, `PDF`, and `EPS`. Verify the export progress notification appears, a status-bar success message follows, and the files exist on disk.
+- [ ] Export Options: Export a plot as `PNG`, `SVG`, `PDF`, and `EPS`. Verify the export progress notification appears, a status-bar success message follows, and the files exist on disk. Open the exported PDF and EPS files; verify the PDF has no blank first page and the EPS retains transparent graphics (if the source plot has transparency).
+- [ ] Flicker-Free Rendering: Generate multiple plots consecutively. Verify that new plot thumbnails load and append to the vertical gallery bar smoothly without causing the entire gallery panel or existing thumbnails to flash or reload.
 - [ ] Comparison Mode: Generate two different plots. Use the Compare button and verify side-by-side comparison, synced zoom/pan, and overlay controls work.
 
 ### 3. Data Viewer
@@ -50,6 +52,8 @@ Goal: Ensure web-based outputs render and serve correctly.
 - [ ] HTML Widgets: Run `plotly::plot_ly(mtcars, x = ~wt, y = ~mpg, type = 'scatter', mode = 'markers')`. Verify the interactive chart appears in the Visuals tab's Viewer subtab.
 - [ ] Snapshots: Click the "Capture as PNG" button in the Viewer subtab. Verify the status-bar success message appears, the completion notification appears, and the image is saved.
 - [ ] Local Shiny App: Run a basic Shiny app. Verify the Viewer subtab loads the app correctly.
+- [ ] Viewer History Navigation: Open multiple HTML widgets or Shiny pages sequentially. Click the Previous/Next buttons rapidly to scroll through history and verify that the viewer correctly updates without loading blank frames.
+- [ ] Narrow Table Breathing Room: Render an interactive table widget (e.g. `DT::datatable`) in the narrow side panel (Group 3). Scroll to the far right of the table and verify there is transparent empty space ("breathing room") on the right edge instead of the content sitting flush against the border.
 
 ### 6. Webview Pop-out & Focus Management
 
@@ -59,3 +63,5 @@ Goal: Ensure webviews can float and restore without breaking VS Code execution c
 - [ ] Restore Panel: Click the `Restore to Side Panel` button. Verify it correctly returns to Group 3 and maintains the strict architectural tab order (`Workspace > Visuals > Data Viewer`).
 - [ ] Protected Layout Tabs: With `r-lab.protectLayoutTabs` enabled, close Tools, Workspace, Visuals, Data Viewer, and the owned shell Terminal one at a time. Verify each reappears in its correct pane and strict tab position (`R Console -> Terminal -> Tools`; `Workspace -> Visuals -> Data Viewer`). Verify source files, Settings, extension pages, and R Console remain closeable.
 - [ ] Focus Stealing Prevention: After generating a plot or popping a panel out, immediately press `Cmd+Enter` (or `Ctrl+Enter`) on a line of code. Ensure `vscode-R` executes the code and does NOT throw a "No active Text editor" error.
+- [ ] Subtab State Retention: Open the Visuals tab and switch the subtab to 'Viewer'. Close the Workspace tab to trigger a partial layout respawn (`ensureLayoutCompleteness`). Verify the Visuals tab remains active on the 'Viewer' subtab and does not reset to 'Plots'.
+- [ ] Pop-out/Restore Button Sync: Open the Visuals tab. Click 'Pop-out to Main Editor'. Switch between the 'Plots' and 'Viewer' subtabs in the popped-out editor tab, and verify that the restoration/pop-out action button icon and tooltips are correctly synchronized on both subtabs.
