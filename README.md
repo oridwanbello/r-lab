@@ -4,16 +4,13 @@
 
 An RStudio-inspired development environment for R in VS Code.
 
-![R Lab Showcase](https://github.com/oridwanbello/r-lab/blob/main/resources/r_lab_showcase.png?raw=true)
+![R Lab Showcase](https://raw.githubusercontent.com/oridwanbello/assets/main/images/r_lab_showcase.png)
 
-> [!NOTE]
-> This extension is currently in preview. We are actively refining the layout and feature set. Please report any issues on GitHub!
-
-Transform your editor into an RStudio-inspired 3-pane grid with a single click. Optimized for data science, it includes a live variable explorer, a combined Visuals tab for plots and viewer output, and a high-performance data viewer.
+Bring the cohesive development experience of RStudio to VS Code with a single click. Optimized for data science, R Lab integrates a live variable explorer, a high-performance data viewer, and a unified Visuals workspace directly into your editor.
 
 ## Core Features
 
-- Instant Layout: Snaps your editor into a 3-pane grid (Source Editor, Terminal/Console/Tools, and Workspace/Visuals/Data Viewer).
+- Unified Development Environment: Instantly organizes your workspace into a professional 3-pane layout (Source Editor, Terminal/Console/Tools, and Workspace/Visuals/Data Viewer).
 - Workspace & Package Manager: Live variable inspector, dictionary-style object previews, and a 1-click interactive data frame viewer. Includes a dedicated tab to search, attach, and detach R packages.
 - Visuals: Combined Plots and Viewer subtabs for plot navigation, export, comparison, R `viewer()` output, Shiny apps, `htmlwidgets`, Quarto previews, and vignettes.
 - Plot Export: Advanced export settings for PDF, SVG, EPS, PNG, and JPG with smart file size estimation.
@@ -21,21 +18,23 @@ Transform your editor into an RStudio-inspired 3-pane grid with a single click. 
 
 ## Getting Started
 
-1. Prerequisite: Ensure you have the official [vscode-R](https://marketplace.visualstudio.com/items?itemName=REditorSupport.r) extension installed.
-2. Open a workspace and click "R Lab" in the Status Bar, or run `Toggle R Lab` from the Command Palette.
-3. Open an `.R` file and click the source icon in the editor title bar. For `.Rmd`, `.qmd`, or Markdown files, select a code chunk or line and run the selection.
+1. Prerequisites: Ensure you have the official [vscode-R](https://marketplace.visualstudio.com/items?itemName=REditorSupport.r) extension installed and configured on your system. Follow the `vscode-R` setup guide to ensure key dependencies are properly set up.
+2. Installation: Install R Lab from the VS Code Marketplace.
+3. Activation: Open a workspace and click "R Lab" in the Status Bar, or run `Toggle R Lab` from the Command Palette.
+4. Execution: Open a `.R` file and click the source icon in the editor title bar. For `.Rmd`, `.qmd`, or Markdown files, select a code chunk or line and run the selection.
 
 ## Key Settings & Commands
 
-| Feature | Description |
-| ------- | ----------- |
-| `r-lab.rConsoleType` | Select console type (`Auto Detect`, `Standard R`, `Radian`) to enforce bracketed paste. |
-| `r-lab.rConsolePath` | Path or command for the R Console terminal (default: `"R"`). |
-| `r-lab.restoreCustomPanelPositions` | If true, restores panels to custom dragged locations instead of strict 3-pane. |
-| `r-lab.protectLayoutTabs` | Automatically restores accidentally closed R Lab webview tabs and the owned shell Terminal while the layout is active. Defaults to true. |
-| `r-lab.plotOutputDir` | Custom directory for R Lab plot images. Defaults to `.R-lab/plots` in the workspace or home directory. |
-| `Toggle R Lab` | Snap the editor into or out of the 3-pane grid. |
-| `Maximize Top Pane` | Expand the top-right pane; minimizes bottom panes. |
+| Feature                             | Description                                                                                                                              |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `r-lab.rConsoleType`                | Select console type (`Auto Detect`, `Standard R`, `Radian`) to enforce bracketed paste.                                                  |
+| `r-lab.rConsolePath`                | Path or command for the R Console terminal (default: `"R"`).                                                                             |
+| `r-lab.restoreCustomPanelPositions` | If true, restores panels to custom dragged locations instead of strict 3-pane.                                                           |
+| `r-lab.protectLayoutTabs`           | Automatically restores accidentally closed R Lab webview tabs and the owned shell Terminal while the layout is active. Defaults to true. |
+| `r-lab.plotOutputDir`               | Custom directory for R Lab plot images. Defaults to `.R-lab/plots` in the workspace or home directory.                                   |
+| `Toggle R Lab`                      | Activate or deactivate the 3-pane development environment.                                                                               |
+| `Maximize Top Pane`                 | Maximize the R Console / Tools pane and minimize the bottom-right panels.                                                                |
+| `Restore Pane Split`                | Restore the standard split between the top-right and bottom-right panes.                                                                 |
 
 ## Contributing
 

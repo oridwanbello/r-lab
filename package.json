@@ -1,202 +1,212 @@
 {
-  "name": "r-layout",
-  "displayName": "R Lab",
-  "preview": true,
-  "description": "RStudio-inspired development environment for R in VS Code",
-  "version": "0.4.0",
-  "publisher": "oridwanbello",
-  "icon": "resources/r_logo.png",
-  "engines": {
-    "vscode": "^1.107.0"
-  },
-  "extensionDependencies": [
-    "REditorSupport.r"
-  ],
-  "categories": [
-    "Other",
-    "Data Science"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/oridwanbello/r-lab.git"
-  },
-  "license": "MIT",
-  "activationEvents": [
-    "onStartupFinished"
-  ],
-  "main": "./dist/extension.js",
-  "capabilities": {
-    "untrustedWorkspaces": {
-      "supported": true
-    }
-  },
-  "contributes": {
-    "configuration": {
-      "title": "R Lab",
-      "properties": {
-        "r-lab.rConsoleType": {
-          "type": "string",
-          "enum": [
-            "Auto Detect",
-            "Standard R",
-            "Radian"
-          ],
-          "default": "Auto Detect",
-          "description": "Select the type of R console you are using. 'Auto Detect' will guess based on the path. Set explicitly to 'Radian' to enforce bracketed paste (required if you use shell aliases)."
-        },
-        "r-lab.rConsolePath": {
-          "type": "string",
-          "default": "R",
-          "description": "Path or command for the R Console terminal. Examples: 'R' or 'radian'."
-        },
-        "r-lab.restoreCustomPanelPositions": {
-          "type": "boolean",
-          "default": false,
-          "description": "When activating the layout, restore webview panels (Plots, Workspace, etc.) to custom locations where they were dragged in the previous session. If false, activating the layout strictly re-enforces the standard 3-pane arrangement."
-        },
-        "r-lab.protectLayoutTabs": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically restore R Lab webview tabs and the owned shell Terminal when they are accidentally closed while the layout is active. This does not protect R Console, source files, Settings, or extension pages."
-        },
-        "r-lab.plotOutputDir": {
-          "type": "string",
-          "default": "",
-          "description": "A custom directory path where R Lab should silently write plot images. If left blank, it uses the default temporary folder (.R-lab/plots in the workspace root, or your home directory if no workspace is open)."
-        }
-      }
+    "name": "r-layout",
+    "displayName": "R Lab",
+    "preview": true,
+    "description": "RStudio-inspired development environment for R in VS Code",
+    "version": "0.4.0",
+    "publisher": "oridwanbello",
+    "icon": "resources/r_logo.png",
+    "engines": {
+        "vscode": "^1.107.0"
     },
-    "commands": [
-      {
-        "command": "r-lab.toggleLayout",
-        "title": "Toggle R Lab",
-        "category": "View"
-      },
-      {
-        "command": "r-lab.maximizeTopRight",
-        "title": "Maximize Top Pane",
-        "icon": "$(screen-full)"
-      },
-      {
-        "command": "r-lab.restoreRightSplit",
-        "title": "Restore Pane Split",
-        "icon": "$(screen-normal)"
-      },
-      {
-        "command": "r-lab.sourceFile",
-        "title": "Source File to R Console",
-        "icon": {
-          "light": "resources/run_source_light.svg",
-          "dark": "resources/run_source_dark.svg"
-        }
-      },
-      {
-        "command": "r-lab.runSelection",
-        "title": "Run Selection in R Console",
-        "icon": {
-          "light": "resources/run_source_light.svg",
-          "dark": "resources/run_source_dark.svg"
-        }
-      },
-      {
-        "command": "r-lab.runSmart",
-        "title": "Run Source / Selection",
-        "icon": {
-          "light": "resources/run_source_light.svg",
-          "dark": "resources/run_source_dark.svg"
-        }
-      }
+    "extensionDependencies": [
+        "REditorSupport.r"
     ],
-    "keybindings": [
-      {
-        "command": "workbench.action.focusSecondEditorGroup",
-        "key": "cmd+j",
-        "when": "r-lab.layoutActive"
-      },
-      {
-        "command": "workbench.action.focusThirdEditorGroup",
-        "key": "cmd+alt+b",
-        "when": "r-lab.layoutActive"
-      },
-      {
-        "command": "r-lab.noop",
-        "key": "cmd+shift+i",
-        "when": "r-lab.layoutActive"
-      },
-      {
-        "command": "r-lab.runSmart",
-        "key": "cmd+shift+s",
-        "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
-      },
-      {
-        "command": "r-lab.runSmart",
-        "key": "ctrl+shift+s",
-        "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
-      },
-      {
-        "command": "r-lab.runSelection",
-        "key": "cmd+enter",
-        "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
-      },
-      {
-        "command": "r-lab.runSelection",
-        "key": "ctrl+enter",
-        "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
-      }
+    "categories": [
+        "Other",
+        "Data Science"
     ],
-    "menus": {
-      "editor/title": [
-        {
-          "command": "r-lab.maximizeTopRight",
-          "when": "r-lab.layoutActive && !r-lab.isTopRightMaximized && activeEditorGroupIndex != 1",
-          "group": "navigation@1"
-        },
-        {
-          "command": "r-lab.restoreRightSplit",
-          "when": "r-lab.layoutActive && r-lab.isTopRightMaximized && activeEditorGroupIndex != 1",
-          "group": "navigation@1"
-        },
-        {
-          "command": "r-lab.runSmart",
-          "when": "r-lab.layoutActive && resourceLangId =~ /^(r|rmd|quarto)$/ && activeEditorGroupIndex == 1",
-          "group": "navigation@-100"
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/oridwanbello/r-lab.git"
+    },
+    "license": "MIT",
+    "activationEvents": [
+        "onStartupFinished"
+    ],
+    "main": "./dist/extension.js",
+    "capabilities": {
+        "untrustedWorkspaces": {
+            "supported": true
         }
-      ],
-      "editor/context": [
-        {
-          "command": "r-lab.runSelection",
-          "when": "r-lab.layoutActive && resourceLangId =~ /^(r|rmd|quarto)$/ && editorHasSelection",
-          "group": "navigation@-100"
+    },
+    "contributes": {
+        "configuration": {
+            "title": "R Lab",
+            "properties": {
+                "r-lab.rConsoleType": {
+                    "type": "string",
+                    "enum": [
+                        "Auto Detect",
+                        "Standard R",
+                        "Radian"
+                    ],
+                    "default": "Auto Detect",
+                    "description": "Select the type of R console you are using. 'Auto Detect' will check vscode-R's native 'r.bracketedPaste' setting and guess based on the path. Set explicitly to 'Radian' to enforce bracketed paste."
+                },
+                "r-lab.rConsolePath": {
+                    "type": "string",
+                    "default": "R",
+                    "description": "Path or command for the R Console terminal. Examples: 'R' or 'radian'."
+                },
+                "r-lab.restoreCustomPanelPositions": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "When activating the layout, restore webview panels (Plots, Workspace, etc.) to custom locations where they were dragged in the previous session. If false, activating the layout strictly re-enforces the standard 3-pane arrangement."
+                },
+                "r-lab.protectLayoutTabs": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Automatically restore R Lab webview tabs and the owned shell Terminal when they are accidentally closed while the layout is active. This does not protect R Console, source files, Settings, or extension pages."
+                },
+                "r-lab.plotOutputDir": {
+                    "type": "string",
+                    "default": "",
+                    "description": "A custom directory path where R Lab should silently write plot images. If left blank, it uses the default temporary folder (.R-lab/plots in the workspace root, or your home directory if no workspace is open)."
+                }
+            }
+        },
+        "commands": [
+            {
+                "command": "r-lab.toggleLayout",
+                "title": "Toggle R Lab",
+                "category": "View"
+            },
+            {
+                "command": "r-lab.maximizeTopRight",
+                "title": "Maximize Top Pane",
+                "icon": "$(screen-full)"
+            },
+            {
+                "command": "r-lab.restoreRightSplit",
+                "title": "Restore Pane Split",
+                "icon": "$(screen-normal)"
+            },
+            {
+                "command": "r-lab.sourceFile",
+                "title": "Source File to R Console",
+                "icon": {
+                    "light": "resources/run_source_light.svg",
+                    "dark": "resources/run_source_dark.svg"
+                }
+            },
+            {
+                "command": "r-lab.runSelection",
+                "title": "Run Selection in R Console",
+                "icon": {
+                    "light": "resources/run_source_light.svg",
+                    "dark": "resources/run_source_dark.svg"
+                }
+            },
+            {
+                "command": "r-lab.runSmart",
+                "title": "Run Source / Selection",
+                "icon": {
+                    "light": "resources/run_source_light.svg",
+                    "dark": "resources/run_source_dark.svg"
+                }
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "workbench.action.focusSecondEditorGroup",
+                "key": "cmd+j",
+                "when": "r-lab.layoutActive"
+            },
+            {
+                "command": "workbench.action.focusThirdEditorGroup",
+                "key": "cmd+alt+b",
+                "when": "r-lab.layoutActive"
+            },
+            {
+                "command": "r-lab.noop",
+                "key": "cmd+shift+i",
+                "when": "r-lab.layoutActive"
+            },
+            {
+                "command": "r-lab.runSmart",
+                "key": "cmd+shift+s",
+                "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
+            },
+            {
+                "command": "r-lab.runSmart",
+                "key": "ctrl+shift+s",
+                "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
+            },
+            {
+                "command": "r-lab.runSelection",
+                "key": "cmd+enter",
+                "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
+            },
+            {
+                "command": "r-lab.runSelection",
+                "key": "ctrl+enter",
+                "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
+            }
+        ],
+        "menus": {
+            "editor/title": [
+                {
+                    "command": "r-lab.maximizeTopRight",
+                    "when": "r-lab.layoutActive && !r-lab.isTopRightMaximized && activeEditorGroupIndex != 1",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "r-lab.restoreRightSplit",
+                    "when": "r-lab.layoutActive && r-lab.isTopRightMaximized && activeEditorGroupIndex != 1",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "r-lab.runSmart",
+                    "when": "r-lab.layoutActive && resourceLangId =~ /^(r|rmd|quarto)$/ && activeEditorGroupIndex == 1",
+                    "group": "navigation@-100"
+                }
+            ],
+            "editor/context": [
+                {
+                    "command": "r-lab.runSelection",
+                    "when": "r-lab.layoutActive && resourceLangId =~ /^(r|rmd|quarto)$/ && editorHasSelection",
+                    "group": "navigation@-100"
+                }
+            ]
         }
-      ]
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run package",
+        "compile": "webpack",
+        "watch": "webpack --watch",
+        "package": "webpack --mode production --devtool hidden-source-map",
+        "compile-tests": "tsc -p . --outDir out",
+        "watch-tests": "tsc -p . -w --outDir out",
+        "pretest": "npm run compile-tests && npm run compile && npm run lint",
+        "lint": "eslint src",
+        "lint:fix": "eslint --fix src",
+        "format": "prettier --write .",
+        "test": "vscode-test",
+        "prepare": "husky install"
+    },
+    "devDependencies": {
+        "@types/mocha": "^10.0.10",
+        "@types/node": "22.x",
+        "@types/vscode": "^1.107.0",
+        "@vscode/test-cli": "^0.0.11",
+        "@vscode/test-electron": "^2.5.2",
+        "eslint": "^9.39.3",
+        "husky": "^8.0.0",
+        "lint-staged": "^17.0.7",
+        "prettier": "^3.8.4",
+        "ts-loader": "^9.5.4",
+        "typescript": "^5.9.3",
+        "typescript-eslint": "^8.56.1",
+        "webpack": "^5.105.3",
+        "webpack-cli": "^6.0.1"
+    },
+    "overrides": {
+        "diff": "^5.2.0",
+        "serialize-javascript": "^7.0.5"
+    },
+    "lint-staged": {
+        "**/*.{ts,json,md,css}": "prettier --write",
+        "src/**/*.ts": "eslint --fix"
     }
-  },
-  "scripts": {
-    "vscode:prepublish": "npm run package",
-    "compile": "webpack",
-    "watch": "webpack --watch",
-    "package": "webpack --mode production --devtool hidden-source-map",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "npm run compile-tests && npm run compile && npm run lint",
-    "lint": "eslint src",
-    "test": "vscode-test"
-  },
-  "devDependencies": {
-    "@types/mocha": "^10.0.10",
-    "@types/node": "22.x",
-    "@types/vscode": "^1.107.0",
-    "@vscode/test-cli": "^0.0.11",
-    "@vscode/test-electron": "^2.5.2",
-    "eslint": "^9.39.3",
-    "ts-loader": "^9.5.4",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.56.1",
-    "webpack": "^5.105.3",
-    "webpack-cli": "^6.0.1"
-  },
-  "overrides": {
-    "diff": "^5.2.0",
-    "serialize-javascript": "^7.0.5"
-  }
 }

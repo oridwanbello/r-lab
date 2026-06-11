@@ -24,9 +24,9 @@ When a user triggers the layout:
 2. Clean Slate: It closes all sidebars, auxiliary bars, and terminal panels.
 3. Grid Construction: It forces a 3-pane layout via vscode.setEditorLayout.
 4. Component Placement:
-   - Group 1 (Left): Receives the user's active source files.
-   - Group 2 (Top-Right): Populated with the R Console, standard Terminal, and Tools panel.
-   - Group 3 (Bottom-Right): Populated with the Workspace Explorer, Visuals panel, and Data Viewer.
+    - Group 1 (Left): Receives the user's active source files.
+    - Group 2 (Top-Right): Populated with the R Console, standard Terminal, and Tools panel.
+    - Group 3 (Bottom-Right): Populated with the Workspace Explorer, Visuals panel, and Data Viewer.
 5. Layout Tab Protection: When `r-lab.protectLayoutTabs` is enabled, accidental closure of R Lab webview tabs and the owned shell Terminal recreates them in their architectural pane and then re-stamps the full strict tab order. R Console is excluded because closing it represents session termination.
 
 ### Deactivation Sequence
@@ -47,7 +47,7 @@ Reads live R session state to display active variables and loaded packages. It o
 1. Native `vscode-R` session watcher state files (`globalenv.json`, `search.json`).
 2. R Lab's custom atomic file-watcher logs (`.workspace_meta.txt` and `.tsv` dumps).
 3. A fallback background `Rscript` process that parses `.RData`.
-It renders the results in a custom HTML webview table, allowing users to view data frames or inspect package attachment states.
+   It renders the results in a custom HTML webview table, allowing users to view data frames or inspect package attachment states.
 
 ### DataViewerPanel
 
@@ -63,4 +63,4 @@ Hosts the R Help and Problems surfaces inside one editor tab. The Help subtab ru
 
 ### Legacy Panels
 
-`PlotsPanel`, `ViewerPanel`, `HelpPanel`, and `ProblemsPanel` still exist as implementation classes or compatibility paths, but the active default layout presents them through `VisualsPanel` and `ToolsPanel`. Local HTML widgets are served through an internal localhost file server with path containment checks.
+`PlotsPanel` and `ViewerPanel` still exist as hosted implementation classes inside `VisualsPanel`. The legacy standalone `HelpPanel` and `ProblemsPanel` have been removed, and their logic has been consolidated directly inside `ToolsPanel`. Local HTML widgets are served through an internal localhost file server with path containment checks.
