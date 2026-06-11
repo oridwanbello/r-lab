@@ -700,6 +700,33 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         }
     }
 
+    // Wait for restored terminals to load on slow startups if we see them in tabGroups
+    const hasRestoredRConsoleTab = vscode.window.tabGroups.all.some(g =>
+        g.tabs.some(tab => tab.input instanceof vscode.TabInputTerminal && tab.label.includes('R Console'))
+    );
+    if (hasRestoredRConsoleTab && !rConsoleTerminal) {
+        for (let i = 0; i < 30; i++) {
+            const found = vscode.window.terminals.find(t => t.name === 'R Console');
+            if (found) {
+                break;
+            }
+            await delay(100);
+        }
+    }
+
+    const hasRestoredShellTab = vscode.window.tabGroups.all.some(g =>
+        g.tabs.some(tab => tab.input instanceof vscode.TabInputTerminal && tab.label === 'Terminal')
+    );
+    if (hasRestoredShellTab && !shellTerminal) {
+        for (let i = 0; i < 30; i++) {
+            const found = vscode.window.terminals.find(t => t.name === 'Terminal');
+            if (found) {
+                break;
+            }
+            await delay(100);
+        }
+    }
+
     // 3. Scan for existing terminals to reuse. We will relocate them to ViewColumn.Two.
     //    Track whether we are reusing to avoid wiping workspace data for live sessions.
     let wasRConsoleReused = false;
@@ -905,6 +932,9 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
             }
         }
 
+    // Wait for R Console to be fully positioned in Group 2 before proceeding
+    await waitForTerminalInGroup2('R Console', 4000);
+
     // Shell terminal
     await delay(10);
     if (shellTerminal) {
@@ -931,6 +961,9 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     } else {
         await createShellTerminalInGroup2();
     }
+
+    // Wait for Shell terminal to be fully positioned in Group 2 before recreating Tools panel
+    await waitForTerminalInGroup2('Terminal', 4000);
 
     // ToolsPanel: dispose the anchor instance and recreate so it becomes the
     // LAST tab in Group 2, giving order: R Console -> Terminal -> Tools.
@@ -1805,7 +1838,7 @@ async function ensureRConsoleInGroup2(
         rConsoleTerminal = vscode.window.terminals.find(t => t.name === 'R Console');
     }
 
-    if (rConsoleTerminal) {
+    if (rConsoleTerminal && vscode.window.terminals.includes(rConsoleTerminal)) {
         const rConsoleEditorGroup = getTerminalTabGroup('R Console');
         if (rConsoleEditorGroup) {
             await focusTabByLabelFallback(rConsoleEditorGroup.viewColumn, 'R Console');
@@ -1816,13 +1849,7 @@ async function ensureRConsoleInGroup2(
             try {
                 await vscode.commands.executeCommand('workbench.action.moveEditorToSecondGroup');
                 await delay(120);
-                if (getTerminalTabGroup('R Console', vscode.ViewColumn.Two)) {
-                    return;
-                }
             } catch {}
-            if (getTerminalTabGroup('R Console')) {
-                return;
-            }
         } else {
             rConsoleTerminal.show(true);
             await delay(120);
@@ -1830,10 +1857,16 @@ async function ensureRConsoleInGroup2(
             await delay(50);
             await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
             await delay(120);
+        }
+
+        // Wait up to 2 seconds for it to land in Group 2
+        for (let i = 0; i < 20; i++) {
             if (getTerminalTabGroup('R Console', vscode.ViewColumn.Two)) {
                 return;
             }
+            await delay(100);
         }
+        return; // Even if it takes longer, do NOT fall through to create a duplicate!
     }
 
     const isWindows = os.platform() === 'win32';
@@ -1854,7 +1887,9 @@ async function ensureRConsoleInGroup2(
         await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
         await delay(50);
         await vscode.commands.executeCommand('workbench.action.terminal.moveToEditor');
-        await delay(120);
+        await delay(200);
+        // Wait for it to land in Group 2
+        await waitForTerminalInGroup2('R Console', 3000);
     } else {
         rConsoleTerminal.show(false);
         await delay(80);
@@ -2009,6 +2044,17 @@ async function focusTabByLabelFallback(viewColumn: vscode.ViewColumn, label: str
         await vscode.commands.executeCommand('workbench.action.previousEditorInGroup');
         await delay(10);
     }
+}
+
+async function waitForTerminalInGroup2(label: string, timeoutMs: number = 4000): Promise<boolean> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+        if (getTerminalTabGroup(label, vscode.ViewColumn.Two)) {
+            return true;
+        }
+        await delay(100);
+    }
+    return false;
 }
 
 async function enforceTabOrder(

@@ -326,7 +326,13 @@ export class ViewerPanel {
                 const safeRelativePath = path.normalize(decodedPath).replace(/^[/\\]+/, '');
                 const rootDir = path.resolve(dir);
                 const filePath = path.resolve(rootDir, safeRelativePath);
-                if (filePath !== rootDir && !filePath.startsWith(rootDir + path.sep)) {
+
+                const isWindows = os.platform() === 'win32';
+                const normFilePath = isWindows ? filePath.toLowerCase() : filePath;
+                const normRootDir = isWindows ? rootDir.toLowerCase() : rootDir;
+                const normSep = isWindows ? path.sep.toLowerCase() : path.sep;
+
+                if (normFilePath !== normRootDir && !normFilePath.startsWith(normRootDir + normSep)) {
                     res.writeHead(403);
                     res.end('Forbidden');
                     return;
