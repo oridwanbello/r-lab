@@ -1,12 +1,16 @@
-import * as vscode from 'vscode';
-import { getNonce } from '../utils/webviewUtils';
-import { getEffectiveWorkspaceRoot, recordLayoutFocus, suppressGuardForPanelMove } from '../layout/layoutManager';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import { enforceGroup3TabOrder } from '../utils/webviewUtils';
-import * as childProcess from 'child_process';
-import { getRscriptPath } from '../utils/rPathResolver';
+import * as vscode from "vscode";
+import { getNonce } from "../utils/webviewUtils";
+import {
+    getEffectiveWorkspaceRoot,
+    recordLayoutFocus,
+    suppressGuardForPanelMove,
+} from "../layout/layoutManager";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
+import { enforceGroup3TabOrder } from "../utils/webviewUtils";
+import * as childProcess from "child_process";
+import { getRscriptPath } from "../utils/rPathResolver";
 
 /**
  * Plots Panel - a WebviewPanel (editor tab) that watches a directory
@@ -16,10 +20,10 @@ import { getRscriptPath } from '../utils/rPathResolver';
  */
 export class PlotsPanel {
     public static currentPanel: PlotsPanel | undefined;
-    public static readonly viewType = 'r-lab.plotsPanel';
+    public static readonly viewType = "r-lab.plotsPanel";
 
     private static _sessionCustomPlotDir: string | undefined;
-    private static _sessionLastDirAction: 'outview' | undefined;
+    private static _sessionLastDirAction: "outview" | undefined;
     private static _sessionHasInteractiveWidgets = false;
 
     private readonly _panel: vscode.WebviewPanel;
@@ -31,11 +35,14 @@ export class PlotsPanel {
     private _focusPending: boolean = false;
     private _disposables: vscode.Disposable[] = [];
     private _isNightMode = false;
-    private _lastRenderedDims: Map<string, { w: number, h: number, res: number, renderScale: number }> = new Map();
+    private _lastRenderedDims: Map<
+        string,
+        { w: number; h: number; res: number; renderScale: number }
+    > = new Map();
     private _resizeRenderTokens: Map<string, number> = new Map();
     private _previewRenderToken = 0;
     private _customPlotDir: string | undefined;
-    private _lastDirAction: 'outview' | undefined;
+    private _lastDirAction: "outview" | undefined;
     private _extensionUri: vscode.Uri;
 
     // Factory
@@ -54,7 +61,7 @@ export class PlotsPanel {
 
         const panel = vscode.window.createWebviewPanel(
             PlotsPanel.viewType,
-            'Plots',
+            "Plots",
             { viewColumn: column, preserveFocus: true },
             {
                 enableScripts: true,
@@ -62,17 +69,27 @@ export class PlotsPanel {
                 retainContextWhenHidden: true,
             }
         );
-        panel.iconPath = vscode.Uri.joinPath(extensionUri, 'resources', 'blank.svg');
+        panel.iconPath = vscode.Uri.joinPath(
+            extensionUri,
+            "resources",
+            "blank.svg"
+        );
 
         PlotsPanel.currentPanel = new PlotsPanel(panel, extensionUri);
         return PlotsPanel.currentPanel;
     }
 
-    public static revive(panel: vscode.WebviewPanel, extensionUri: vscode.Uri): void {
+    public static revive(
+        panel: vscode.WebviewPanel,
+        extensionUri: vscode.Uri
+    ): void {
         PlotsPanel.currentPanel = new PlotsPanel(panel, extensionUri);
     }
 
-    public static createHosted(panel: vscode.WebviewPanel, extensionUri: vscode.Uri): PlotsPanel {
+    public static createHosted(
+        panel: vscode.WebviewPanel,
+        extensionUri: vscode.Uri
+    ): PlotsPanel {
         PlotsPanel.currentPanel = new PlotsPanel(panel, extensionUri);
         return PlotsPanel.currentPanel;
     }
@@ -115,8 +132,14 @@ export class PlotsPanel {
         this._extensionUri = extensionUri;
 
         // Restore persisted state from static session memory, falling back to VS Code settings
-        const configPlotDir = vscode.workspace.getConfiguration('r-lab').get<string>('plotOutputDir');
-        if (PlotsPanel._sessionCustomPlotDir === undefined && configPlotDir && configPlotDir.trim() !== '') {
+        const configPlotDir = vscode.workspace
+            .getConfiguration("r-lab")
+            .get<string>("plotOutputDir");
+        if (
+            PlotsPanel._sessionCustomPlotDir === undefined &&
+            configPlotDir &&
+            configPlotDir.trim() !== ""
+        ) {
             this._customPlotDir = configPlotDir.trim();
         } else {
             this._customPlotDir = PlotsPanel._sessionCustomPlotDir;
@@ -131,7 +154,7 @@ export class PlotsPanel {
         this._panel.onDidChangeViewState(
             (e) => {
                 if (e.webviewPanel.active) {
-                    recordLayoutFocus('Plots', e.webviewPanel.viewColumn);
+                    recordLayoutFocus("Plots", e.webviewPanel.viewColumn);
                 }
                 this._postState();
             },
@@ -142,43 +165,50 @@ export class PlotsPanel {
         this._panel.webview.onDidReceiveMessage(
             (msg: { type: string }) => {
                 switch (msg.type) {
-                    case 'syncPopoutState':
+                    case "syncPopoutState":
                         this._postState((msg as any).isPoppedOut);
                         break;
-                    case 'ready':
+                    case "ready":
                         this._postState();
                         if (this._focusPending) {
                             this._focusPending = false;
-                            enforceGroup3TabOrder('Plots').then(() => {
+                            enforceGroup3TabOrder("Plots").then(() => {
                                 setTimeout(() => {
-                                    vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+                                    vscode.commands.executeCommand(
+                                        "workbench.action.focusFirstEditorGroup"
+                                    );
                                 }, 150);
                             });
                         }
                         break;
-                    case 'navigatePrev':
+                    case "navigatePrev":
                         if (this._currentIndex > 0) {
                             this._currentIndex--;
                             this._render();
                         }
                         break;
-                    case 'navigateNext':
+                    case "navigateNext":
                         if (this._currentIndex < this._plots.length - 1) {
                             this._currentIndex++;
                             this._render();
                         }
                         break;
-                    case 'navigateTo':
+                    case "navigateTo":
                         this._currentIndex = (msg as any).index;
                         this._render();
                         break;
-                    case 'clear':
+                    case "clear":
                         this.clear();
                         break;
-                    case 'saveAs':
-                        this._handleSaveAs((msg as any).format, (msg as any).width, (msg as any).height, (msg as any).unit);
+                    case "saveAs":
+                        this._handleSaveAs(
+                            (msg as any).format,
+                            (msg as any).width,
+                            (msg as any).height,
+                            (msg as any).unit
+                        );
                         break;
-                    case 'previewRender':
+                    case "previewRender":
                         this._handleRequestPreviewRender(
                             (msg as any).format,
                             (msg as any).width,
@@ -187,17 +217,21 @@ export class PlotsPanel {
                             (msg as any).requestId
                         );
                         break;
-                    case 'deleteCurrent':
+                    case "deleteCurrent":
                         this._handleDeleteCurrent();
                         break;
-                    case 'toggleNightMode':
+                    case "toggleNightMode":
                         this._isNightMode = !this._isNightMode;
                         this._render();
                         break;
-                    case 'resize':
-                        this._handleResize((msg as any).width, (msg as any).height, (msg as any).pixelRatio);
+                    case "resize":
+                        this._handleResize(
+                            (msg as any).width,
+                            (msg as any).height,
+                            (msg as any).pixelRatio
+                        );
                         break;
-                    case 'resizePlot':
+                    case "resizePlot":
                         this._handleResize(
                             (msg as any).width,
                             (msg as any).height,
@@ -205,37 +239,45 @@ export class PlotsPanel {
                             (msg as any).index
                         );
                         break;
-                    case 'setOutViewDir':
+                    case "setOutViewDir":
                         this._handleSetCustomDir((msg as any).path);
                         break;
-                    case 'openViewer':
-                        vscode.commands.executeCommand('r-lab.focusViewer');
+                    case "openViewer":
+                        vscode.commands.executeCommand("r-lab.focusViewer");
                         break;
-                    case 'copyImage':
+                    case "copyImage":
                         this._handleCopyImage();
                         break;
-                    case 'browseCustomDir':
+                    case "browseCustomDir":
                         this._handleBrowseCustomDir();
                         break;
-                    case 'popout':
+                    case "popout":
                         this._focusPending = true;
                         suppressGuardForPanelMove();
                         this._panel.reveal(vscode.ViewColumn.One, false);
-                        vscode.commands.executeCommand('workbench.action.keepEditor');
+                        vscode.commands.executeCommand(
+                            "workbench.action.keepEditor"
+                        );
                         setTimeout(async () => {
-                            await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+                            await vscode.commands.executeCommand(
+                                "workbench.action.focusFirstEditorGroup"
+                            );
                         }, 150);
                         this._postState(true);
                         break;
-                    case 'restore':
+                    case "restore":
                         this._focusPending = true;
                         suppressGuardForPanelMove();
                         this._panel.reveal(vscode.ViewColumn.Three, false);
-                        vscode.commands.executeCommand('workbench.action.keepEditor');
+                        vscode.commands.executeCommand(
+                            "workbench.action.keepEditor"
+                        );
                         setTimeout(async () => {
-                            await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+                            await vscode.commands.executeCommand(
+                                "workbench.action.focusFirstEditorGroup"
+                            );
                         }, 150);
-                        enforceGroup3TabOrder('Plots');
+                        enforceGroup3TabOrder("Plots");
                         this._postState(false);
                         break;
                 }
@@ -258,13 +300,13 @@ export class PlotsPanel {
         }
         this._panel.webview.options = {
             ...this._panel.webview.options,
-            localResourceRoots: roots
+            localResourceRoots: roots,
         };
 
         this._writePlotDirRequest(resolved);
 
         // Track which action was last used so we can show persistent active state in the UI.
-        this._lastDirAction = resolved ? 'outview' : undefined;
+        this._lastDirAction = resolved ? "outview" : undefined;
 
         // Persist to session memory
         PlotsPanel._sessionCustomPlotDir = this._customPlotDir;
@@ -273,70 +315,92 @@ export class PlotsPanel {
         this.clear(); // Clear existing plots
         this._startWatcher(); // Restart watcher on new dir
         this.syncPlots(); // Load existing plots from new dir
-        vscode.commands.executeCommand('r-lab.syncWidgetPlaceholder');
+        vscode.commands.executeCommand("r-lab.syncWidgetPlaceholder");
     }
 
     private async _handleBrowseCustomDir(): Promise<void> {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        const defaultUri = workspaceFolder ? workspaceFolder.uri : vscode.Uri.file(os.homedir());
+        const defaultUri = workspaceFolder
+            ? workspaceFolder.uri
+            : vscode.Uri.file(os.homedir());
 
         const uris = await vscode.window.showOpenDialog({
             canSelectFiles: false,
             canSelectFolders: true,
             canSelectMany: false,
-            openLabel: 'Select Plot Directory',
-            defaultUri: defaultUri
+            openLabel: "Select Plot Directory",
+            defaultUri: defaultUri,
         });
 
         if (uris && uris.length > 0) {
-            this._panel.webview.postMessage({ type: 'customDirBrowsed', path: uris[0].fsPath });
+            this._panel.webview.postMessage({
+                type: "customDirBrowsed",
+                path: uris[0].fsPath,
+            });
         }
     }
 
     private _defaultPlotDir(): string {
-        return path.join(getEffectiveWorkspaceRoot(), '.R-lab', 'plots');
+        return path.join(getEffectiveWorkspaceRoot(), ".R-lab", "plots");
     }
 
     private _resolvePlotDir(dirPath: string | undefined): string {
-        if (!dirPath || dirPath.trim() === '') {
+        if (!dirPath || dirPath.trim() === "") {
             return this._defaultPlotDir();
         }
         const trimmed = dirPath.trim();
-        const expanded = trimmed === '~' ? os.homedir() : trimmed.replace(/^~(?=$|[\\/])/, os.homedir());
-        return path.isAbsolute(expanded) ? path.normalize(expanded) : path.join(getEffectiveWorkspaceRoot(), expanded);
+        const expanded =
+            trimmed === "~"
+                ? os.homedir()
+                : trimmed.replace(/^~(?=$|[\\/])/, os.homedir());
+        return path.isAbsolute(expanded)
+            ? path.normalize(expanded)
+            : path.join(getEffectiveWorkspaceRoot(), expanded);
     }
 
     private _writePlotDirRequest(dirPath: string | undefined): void {
-        const outDir = path.join(getEffectiveWorkspaceRoot(), '.R-lab');
+        const outDir = path.join(getEffectiveWorkspaceRoot(), ".R-lab");
         fs.mkdirSync(outDir, { recursive: true });
-        const reqPath = path.join(outDir, '.plot_dir_req');
+        const reqPath = path.join(outDir, ".plot_dir_req");
         const tmpPath = `${reqPath}.tmp`;
-        const content = dirPath && dirPath.trim()
-            ? this._resolvePlotDir(dirPath).replace(/\\/g, '/')
-            : '__DEFAULT__';
-        fs.writeFileSync(tmpPath, `${content}\n`, 'utf8');
+        const content =
+            dirPath && dirPath.trim()
+                ? this._resolvePlotDir(dirPath).replace(/\\/g, "/")
+                : "__DEFAULT__";
+        fs.writeFileSync(tmpPath, `${content}\n`, "utf8");
         fs.renameSync(tmpPath, reqPath);
     }
 
     private _handleDeleteCurrent(): void {
-        if (this._currentIndex < 0 || this._currentIndex >= this._plots.length) { return; }
+        if (
+            this._currentIndex < 0 ||
+            this._currentIndex >= this._plots.length
+        ) {
+            return;
+        }
         const uri = this._plots[this._currentIndex];
 
-        if (uri.fsPath.includes('_interactive.svg')) {
-            vscode.window.showWarningMessage('Interactive widget placeholders can only be deleted from the Viewer tab.');
+        if (uri.fsPath.includes("_interactive.svg")) {
+            vscode.window.showWarningMessage(
+                "Interactive widget placeholders can only be deleted from the Viewer tab."
+            );
             return;
         }
 
         // Only allow physical deletion for files inside the .R-lab directory.
         // User-specified directories must not be modified - we only display them.
-        const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
-        const rLabDir = path.join(wf, '.R-lab');
+        const wf =
+            vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
+        const rLabDir = path.join(wf, ".R-lab");
         const relative = path.relative(rLabDir, uri.fsPath);
-        const isInside = relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+        const isInside =
+            relative &&
+            !relative.startsWith("..") &&
+            !path.isAbsolute(relative);
         if (!isInside) {
             vscode.window.showWarningMessage(
-                'Deletion is only permitted for plots in the .R-lab directory. ' +
-                'To remove plots from a custom folder, delete them manually.'
+                "Deletion is only permitted for plots in the .R-lab directory. " +
+                    "To remove plots from a custom folder, delete them manually."
             );
             return;
         }
@@ -344,34 +408,45 @@ export class PlotsPanel {
         try {
             if (fs.existsSync(uri.fsPath)) {
                 fs.unlinkSync(uri.fsPath);
-                const rdsPath = uri.fsPath.replace(/\.(png|jpg|jpeg|svg|gif|bmp|webp|ico)$/i, '.rds');
+                const rdsPath = uri.fsPath.replace(
+                    /\.(png|jpg|jpeg|svg|gif|bmp|webp|ico)$/i,
+                    ".rds"
+                );
                 if (fs.existsSync(rdsPath)) {
                     fs.unlinkSync(rdsPath);
                 }
             }
             // The watcher will pick up the deletion and update the UI
         } catch (err: any) {
-            vscode.window.showErrorMessage(`Failed to delete plot: ${err.message}`);
+            vscode.window.showErrorMessage(
+                `Failed to delete plot: ${err.message}`
+            );
         }
     }
 
-    private async _handleResize(width: number, height: number, pixelRatio?: number, plotIndex?: number): Promise<void> {
-        const targetIndex = typeof plotIndex === 'number' ? plotIndex : this._currentIndex;
+    private async _handleResize(
+        width: number,
+        height: number,
+        pixelRatio?: number,
+        plotIndex?: number
+    ): Promise<void> {
+        const targetIndex =
+            typeof plotIndex === "number" ? plotIndex : this._currentIndex;
         if (targetIndex < 0 || targetIndex >= this._plots.length) {
             return;
         }
         const sourceUri = this._plots[targetIndex];
         // Only dynamically resize generated plots, not interactive SVG placeholders
-        if (sourceUri.fsPath.includes('_interactive.svg')) {
+        if (sourceUri.fsPath.includes("_interactive.svg")) {
             return;
         }
 
         const ext = path.extname(sourceUri.fsPath);
-        if (ext !== '.png') {
+        if (ext !== ".png") {
             return; // We only resize PNG plots saved via layoutManager.ts
         }
 
-        const rdsPath = sourceUri.fsPath.replace(/\.png$/, '.rds');
+        const rdsPath = sourceUri.fsPath.replace(/\.png$/, ".rds");
         if (!fs.existsSync(rdsPath)) {
             return;
         }
@@ -400,7 +475,13 @@ export class PlotsPanel {
         // Prevent redundant re-rendering if this plot was already rendered at this exact dimension
         const cacheKey = sourceUri.fsPath;
         const lastDims = this._lastRenderedDims.get(cacheKey);
-        if (lastDims && lastDims.w === w && lastDims.h === h && lastDims.res === res && lastDims.renderScale === renderScale) {
+        if (
+            lastDims &&
+            lastDims.w === w &&
+            lastDims.h === h &&
+            lastDims.res === res &&
+            lastDims.renderScale === renderScale
+        ) {
             return; // Already perfectly rendered for this size
         }
 
@@ -409,12 +490,12 @@ export class PlotsPanel {
 
         const tmpPngPath = path.join(
             path.dirname(sourceUri.fsPath),
-            `.${path.basename(sourceUri.fsPath, '.png')}.resize-${process.pid}-${Date.now()}-${token}.tmp`
+            `.${path.basename(sourceUri.fsPath, ".png")}.resize-${process.pid}-${Date.now()}-${token}.tmp`
         );
 
         // Escape paths for R
-        const safeRdsPath = rdsPath.replace(/\\/g, '/');
-        const safeTmpPngPath = tmpPngPath.replace(/\\/g, '/');
+        const safeRdsPath = rdsPath.replace(/\\/g, "/");
+        const safeTmpPngPath = tmpPngPath.replace(/\\/g, "/");
 
         const script = `
 tryCatch({
@@ -425,66 +506,121 @@ tryCatch({
 }, error = function(e) {})
 `;
 
-        childProcess.execFile(rscriptPath, ['-e', script], { encoding: 'utf8' }, (error) => {
-            if (error) {
-                console.error('[R Lab] Dynamic resize re-rendering failed:', error);
-                try { if (fs.existsSync(tmpPngPath)) { fs.unlinkSync(tmpPngPath); } } catch {}
-                return;
-            }
-
-            if (this._resizeRenderTokens.get(cacheKey) !== token || !this._plots.some(plot => plot.fsPath === sourceUri.fsPath)) {
-                try { if (fs.existsSync(tmpPngPath)) { fs.unlinkSync(tmpPngPath); } } catch {}
-                return;
-            }
-
-            try {
-                const stats = fs.existsSync(tmpPngPath) ? fs.statSync(tmpPngPath) : undefined;
-                if (!stats || stats.size === 0) {
-                    try { if (fs.existsSync(tmpPngPath)) { fs.unlinkSync(tmpPngPath); } } catch {}
+        childProcess.execFile(
+            rscriptPath,
+            ["-e", script],
+            { encoding: "utf8" },
+            (error) => {
+                if (error) {
+                    console.error(
+                        "[R Lab] Dynamic resize re-rendering failed:",
+                        error
+                    );
+                    try {
+                        if (fs.existsSync(tmpPngPath)) {
+                            fs.unlinkSync(tmpPngPath);
+                        }
+                    } catch {}
                     return;
                 }
-                fs.renameSync(tmpPngPath, sourceUri.fsPath);
-                this._lastRenderedDims.set(cacheKey, { w, h, res, renderScale });
-            } catch (err) {
-                console.error('[R Lab] Dynamic resize replacement failed:', err);
-                try { if (fs.existsSync(tmpPngPath)) { fs.unlinkSync(tmpPngPath); } } catch {}
+
+                if (
+                    this._resizeRenderTokens.get(cacheKey) !== token ||
+                    !this._plots.some(
+                        (plot) => plot.fsPath === sourceUri.fsPath
+                    )
+                ) {
+                    try {
+                        if (fs.existsSync(tmpPngPath)) {
+                            fs.unlinkSync(tmpPngPath);
+                        }
+                    } catch {}
+                    return;
+                }
+
+                try {
+                    const stats = fs.existsSync(tmpPngPath)
+                        ? fs.statSync(tmpPngPath)
+                        : undefined;
+                    if (!stats || stats.size === 0) {
+                        try {
+                            if (fs.existsSync(tmpPngPath)) {
+                                fs.unlinkSync(tmpPngPath);
+                            }
+                        } catch {}
+                        return;
+                    }
+                    fs.renameSync(tmpPngPath, sourceUri.fsPath);
+                    this._lastRenderedDims.set(cacheKey, {
+                        w,
+                        h,
+                        res,
+                        renderScale,
+                    });
+                } catch (err) {
+                    console.error(
+                        "[R Lab] Dynamic resize replacement failed:",
+                        err
+                    );
+                    try {
+                        if (fs.existsSync(tmpPngPath)) {
+                            fs.unlinkSync(tmpPngPath);
+                        }
+                    } catch {}
+                }
+                // If successful, the file watcher picks up the modified PNG and automatically calls _render().
             }
-            // If successful, the file watcher picks up the modified PNG and automatically calls _render().
-        });
+        );
     }
 
-    private async _handleRequestPreviewRender(format: string, widthStr: string, heightStr: string, unit: string, requestId?: number): Promise<void> {
+    private async _handleRequestPreviewRender(
+        format: string,
+        widthStr: string,
+        heightStr: string,
+        unit: string,
+        requestId?: number
+    ): Promise<void> {
         if (this._currentIndex < 0) {
             return;
         }
         const sourceUri = this._plots[this._currentIndex];
 
         // Interactive SVG doesn't need R rendering
-        if (sourceUri.fsPath.includes('_interactive.svg')) {
+        if (sourceUri.fsPath.includes("_interactive.svg")) {
             return;
         }
 
-        const rdsPath = sourceUri.fsPath.replace(/\.png$/, '.rds');
+        const rdsPath = sourceUri.fsPath.replace(/\.png$/, ".rds");
         if (!fs.existsSync(rdsPath)) {
             return;
         }
 
-        const effectiveRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
-        const tmpDir = path.join(effectiveRoot, '.tmp');
+        const effectiveRoot =
+            vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
+        const tmpDir = path.join(effectiveRoot, ".R-lab", "tmp");
         if (!fs.existsSync(tmpDir)) {
             fs.mkdirSync(tmpDir, { recursive: true });
         }
 
         const token = ++this._previewRenderToken;
-        const previewPath = path.join(tmpDir, 'export_preview.png');
-        const tmpPreviewPath = path.join(tmpDir, `export_preview.${process.pid}.${Date.now()}.${token}.tmp`);
+        const previewPath = path.join(tmpDir, "export_preview.png");
+        const tmpPreviewPath = path.join(
+            tmpDir,
+            `export_preview.${process.pid}.${Date.now()}.${token}.tmp`
+        );
         const targetExt = format.toLowerCase();
-        const targetTempPath = path.join(tmpDir, `export_size_test.${targetExt}`);
-        const tmpTargetTempPath = path.join(tmpDir, `export_size_test.${process.pid}.${Date.now()}.${token}.${targetExt}.tmp`);
+        const targetTempPath = path.join(
+            tmpDir,
+            `export_size_test.${targetExt}`
+        );
+        const tmpTargetTempPath = path.join(
+            tmpDir,
+            `export_size_test.${process.pid}.${Date.now()}.${token}.${targetExt}.tmp`
+        );
 
-        const safeRdsPath = rdsPath.replace(/\\/g, '/');
-        const safePngPath = tmpPreviewPath.replace(/\\/g, '/');
-        const safeTargetTempPath = tmpTargetTempPath.replace(/\\/g, '/');
+        const safeRdsPath = rdsPath.replace(/\\/g, "/");
+        const safePngPath = tmpPreviewPath.replace(/\\/g, "/");
+        const safeTargetTempPath = tmpTargetTempPath.replace(/\\/g, "/");
 
         const rscriptPath = getRscriptPath();
         const script = `
@@ -540,10 +676,18 @@ tryCatch({
 }, error = function(e) {})
 `;
 
-        childProcess.execFile(rscriptPath, ['-e', script], (error) => {
+        childProcess.execFile(rscriptPath, ["-e", script], (error) => {
             const cleanupTemps = () => {
-                try { if (fs.existsSync(tmpPreviewPath)) { fs.unlinkSync(tmpPreviewPath); } } catch {}
-                try { if (fs.existsSync(tmpTargetTempPath)) { fs.unlinkSync(tmpTargetTempPath); } } catch {}
+                try {
+                    if (fs.existsSync(tmpPreviewPath)) {
+                        fs.unlinkSync(tmpPreviewPath);
+                    }
+                } catch {}
+                try {
+                    if (fs.existsSync(tmpTargetTempPath)) {
+                        fs.unlinkSync(tmpTargetTempPath);
+                    }
+                } catch {}
             };
 
             if (error || this._previewRenderToken !== token) {
@@ -553,13 +697,13 @@ tryCatch({
 
             if (fs.existsSync(tmpPreviewPath)) {
                 let fileSizeInBytes = 0;
-                if (targetExt === 'png') {
+                if (targetExt === "png") {
                     fileSizeInBytes = fs.statSync(tmpPreviewPath).size;
                 } else if (fs.existsSync(tmpTargetTempPath)) {
                     fileSizeInBytes = fs.statSync(tmpTargetTempPath).size;
                 }
 
-                let fileSizeStr = '';
+                let fileSizeStr = "";
                 if (fileSizeInBytes > 0) {
                     if (fileSizeInBytes < 1000) {
                         fileSizeStr = `${fileSizeInBytes} B`;
@@ -576,110 +720,155 @@ tryCatch({
                         fs.renameSync(tmpTargetTempPath, targetTempPath);
                     }
                 } catch (err) {
-                    console.error('[R Lab] Preview render replacement failed:', err);
+                    console.error(
+                        "[R Lab] Preview render replacement failed:",
+                        err
+                    );
                     cleanupTemps();
                     return;
                 }
 
-                const webviewUri = this._panel.webview.asWebviewUri(vscode.Uri.file(previewPath)).toString();
+                const webviewUri = this._panel.webview
+                    .asWebviewUri(vscode.Uri.file(previewPath))
+                    .toString();
                 this._panel.webview.postMessage({
-                    type: 'previewRendered',
+                    type: "previewRendered",
                     src: webviewUri,
                     fileSize: fileSizeStr,
-                    requestId
+                    requestId,
                 });
             }
         });
     }
 
-    private async _handleSaveAs(format: string, widthStr: string, heightStr: string, unit: string): Promise<void> {
-        if (this._currentIndex < 0) { return; }
+    private async _handleSaveAs(
+        format: string,
+        widthStr: string,
+        heightStr: string,
+        unit: string
+    ): Promise<void> {
+        if (this._currentIndex < 0) {
+            return;
+        }
         const sourceUri = this._plots[this._currentIndex];
 
         const filterName = format.toUpperCase();
         const ext = format;
 
-        const effectiveRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
-        const defaultFilename = path.basename(sourceUri.fsPath).replace('.png', `.${ext}`);
+        const effectiveRoot =
+            vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
+        const defaultFilename = path
+            .basename(sourceUri.fsPath)
+            .replace(".png", `.${ext}`);
 
         const saveUri = await vscode.window.showSaveDialog({
-            defaultUri: vscode.Uri.file(path.join(effectiveRoot, defaultFilename)),
-            filters: { [filterName]: [ext] }
+            defaultUri: vscode.Uri.file(
+                path.join(effectiveRoot, defaultFilename)
+            ),
+            filters: { [filterName]: [ext] },
         });
 
         if (saveUri) {
             try {
                 // Plot ID is the basename without extension, e.g., 'plot_00002'
-                const plotId = path.basename(sourceUri.fsPath, '.png');
+                const plotId = path.basename(sourceUri.fsPath, ".png");
                 const plotDir = path.dirname(sourceUri.fsPath);
-                const reqPath = path.join(plotDir, '..', '.plot_req');
+                const reqPath = path.join(plotDir, "..", ".plot_req");
                 const reqContent = [
                     plotId,
                     format,
                     widthStr,
                     heightStr,
                     unit,
-                    saveUri.fsPath
-                ].join('\n');
+                    saveUri.fsPath,
+                ].join("\n");
 
-                fs.writeFileSync(reqPath, reqContent, 'utf8');
+                fs.writeFileSync(reqPath, reqContent, "utf8");
 
-                vscode.window.withProgress({
-                    location: vscode.ProgressLocation.Notification,
-                    title: `Exporting plot...`,
-                    cancellable: false
-                }, async (progress) => {
-                    let attempts = 0;
-                    // Wait up to 10 seconds for the R process to consume the request
-                    while (fs.existsSync(reqPath) && attempts < 50) {
-                        await new Promise(r => setTimeout(r, 200));
-                        attempts++;
+                vscode.window.withProgress(
+                    {
+                        location: vscode.ProgressLocation.Notification,
+                        title: `Exporting plot...`,
+                        cancellable: false,
+                    },
+                    async (progress) => {
+                        let attempts = 0;
+                        // Wait up to 10 seconds for the R process to consume the request
+                        while (fs.existsSync(reqPath) && attempts < 50) {
+                            await new Promise((r) => setTimeout(r, 200));
+                            attempts++;
+                        }
+
+                        // Allow a brief moment for OS flush
+                        await new Promise((r) => setTimeout(r, 500));
+
+                        if (fs.existsSync(saveUri.fsPath)) {
+                            vscode.window.setStatusBarMessage(
+                                `Export completed: ${path.basename(saveUri.fsPath)}`,
+                                5000
+                            );
+                            // Show an auto-disappearing notification immediately after export
+                            vscode.window.withProgress(
+                                {
+                                    location:
+                                        vscode.ProgressLocation.Notification,
+                                    title: `Export completed: ${path.basename(saveUri.fsPath)}`,
+                                    cancellable: false,
+                                },
+                                async () => {
+                                    await new Promise((r) =>
+                                        setTimeout(r, 2000)
+                                    );
+                                }
+                            );
+                        } else {
+                            vscode.window.showErrorMessage(
+                                `Failed to export plot to ${path.basename(saveUri.fsPath)}. Please check directory permissions.`
+                            );
+                        }
                     }
-
-                    // Allow a brief moment for OS flush
-                    await new Promise(r => setTimeout(r, 500));
-
-                    if (fs.existsSync(saveUri.fsPath)) {
-                        vscode.window.setStatusBarMessage(`Export completed: ${path.basename(saveUri.fsPath)}`, 5000);
-                        // Show an auto-disappearing notification immediately after export
-                        vscode.window.withProgress({
-                            location: vscode.ProgressLocation.Notification,
-                            title: `Export completed: ${path.basename(saveUri.fsPath)}`,
-                            cancellable: false
-                        }, async () => {
-                            await new Promise(r => setTimeout(r, 2000));
-                        });
-                    } else {
-                        vscode.window.showErrorMessage(`Failed to export plot to ${path.basename(saveUri.fsPath)}. Please check directory permissions.`);
-                    }
-                });
+                );
             } catch (err: any) {
-                vscode.window.showErrorMessage(`Failed to export plot: ${err.message}`);
+                vscode.window.showErrorMessage(
+                    `Failed to export plot: ${err.message}`
+                );
             }
         }
     }
 
     private async _handleCopyImage(): Promise<void> {
-        if (this._plots.length === 0 || this._currentIndex < 0 || this._currentIndex >= this._plots.length) {
+        if (
+            this._plots.length === 0 ||
+            this._currentIndex < 0 ||
+            this._currentIndex >= this._plots.length
+        ) {
             return;
         }
         const currentPlotPath = this._plots[this._currentIndex].fsPath;
 
         try {
             const platform = os.platform();
-            if (platform === 'darwin') {
+            if (platform === "darwin") {
                 // macOS: copy as TIFF because JPEG/PNG sometimes loses transparency depending on the clipboard consumer
-                childProcess.execSync(`osascript -e 'set the clipboard to (read (POSIX file "${currentPlotPath}") as TIFF picture)'`);
-            } else if (platform === 'win32') {
+                childProcess.execSync(
+                    `osascript -e 'set the clipboard to (read (POSIX file "${currentPlotPath}") as TIFF picture)'`
+                );
+            } else if (platform === "win32") {
                 // Windows: use PowerShell
-                childProcess.execSync(`powershell -command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::SetImage([System.Drawing.Image]::FromFile('${currentPlotPath}'))"`);
+                childProcess.execSync(
+                    `powershell -command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::SetImage([System.Drawing.Image]::FromFile('${currentPlotPath}'))"`
+                );
             } else {
                 // Linux: requires xclip
-                childProcess.execSync(`xclip -selection clipboard -t image/png -i "${currentPlotPath}"`);
+                childProcess.execSync(
+                    `xclip -selection clipboard -t image/png -i "${currentPlotPath}"`
+                );
             }
-            vscode.window.setStatusBarMessage('Plot copied to clipboard', 4000);
+            vscode.window.setStatusBarMessage("Plot copied to clipboard", 4000);
         } catch (e: any) {
-            vscode.window.showErrorMessage(`Failed to copy plot to clipboard: ${e.message || e}`);
+            vscode.window.showErrorMessage(
+                `Failed to copy plot to clipboard: ${e.message || e}`
+            );
         }
     }
 
@@ -705,14 +894,18 @@ tryCatch({
 
         const pattern = new vscode.RelativePattern(
             vscode.Uri.file(watchDirFsPath),
-            '*.{png,jpg,jpeg,svg,gif,bmp,webp,ico}'
+            "*.{png,jpg,jpeg,svg,gif,bmp,webp,ico}"
         );
 
         this._watcher = vscode.workspace.createFileSystemWatcher(pattern);
         this._watcher.onDidCreate(async (uri) => {
-            if (this._isInteractivePlaceholder(uri)) { return; }
+            if (this._isInteractivePlaceholder(uri)) {
+                return;
+            }
             // Guard against duplicates
-            if (this._plots.some(p => p.fsPath === uri.fsPath)) { return; }
+            if (this._plots.some((p) => p.fsPath === uri.fsPath)) {
+                return;
+            }
 
             // Windows race condition prevention (Rule #15):
             // Wait for R to finish flushing the image file to disk before exposing it to the UI.
@@ -725,15 +918,19 @@ tryCatch({
                 } catch (e) {
                     // ignore ENOENT if OS hasn't materialized it yet
                 }
-                await new Promise(r => setTimeout(r, 100));
+                await new Promise((r) => setTimeout(r, 100));
             }
 
             // Second guard: prevent duplicates if another event pushed the same URI while we were waiting
-            if (this._plots.some(p => p.fsPath === uri.fsPath)) { return; }
+            if (this._plots.some((p) => p.fsPath === uri.fsPath)) {
+                return;
+            }
 
             this._plots.push(uri);
             this._plots.sort((a, b) => a.fsPath.localeCompare(b.fsPath));
-            this._currentIndex = this._plots.findIndex(p => p.fsPath === uri.fsPath);
+            this._currentIndex = this._plots.findIndex(
+                (p) => p.fsPath === uri.fsPath
+            );
             this._render();
             this._revealWithoutStealingContext();
         });
@@ -742,7 +939,7 @@ tryCatch({
             this._render();
         });
         this._watcher.onDidDelete((uri) => {
-            const idx = this._plots.findIndex(p => p.fsPath === uri.fsPath);
+            const idx = this._plots.findIndex((p) => p.fsPath === uri.fsPath);
             if (idx !== -1) {
                 this._plots.splice(idx, 1);
                 if (this._currentIndex >= this._plots.length) {
@@ -760,7 +957,8 @@ tryCatch({
         // Retain widget placeholders, clear everything else
         this._plots = [];
         this._syncWidgetPlaceholder();
-        this._currentIndex = this._plots.length > 0 ? this._plots.length - 1 : -1;
+        this._currentIndex =
+            this._plots.length > 0 ? this._plots.length - 1 : -1;
         this._render();
     }
 
@@ -776,16 +974,17 @@ tryCatch({
 
     public setWidgetPlaceholderVisible(visible: boolean): void {
         PlotsPanel._sessionHasInteractiveWidgets = visible;
-        const previous = this._currentIndex >= 0 && this._currentIndex < this._plots.length
-            ? this._plots[this._currentIndex].fsPath
-            : undefined;
+        const previous =
+            this._currentIndex >= 0 && this._currentIndex < this._plots.length
+                ? this._plots[this._currentIndex].fsPath
+                : undefined;
 
         this._syncWidgetPlaceholder();
 
         if (this._plots.length === 0) {
             this._currentIndex = -1;
         } else if (previous) {
-            const idx = this._plots.findIndex(p => p.fsPath === previous);
+            const idx = this._plots.findIndex((p) => p.fsPath === previous);
             this._currentIndex = idx >= 0 ? idx : this._plots.length - 1;
         } else {
             this._currentIndex = this._plots.length - 1;
@@ -794,15 +993,23 @@ tryCatch({
     }
 
     private _isInteractivePlaceholder(uri: vscode.Uri): boolean {
-        return path.basename(uri.fsPath).endsWith('_interactive.svg');
+        return path.basename(uri.fsPath).endsWith("_interactive.svg");
     }
 
     private _widgetPlaceholderUri(): vscode.Uri {
-        return vscode.Uri.file(path.join(this._extensionUri.fsPath, 'resources', 'widget_interactive.svg'));
+        return vscode.Uri.file(
+            path.join(
+                this._extensionUri.fsPath,
+                "resources",
+                "widget_interactive.svg"
+            )
+        );
     }
 
     private _syncWidgetPlaceholder(): void {
-        this._plots = this._plots.filter(p => !this._isInteractivePlaceholder(p));
+        this._plots = this._plots.filter(
+            (p) => !this._isInteractivePlaceholder(p)
+        );
         if (PlotsPanel._sessionHasInteractiveWidgets) {
             this._plots.push(this._widgetPlaceholderUri());
         }
@@ -826,13 +1033,26 @@ tryCatch({
             return;
         }
 
-        const exts = new Set(['.png', '.jpg', '.jpeg', '.svg', '.gif', '.bmp', '.webp', '.ico']);
-        const existing = new Set(this._plots.map(u => u.fsPath));
+        const exts = new Set([
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".svg",
+            ".gif",
+            ".bmp",
+            ".webp",
+            ".ico",
+        ]);
+        const existing = new Set(this._plots.map((u) => u.fsPath));
 
         let added = 0;
         for (const file of fs.readdirSync(dir)) {
-            if (!exts.has(path.extname(file).toLowerCase())) { continue; }
-            if (file.endsWith('_interactive.svg')) { continue; }
+            if (!exts.has(path.extname(file).toLowerCase())) {
+                continue;
+            }
+            if (file.endsWith("_interactive.svg")) {
+                continue;
+            }
             const uri = vscode.Uri.file(path.join(dir, file));
             if (!existing.has(uri.fsPath)) {
                 this._plots.push(uri);
@@ -844,7 +1064,8 @@ tryCatch({
             this._plots.sort((a, b) => a.fsPath.localeCompare(b.fsPath));
         }
         this._syncWidgetPlaceholder();
-        this._currentIndex = this._plots.length > 0 ? this._plots.length - 1 : -1;
+        this._currentIndex =
+            this._plots.length > 0 ? this._plots.length - 1 : -1;
         if (added > 0 || PlotsPanel._sessionHasInteractiveWidgets) {
             this._render();
         }
@@ -856,7 +1077,10 @@ tryCatch({
         if (!this._panel.visible) {
             // Do not reveal if it would hide the currently active text editor
             const activeEditor = vscode.window.activeTextEditor;
-            if (activeEditor && activeEditor.viewColumn === this._panel.viewColumn) {
+            if (
+                activeEditor &&
+                activeEditor.viewColumn === this._panel.viewColumn
+            ) {
                 // The panel is in the same group as the user's active code.
                 // Revealing it would hide their code, causing "No text editor active" errors
                 // when running R commands. Do nothing.
@@ -869,20 +1093,30 @@ tryCatch({
 
     private _render(): void {
         if (!this._panel.webview.html) {
-            this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
+            this._panel.webview.html = this._getHtmlForWebview(
+                this._panel.webview
+            );
         } else {
             this._postState();
         }
     }
 
     private _postState(overrideIsPoppedOut?: boolean): void {
-        const plots = this._plots.map(uri => this._panel.webview.asWebviewUri(uri).toString() + `?t=${Date.now()}`);
+        const plots = this._plots.map(
+            (uri) =>
+                this._panel.webview.asWebviewUri(uri).toString() +
+                `?t=${Date.now()}`
+        );
 
-        const isPoppedOut = overrideIsPoppedOut !== undefined ? overrideIsPoppedOut : (this._panel.viewColumn !== vscode.ViewColumn.Three && this._panel.viewColumn !== undefined);
+        const isPoppedOut =
+            overrideIsPoppedOut !== undefined
+                ? overrideIsPoppedOut
+                : this._panel.viewColumn !== vscode.ViewColumn.Three &&
+                  this._panel.viewColumn !== undefined;
         const actualMinimized = isPoppedOut ? false : this._isMinimized;
 
         this._panel.webview.postMessage({
-            type: 'updateState',
+            type: "updateState",
             state: {
                 plots: plots,
                 currentIndex: this._currentIndex,
@@ -890,17 +1124,21 @@ tryCatch({
                 minimized: actualMinimized,
                 customPlotDir: this._customPlotDir,
                 lastDirAction: this._lastDirAction,
-                isPoppedOut: isPoppedOut
-            }
+                isPoppedOut: isPoppedOut,
+            },
         });
     }
 
     private _getHtmlForWebview(webview: vscode.Webview): string {
         const nonce = getNonce();
-        const isPoppedOut = this._panel.viewColumn !== vscode.ViewColumn.Three && this._panel.viewColumn !== undefined;
+        const isPoppedOut =
+            this._panel.viewColumn !== vscode.ViewColumn.Three &&
+            this._panel.viewColumn !== undefined;
 
-        const moonIcon = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786z"/></svg>';
-        const sunIcon = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2A.5.5 0 018 0zm0 13a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2A.5.5 0 018 13zm8-5a.5.5 0 01-.5.5h-2a.5.5 0 010-1h2a.5.5 0 01.5.5zM3 8a.5.5 0 01-.5.5h-2a.5.5 0 010-1h2A.5.5 0 013 8zm10.657-5.657a.5.5 0 010 .707l-1.414 1.415a.5.5 0 11-.707-.708l1.414-1.414a.5.5 0 01.707 0zm-9.193 9.193a.5.5 0 010 .707L3.05 13.657a.5.5 0 01-.707-.707l1.414-1.414a.5.5 0 01.707 0zm9.193 2.121a.5.5 0 01-.707 0l-1.414-1.414a.5.5 0 01.707-.707l1.414 1.414a.5.5 0 010 .707zM4.464 2.343a.5.5 0 01-.707 0L2.343 3.757a.5.5 0 11.707.707l1.414-1.414a.5.5 0 010-.707z"/></svg>';
+        const moonIcon =
+            '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786z"/></svg>';
+        const sunIcon =
+            '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2A.5.5 0 018 0zm0 13a.5.5 0 01.5.5v2a.5.5 0 01-1 0v-2A.5.5 0 018 13zm8-5a.5.5 0 01-.5.5h-2a.5.5 0 010-1h2a.5.5 0 01.5.5zM3 8a.5.5 0 01-.5.5h-2a.5.5 0 010-1h2A.5.5 0 013 8zm10.657-5.657a.5.5 0 010 .707l-1.414 1.415a.5.5 0 11-.707-.708l1.414-1.414a.5.5 0 01.707 0zm-9.193 9.193a.5.5 0 010 .707L3.05 13.657a.5.5 0 01-.707-.707l1.414-1.414a.5.5 0 01.707 0zm9.193 2.121a.5.5 0 01-.707 0l-1.414-1.414a.5.5 0 01.707-.707l1.414 1.414a.5.5 0 010 .707zM4.464 2.343a.5.5 0 01-.707 0L2.343 3.757a.5.5 0 11.707.707l1.414-1.414a.5.5 0 010-.707z"/></svg>';
 
         return /* html */ `<!DOCTYPE html>
 <html lang="en">
@@ -1671,7 +1909,7 @@ tryCatch({
         }
     </style>
 </head>
-<body${this._isMinimized ? ' class="minimized"' : ''}>
+<body${this._isMinimized ? ' class="minimized"' : ""}>
     <div class="toolbar">
         <div class="nav-controls">
             <button id="btn-prev" disabled data-tooltip="Previous Plot"><svg viewBox="0 0 16 16"><path fill="currentColor" d="M11.354 1.646L12.061 2.354 6.414 8l5.647 5.646-.707.708L5 8l6.354-6.354z"/></svg></button>
@@ -1709,7 +1947,7 @@ tryCatch({
                 <button id="btn-compare-options" style="display: none;" data-tooltip="Compare Options"><svg viewBox="0 0 16 16"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M7.976 10.072l4.357-4.357.62.618L8.284 11h-.618L3 6.333l.619-.618 4.357 4.357z"/></svg></button>
             </div>
             <button id="btn-custom-dir" class="btn-custom-dir" data-tooltip="Set Custom Plot Directory"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="m7.52 2c-0.00591-2.1e-4 -0.0118-3.1e-4 -0.0178-3.1e-4l-1.2-1.6c-0.0932-0.124-0.214-0.225-0.353-0.294-0.139-0.0694-0.292-0.106-0.447-0.106h-3.5c-0.53 0-1.04 0.211-1.41 0.586-0.375 0.375-0.586 0.884-0.586 1.41v10c0 0.53 0.211 1.04 0.586 1.41 0.375 0.375 0.884 0.586 1.41 0.586h4v-1h-4c-0.265 0-0.52-0.105-0.707-0.293-0.188-0.188-0.293-0.442-0.293-0.707v-7l3.88 3e-5c0.203 1.9e-4 0.383 3.5e-4 0.557-0.0415 0.153-0.0368 0.299-0.0974 0.434-0.18 0.153-0.0936 0.279-0.221 0.423-0.365l1.41-1.41h6.29c0.265 0 0.52 0.105 0.707 0.293s0.293 0.442 0.293 0.707v2h1v-2c0-0.53-0.211-1.04-0.586-1.41s-0.884-0.586-1.41-0.586h-6.48zm-2.02-1 1.2 1.6-1.08 1.08c-0.19 0.19-0.229 0.225-0.268 0.248-0.0447 0.0274-0.0935 0.0476-0.145 0.0599-0.0442 0.0106-0.0969 0.0138-0.365 0.0138h-3.84v-2c0-0.265 0.105-0.52 0.293-0.707 0.188-0.188 0.442-0.293 0.707-0.293h3.5z" clip-rule="evenodd" fill="currentColor" fill-rule="evenodd"/><path d="m11.5 7c0.276 0 0.5 0.224 0.5 0.5v3.5h3.5c0.276 0 0.5 0.224 0.5 0.5s-0.224 0.5-0.5 0.5h-3.5v3.5c0 0.276-0.224 0.5-0.5 0.5s-0.5-0.224-0.5-0.5v-3.5h-3.5c-0.276 0-0.5-0.224-0.5-0.5s0.224-0.5 0.5-0.5h3.5v-3.5c0-0.276 0.224-0.5 0.5-0.5z" fill="currentColor"/></svg></button>
-            <button id="btn-popout" data-tooltip="${isPoppedOut ? 'Restore to Side Panel' : 'Pop-out to Main Editor'}"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/><path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/></svg></button>
+            <button id="btn-popout" data-tooltip="${isPoppedOut ? "Restore to Side Panel" : "Pop-out to Main Editor"}"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" fill="currentColor"><path d="M1.5 1H6v1H2v12h12v-4h1v4.5l-.5.5h-13l-.5-.5v-13l.5-.5z"/><path d="M15 1.5V6h-1V2.707L7.854 8.854l-.708-.708L13.293 2H10V1h4.5l.5.5z"/></svg></button>
             <div id="toolbar-overflow" class="toolbar-overflow">
                 <button id="btn-toolbar-overflow" data-tooltip="More Tools">...</button>
                 <div id="toolbar-overflow-menu" class="toolbar-overflow-menu"></div>
@@ -1859,11 +2097,11 @@ tryCatch({
         const sunIcon = \`${sunIcon}\`;
 
         const initialState = {
-            plots: ${JSON.stringify(this._plots.map(uri => webview.asWebviewUri(uri).toString() + '?t=' + Date.now()))},
+            plots: ${JSON.stringify(this._plots.map((uri) => webview.asWebviewUri(uri).toString() + "?t=" + Date.now()))},
             currentIndex: ${this._currentIndex},
             isNightMode: ${this._isNightMode},
             minimized: ${this._isMinimized},
-            customPlotDir: ${JSON.stringify(this._customPlotDir || '')},
+            customPlotDir: ${JSON.stringify(this._customPlotDir || "")},
             lastDirAction: ${JSON.stringify(this._lastDirAction || null)},
             isPoppedOut: isPoppedOut
         };
@@ -3003,7 +3241,9 @@ tryCatch({
         this._panel.dispose();
         while (this._disposables.length) {
             const d = this._disposables.pop();
-            if (d) { d.dispose(); }
+            if (d) {
+                d.dispose();
+            }
         }
     }
 }
