@@ -4,7 +4,7 @@
 
 An RStudio-inspired development environment for R in VS Code.
 
-![R Lab Showcase](resources/r_lab_showcase.png)
+![R Lab Showcase](https://raw.githubusercontent.com/oridwanbello/r-lab/main/resources/r_lab_showcase.png)
 
 > [!NOTE]
 > This extension is currently in preview. We are actively refining the layout and feature set. Please report any issues on GitHub!
