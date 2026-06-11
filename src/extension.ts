@@ -4,7 +4,7 @@ import { initializeRPathResolver } from './utils/rPathResolver';
 import { PlotsPanel } from './panels/plotsPanel';
 
 export async function activate(context: vscode.ExtensionContext) {
-    console.log('R Layout extension is now active.');
+    console.log('R Lab extension is now active.');
 
     // Immediate layout guard (fire-and-forget)
     fireImmediateLayoutReset(context);
@@ -15,7 +15,7 @@ export async function activate(context: vscode.ExtensionContext) {
     // Re-resolve if R configuration changes
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration(e => {
-            if (e.affectsConfiguration('r-layout.rConsolePath') || e.affectsConfiguration('r')) {
+            if (e.affectsConfiguration('r-lab.rConsolePath') || e.affectsConfiguration('r')) {
                 initializeRPathResolver();
             }
         })

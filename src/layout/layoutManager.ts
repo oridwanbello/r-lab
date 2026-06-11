@@ -13,7 +13,7 @@ import { VisualsPanel } from '../panels/visualsPanel';
 import { getRPath, getRArgs } from '../utils/rPathResolver';
 
 /**
- * R Layout Layout Manager
+ * R Lab Layout Manager
  *
  * Orchestrates an asymmetrical 3-pane RStudio-style layout:
  *
@@ -72,7 +72,7 @@ export function recordLayoutFocus(label: string, viewColumn: vscode.ViewColumn |
     lastActiveGroupColumn = viewColumn;
 }
 
-const STATE_KEY = 'r-layout.layoutActive';
+const STATE_KEY = 'r-lab.layoutActive';
 
 // Registration
 
@@ -97,20 +97,20 @@ export function registerLayoutCommand(
         vscode.StatusBarAlignment.Right,
         100
     );
-    statusBarItem.command = 'r-layout.toggleLayout';
+    statusBarItem.command = 'r-lab.toggleLayout';
     updateStatusBar();
     statusBarItem.show();
     context.subscriptions.push(statusBarItem);
 
     // Layout Toggle Command
     context.subscriptions.push(
-        vscode.commands.registerCommand("r-layout.activate", () => {
+        vscode.commands.registerCommand("r-lab.activate", () => {
             activateLayout(context);
         })
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand("r-layout.focusViewer", () => {
+        vscode.commands.registerCommand("r-lab.focusViewer", () => {
             if (VisualsPanel.currentPanel) {
                 VisualsPanel.currentPanel.revealTarget('viewer');
             } else {
@@ -120,7 +120,7 @@ export function registerLayoutCommand(
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('r-layout.toggleLayout', async () => {
+        vscode.commands.registerCommand('r-lab.toggleLayout', async () => {
             if (isLayoutActive) {
                 await deactivateLayout();
             } else {
@@ -131,10 +131,10 @@ export function registerLayoutCommand(
 
     // Utility Commands
     context.subscriptions.push(
-        vscode.commands.registerCommand('r-layout.noop', () => {})
+        vscode.commands.registerCommand('r-lab.noop', () => {})
     );
     context.subscriptions.push(
-        vscode.commands.registerCommand('r-layout.syncWidgetPlaceholder', () => {
+        vscode.commands.registerCommand('r-lab.syncWidgetPlaceholder', () => {
             const hasWidgets = ViewerPanel.currentPanel?.hasInteractiveWidgetHistory() ?? false;
             PlotsPanel.currentPanel?.setWidgetPlaceholderVisible(hasWidgets);
         })
@@ -164,7 +164,7 @@ export function registerLayoutCommand(
 
         // Ensure we have a live R Console terminal
         if (!rConsoleTerminal) {
-            vscode.window.showWarningMessage('R Console is not running. Activate R Layout first.');
+            vscode.window.showWarningMessage('R Console is not running. Activate R Lab first.');
             return;
         }
 
@@ -181,7 +181,7 @@ export function registerLayoutCommand(
     };
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('r-layout.sourceFile', doSourceFile)
+        vscode.commands.registerCommand('r-lab.sourceFile', doSourceFile)
     );
 
     // Run Selection in R Console
@@ -209,7 +209,7 @@ export function registerLayoutCommand(
         }
 
         if (!rConsoleTerminal) {
-            vscode.window.showWarningMessage('R Console is not running. Activate R Layout first.');
+            vscode.window.showWarningMessage('R Console is not running. Activate R Lab first.');
             return;
         }
 
@@ -218,7 +218,7 @@ export function registerLayoutCommand(
         // Bracketed paste is strictly required for radian to process multiline selections.
         // We determine if we should use bracketed paste based on the user's explicit Console Type setting,
         // or auto-detect it from the path if set to Auto Detect.
-        const layoutConfig = vscode.workspace.getConfiguration('r-layout');
+        const layoutConfig = vscode.workspace.getConfiguration('r-lab');
         const rConsoleType = layoutConfig.get<string>('rConsoleType', 'Auto Detect');
         const rConsolePath = layoutConfig.get<string>('rConsolePath', 'R');
 
@@ -241,7 +241,7 @@ export function registerLayoutCommand(
     };
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('r-layout.runSelection', doRunSelection)
+        vscode.commands.registerCommand('r-lab.runSelection', doRunSelection)
     );
 
     // Run Smart: Run selection if there is one, otherwise source file.
@@ -261,7 +261,7 @@ export function registerLayoutCommand(
     };
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('r-layout.runSmart', doRunSmart)
+        vscode.commands.registerCommand('r-lab.runSmart', doRunSmart)
     );
 
     // Resize Commands
@@ -276,7 +276,7 @@ export function registerLayoutCommand(
     //           works correctly when the window is later resized.
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('r-layout.maximizeTopRight', async () => {
+        vscode.commands.registerCommand('r-lab.maximizeTopRight', async () => {
             if (!isLayoutActive) {
                 return;
             }
@@ -303,15 +303,15 @@ export function registerLayoutCommand(
                     ]
                 });
 
-                await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', true);
+                await vscode.commands.executeCommand('setContext', 'r-lab.isTopRightMaximized', true);
             } catch {
                 WorkspacePanel.currentPanel?.setMinimized(false);
                 VisualsPanel.currentPanel?.setMinimized(false);
                 DataViewerPanel.currentPanel?.setMinimized(false);
-                await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', false);
+                await vscode.commands.executeCommand('setContext', 'r-lab.isTopRightMaximized', false);
             }
         }),
-        vscode.commands.registerCommand('r-layout.restoreRightSplit', async () => {
+        vscode.commands.registerCommand('r-lab.restoreRightSplit', async () => {
             if (!isLayoutActive) {
                 return;
             }
@@ -364,7 +364,7 @@ export function registerLayoutCommand(
             // Restore webview content only after the split has real dimensions.
             VisualsPanel.currentPanel?.restoreActivePlotlyWidgetAfterPaneSplit();
 
-            await vscode.commands.executeCommand('setContext', 'r-layout.isTopRightMaximized', false);
+            await vscode.commands.executeCommand('setContext', 'r-lab.isTopRightMaximized', false);
         })
     );
 
@@ -378,18 +378,18 @@ export function registerLayoutCommand(
                 savedViewerState = undefined;
                 PlotsPanel.resetSessionState();
 
-                // Delete .R-layout directory to prevent left-over files
-                deleteRLayoutDir();
+                // Delete .R-lab directory to prevent left-over files
+                deleteRLabDir();
 
                 // If the layout is active, closing the R Console should trigger an exit
                 if (isLayoutActive) {
-                    vscode.window.showInformationMessage('R Console session ended. Exiting R Layout.');
+                    vscode.window.showInformationMessage('R Console session ended. Exiting R Lab.');
                     await deactivateLayout();
                 }
             }
             if (t === shellTerminal) {
                 shellTerminal = undefined;
-                if (isLayoutActive && vscode.workspace.getConfiguration('r-layout').get<boolean>('protectLayoutTabs', true)) {
+                if (isLayoutActive && vscode.workspace.getConfiguration('r-lab').get<boolean>('protectLayoutTabs', true)) {
                     await recreateProtectedShellTerminal();
                 }
             }
@@ -476,21 +476,21 @@ export async function resetStaleLayout(
         const cfgTarget = getConfigTarget();
         const wsConfig = vscode.workspace.getConfiguration();
 
-        const origClose = context.workspaceState.get<boolean | undefined>('r-layout.origCloseEmptyGroups', undefined);
+        const origClose = context.workspaceState.get<boolean | undefined>('r-lab.origCloseEmptyGroups', undefined);
 
         await Promise.all([
             Promise.resolve(
                 wsConfig.update('workbench.editor.closeEmptyGroups', origClose, cfgTarget)
             ).catch(() => {}),
             Promise.resolve(
-                context.workspaceState.update('r-layout.origCloseEmptyGroups', undefined)
+                context.workspaceState.update('r-lab.origCloseEmptyGroups', undefined)
             ).catch(() => {})
         ]);
     } catch {}
 
     // CONDITIONAL stale-layout cleanup
     // Only close editors and reset the layout if there are actually
-    // stale elements from a previous R Layout session:
+    // stale elements from a previous R Lab session:
     //   - more than one editor group (leftover 3-pane grid), OR
     //   - webview / notebook tabs (our panel singletons) still open
     // On a clean startup with no stale layout this is a no-op,
@@ -573,20 +573,20 @@ export async function resetStaleLayout(
  * layout to its session store, so on the next startup there is nothing
  * multi-group to restore - and the flash never happens.
  *
- * Without this, when the user reloads while R Layout is active, VS Code
+ * Without this, when the user reloads while R Lab is active, VS Code
  * saves the 4-group layout, restores it on reload (flash!), and only then
  * our activation code can collapse it.
  */
 export async function collapseLayoutForShutdown(): Promise<void> {
-    // Always clean up the .R-layout temp directory on shutdown.
-    deleteRLayoutDir();
+    // Always clean up the .R-lab temp directory on shutdown.
+    deleteRLabDir();
 
     if (!isLayoutActive) {
         // Layout wasn't active - no layout state to collapse.
         return;
     }
 
-    console.log('[R Layout] deactivate(): collapsing layout before state is saved.');
+    console.log('[R Lab] deactivate(): collapsing layout before state is saved.');
 
     // Determine config target once, synchronously, before we fan out.
     const cfgTarget = getConfigTarget();
@@ -622,7 +622,7 @@ export async function collapseLayoutForShutdown(): Promise<void> {
         // 3 Reset settings
         (() => {
             const origClose = extensionContext
-                ? extensionContext.workspaceState.get<boolean | undefined>('r-layout.origCloseEmptyGroups', undefined)
+                ? extensionContext.workspaceState.get<boolean | undefined>('r-lab.origCloseEmptyGroups', undefined)
                 : undefined;
 
             return Promise.all([
@@ -631,7 +631,7 @@ export async function collapseLayoutForShutdown(): Promise<void> {
                 ).catch(() => {}),
                 extensionContext
                     ? Promise.resolve(
-                          extensionContext.workspaceState.update('r-layout.origCloseEmptyGroups', undefined)
+                          extensionContext.workspaceState.update('r-lab.origCloseEmptyGroups', undefined)
                       ).catch(() => {})
                     : Promise.resolve()
             ]);
@@ -644,14 +644,14 @@ export async function collapseLayoutForShutdown(): Promise<void> {
 async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     return vscode.window.withProgress({
         location: vscode.ProgressLocation.Notification,
-        title: 'Activating R Layout...',
+        title: 'Activating R Lab...',
         cancellable: false
     }, async () => {
     activationInProgress = true;
     // 1. Load saved positions, and Save references to all currently open TEXT files
     //    so we can reopen them after setting the layout.
-    const textFilePositions = context.workspaceState.get<Record<string, number>>('r-layout.textFilePositions', {});
-    let panelPositions = context.workspaceState.get<Record<string, number>>('r-layout.panelPositions', {});
+    const textFilePositions = context.workspaceState.get<Record<string, number>>('r-lab.textFilePositions', {});
+    let panelPositions = context.workspaceState.get<Record<string, number>>('r-lab.panelPositions', {});
 
     // --- Layout Integrity Check ---
     // If the layout was closed prematurely or tabs were deleted in a previous session,
@@ -683,10 +683,10 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         }
     }
 
-    // 2. Close stale R Layout panels from previous sessions.
+    // 2. Close stale R Lab panels from previous sessions.
     //    We explicitly PRESERVE the Help tab and any Chat tabs so their sessions survive layout toggles.
     //    We preserve TabInputText so the user's source files remain open.
-    const config = vscode.workspace.getConfiguration('r-layout');
+    const config = vscode.workspace.getConfiguration('r-lab');
     const restoreCustom = config.get<boolean>('restoreCustomPanelPositions', false);
 
     for (const group of vscode.window.tabGroups.all) {
@@ -719,10 +719,10 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     // 5. Set context key (for keybinding "when" clauses)
     await vscode.commands.executeCommand(
-        'setContext', 'r-layout.layoutActive', true
+        'setContext', 'r-lab.layoutActive', true
     );
     await vscode.commands.executeCommand(
-        'setContext', 'r-layout.isTopRightMaximized', false
+        'setContext', 'r-lab.isTopRightMaximized', false
     );
 
     // 6. Apply workspace overrides
@@ -730,7 +730,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     const wsConfig = vscode.workspace.getConfiguration();
 
     // Inspect and save original user settings before modifying them
-    const existingOrigClose = extensionContext.workspaceState.get<boolean | undefined>('r-layout.origCloseEmptyGroups', undefined);
+    const existingOrigClose = extensionContext.workspaceState.get<boolean | undefined>('r-lab.origCloseEmptyGroups', undefined);
     if (existingOrigClose === undefined) {
         const inspectionClose = wsConfig.inspect<boolean>('workbench.editor.closeEmptyGroups');
         const origClose = cfgTarget === vscode.ConfigurationTarget.Workspace ? inspectionClose?.workspaceValue : inspectionClose?.globalValue;
@@ -738,7 +738,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         // because of a previous stuck state, we just save undefined. A genuine user setting would be fine to lose
         // in favor of default behavior (undefined) rather than permanently polluting settings.json.
         const safeOrigClose = (origClose === false) ? undefined : origClose;
-        await extensionContext.workspaceState.update('r-layout.origCloseEmptyGroups', safeOrigClose);
+        await extensionContext.workspaceState.update('r-lab.origCloseEmptyGroups', safeOrigClose);
     }
 
     await wsConfig.update('workbench.editor.closeEmptyGroups', false, cfgTarget);
@@ -823,7 +823,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         // running and its variables are still live - do NOT wipe the data file.
         const wf = getEffectiveWorkspaceRoot();
         if (!wasRConsoleReused) {
-            const staleFile = path.join(wf, '.R-layout', '.workspace_data.json');
+            const staleFile = path.join(wf, '.R-lab', '.workspace_data.json');
             try { fs.unlinkSync(staleFile); } catch {}
 
             // NEW: Clear R Help state for brand-new R sessions
@@ -835,11 +835,11 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         const rProfileEnv: Record<string, string> = {};
         if (watcherPath) {
             rProfileEnv['R_PROFILE_USER'] = watcherPath;
-            rProfileEnv['R_LAYOUT_SESSION'] = '1';
+            rProfileEnv['R_LAB_SESSION'] = '1';
             const existing = process.env['R_PROFILE_USER'];
             if (existing) { rProfileEnv['R_PROFILE_USER_ORIG'] = existing; }
         }
-        console.log(`[R Layout] rProfileEnv=${JSON.stringify(rProfileEnv)}, wasRConsoleReused=${wasRConsoleReused}, rConsoleTerminal=${!!rConsoleTerminal}`);
+        console.log(`[R Lab] rProfileEnv=${JSON.stringify(rProfileEnv)}, wasRConsoleReused=${wasRConsoleReused}, rConsoleTerminal=${!!rConsoleTerminal}`);
 
         // Merge process.env and user settings to emulate normal terminal env while using strictEnv
         const platform = os.platform() === 'win32' ? 'windows' : (os.platform() === 'darwin' ? 'osx' : 'linux');
@@ -856,7 +856,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
                         tab.label.includes('R Console');
                 })
             );
-            console.log(`[R Layout] Reusing rConsoleTerminal, isEditorTab=${rConsoleIsEditorTab}`);
+            console.log(`[R Lab] Reusing rConsoleTerminal, isEditorTab=${rConsoleIsEditorTab}`);
 
             if (rConsoleIsEditorTab) {
                 // Already an editor tab - just reveal it without moving.
@@ -877,7 +877,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
         } else {
             const shellPath = getRPath();
             const cwdPath = getEffectiveWorkspaceRoot();
-            console.log(`[R Layout] Creating NEW R Console: shellPath=${shellPath}, cwd=${cwdPath}, env keys=${Object.keys(rProfileEnv).join(',')}`);
+            console.log(`[R Lab] Creating NEW R Console: shellPath=${shellPath}, cwd=${cwdPath}, env keys=${Object.keys(rProfileEnv).join(',')}`);
             const isWindows = os.platform() === 'win32';
             rConsoleTerminal = vscode.window.createTerminal({
                 name: 'R Console',
@@ -961,7 +961,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     const dataPanel = DataViewerPanel.createOrShow(context.extensionUri, vscode.ViewColumn.Three, !restoreCustom);
     const visualsState = VisualsPanel.lastClosedState ?? (savedViewerState ? { viewerState: savedViewerState } : undefined);
     if (visualsState) { visualsPanel.loadState(visualsState); }
-    await vscode.commands.executeCommand('r-layout.syncWidgetPlaceholder');
+    await vscode.commands.executeCommand('r-lab.syncWidgetPlaceholder');
 
     if (!restoreCustom) {
         workspacePanel.reveal(); // restore Workspace as the focused tab in Group 3
@@ -971,7 +971,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     if (!viewerWatcher) {
         const wf = getEffectiveWorkspaceRoot();
-        const pattern = new vscode.RelativePattern(vscode.Uri.file(path.join(wf, '.R-layout')), 'viewer_url.txt');
+        const pattern = new vscode.RelativePattern(vscode.Uri.file(path.join(wf, '.R-lab')), 'viewer_url.txt');
         viewerWatcher = vscode.workspace.createFileSystemWatcher(pattern);
         let lastViewerLineCount = 0;
 
@@ -979,7 +979,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
             if (!isLayoutActive) {
                 return;
             }
-            const urlPath = path.join(wf, '.R-layout', 'viewer_url.txt');
+            const urlPath = path.join(wf, '.R-lab', 'viewer_url.txt');
             try {
                 let content = '';
                 // Wait for file creation + flush
@@ -1026,13 +1026,13 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 
     if (!dvWatcher) {
         const wf = getEffectiveWorkspaceRoot();
-        const pattern = new vscode.RelativePattern(vscode.Uri.file(path.join(wf, '.R-layout')), 'dv-meta.txt');
+        const pattern = new vscode.RelativePattern(vscode.Uri.file(path.join(wf, '.R-lab')), 'dv-meta.txt');
         dvWatcher = vscode.workspace.createFileSystemWatcher(pattern);
         const dvHandler = async () => {
             if (!isLayoutActive) {
                 return;
             }
-            const metaPath = path.join(wf, '.R-layout', 'dv-meta.txt');
+            const metaPath = path.join(wf, '.R-lab', 'dv-meta.txt');
             try {
                 let raw = '';
                 // Windows watchers often fire on file creation before content is fully flushed.
@@ -1110,7 +1110,7 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
     }
 
     // Reposition custom panels
-    const restoreCustomPositions = vscode.workspace.getConfiguration('r-layout').get<boolean>('restoreCustomPanelPositions', false);
+    const restoreCustomPositions = vscode.workspace.getConfiguration('r-lab').get<boolean>('restoreCustomPanelPositions', false);
     if (restoreCustomPositions) {
         if (panelPositions['tools'] && panelPositions['tools'] !== vscode.ViewColumn.Two) {
             const panel = ToolsPanel.createOrShow(context.extensionUri, panelPositions['tools']);
@@ -1228,15 +1228,15 @@ async function activateLayout(context: vscode.ExtensionContext): Promise<void> {
 async function deactivateLayout(): Promise<void> {
     return vscode.window.withProgress({
         location: vscode.ProgressLocation.Notification,
-        title: 'Deactivating R Layout...',
+        title: 'Deactivating R Lab...',
         cancellable: false
     }, async () => {
     // 1. Clear context key
     await vscode.commands.executeCommand(
-        'setContext', 'r-layout.layoutActive', false
+        'setContext', 'r-lab.layoutActive', false
     );
     await vscode.commands.executeCommand(
-        'setContext', 'r-layout.isTopRightMaximized', false
+        'setContext', 'r-lab.isTopRightMaximized', false
     );
 
     // 2. Dispose layout guards immediately so they don't interfere
@@ -1279,23 +1279,23 @@ async function deactivateLayout(): Promise<void> {
     }
 
     // Save to workspaceState
-    await extensionContext.workspaceState.update('r-layout.textFilePositions', textFilePositions);
-    await extensionContext.workspaceState.update('r-layout.panelPositions', panelPositions);
+    await extensionContext.workspaceState.update('r-lab.textFilePositions', textFilePositions);
+    await extensionContext.workspaceState.update('r-lab.panelPositions', panelPositions);
 
     // Save Help state to in-memory variable before disposing
     if (ToolsPanel.currentPanel) {
         savedHelpState = ToolsPanel.currentPanel.saveState();
-        await extensionContext.workspaceState.update('r-layout.helpState', undefined);
+        await extensionContext.workspaceState.update('r-lab.helpState', undefined);
     } else if (HelpPanel.currentPanel) {
         savedHelpState = HelpPanel.currentPanel.saveState();
-        await extensionContext.workspaceState.update('r-layout.helpState', undefined);
+        await extensionContext.workspaceState.update('r-lab.helpState', undefined);
     }
 
     // Save Data Viewer state to in-memory variable before disposing
     if (DataViewerPanel.currentPanel) {
         savedDataViewerState = DataViewerPanel.currentPanel.saveState();
         // Clear workspaceState in case it was used previously
-        await extensionContext.workspaceState.update('r-layout.dataViewerState', undefined);
+        await extensionContext.workspaceState.update('r-lab.dataViewerState', undefined);
     }
 
     // Save Viewer/Visuals state to in-memory variable before disposing
@@ -1303,16 +1303,16 @@ async function deactivateLayout(): Promise<void> {
         const visualsState = VisualsPanel.currentPanel.saveState();
         savedViewerState = visualsState.viewerState;
         VisualsPanel.lastClosedState = visualsState;
-        await extensionContext.workspaceState.update('r-layout.viewerState', undefined);
+        await extensionContext.workspaceState.update('r-lab.viewerState', undefined);
     }
     if (ViewerPanel.currentPanel) {
         savedViewerState = ViewerPanel.currentPanel.saveState();
-        await extensionContext.workspaceState.update('r-layout.viewerState', undefined);
+        await extensionContext.workspaceState.update('r-lab.viewerState', undefined);
     }
 
     // Ensure focus is on a text editor before disposing panels to avoid
     // "No active text editor" warnings from vscode-R when the active tab is
-    // a popped-out R Layout webview in the main editor area.
+    // a popped-out R Lab webview in the main editor area.
     await focusTextEditorBeforePanelDisposal(sourceFiles);
 
     // 4. Dispose panel singletons (closes our Webview tabs). VS Code can clear
@@ -1333,19 +1333,19 @@ async function deactivateLayout(): Promise<void> {
     const cfgTarget = getConfigTarget();
     const wsConfig = vscode.workspace.getConfiguration();
 
-    const origClose = extensionContext.workspaceState.get<boolean | undefined>('r-layout.origCloseEmptyGroups', undefined);
+    const origClose = extensionContext.workspaceState.get<boolean | undefined>('r-lab.origCloseEmptyGroups', undefined);
 
     await Promise.all([
         Promise.resolve(
             wsConfig.update('workbench.editor.closeEmptyGroups', origClose, cfgTarget)
         ).catch(() => {}),
         Promise.resolve(
-            extensionContext.workspaceState.update('r-layout.origCloseEmptyGroups', undefined)
+            extensionContext.workspaceState.update('r-lab.origCloseEmptyGroups', undefined)
         ).catch(() => {})
     ]);
     await delay(100); // Give VS Code backend time to register the setting change
 
-    // 6. Move only R Layout terminals back to the bottom panel.
+    // 6. Move only R Lab terminals back to the bottom panel.
     //    We target ONLY our terminals by reference, not all editor terminals.
     //    This prevents moving third-party terminals (e.g. Python Debugger) which
     //    can corrupt panel state and cause PTY crashes on reactivation.
@@ -1498,15 +1498,15 @@ function registerLayoutGuards(context: vscode.ExtensionContext): void {
         ToolsPanel.viewType,
     ]);
     const allowedGroup3ViewTypes = new Set([
-        'r-layout.workspacePanel',
+        'r-lab.workspacePanel',
         VisualsPanel.viewType,
         VisualsPanel.legacyViewType,
-        'r-layout.dataViewerPanel',
+        'r-lab.dataViewerPanel',
     ]);
 
     const tabAndTermGuard = vscode.window.tabGroups.onDidChangeTabs(async (e) => {
         if (!isLayoutActive || activationInProgress || panelMoveInProgress) { return; }
-        if (vscode.workspace.getConfiguration('r-layout').get<boolean>('protectLayoutTabs', true)) {
+        if (vscode.workspace.getConfiguration('r-lab').get<boolean>('protectLayoutTabs', true)) {
             for (const tab of e.closed) {
                 const panelKey = getProtectedPanelKey(tab);
                 if (panelKey) {
@@ -1842,7 +1842,7 @@ async function ensureRConsoleInGroup2(
         shellPath: getRPath(),
         shellArgs: getRArgs(),
         location: isWindows ? undefined : { viewColumn: vscode.ViewColumn.Two },
-        env: { ...rEnv, R_LAYOUT_SESSION: '1' },
+        env: { ...rEnv, R_LAB_SESSION: '1' },
         strictEnv: !isWindows,
         cwd: getEffectiveWorkspaceRoot(),
         iconPath: vscode.Uri.joinPath(context.extensionUri, 'resources', 'r_logo.svg'),
@@ -2133,11 +2133,11 @@ async function focusGroup3(): Promise<void> {
 
 function updateStatusBar(): void {
     if (isLayoutActive) {
-        statusBarItem.text = 'R Layout $(circle-filled)';
-        statusBarItem.tooltip = 'Click to Deactivate RStudio Layout';
+        statusBarItem.text = 'R Lab $(circle-filled)';
+        statusBarItem.tooltip = 'Click to Deactivate R Lab';
     } else {
-        statusBarItem.text = 'R Layout';
-        statusBarItem.tooltip = 'Click to Activate RStudio Layout';
+        statusBarItem.text = 'R Lab';
+        statusBarItem.tooltip = 'Click to Activate R Lab';
     }
 }
 
@@ -2163,13 +2163,13 @@ function groupFocusCommand(col: vscode.ViewColumn): string | undefined {
  */
 function _buildWatcherRprofile(): string | undefined {
     const wf = getEffectiveWorkspaceRoot();
-    console.log(`[R Layout] _buildWatcherRprofile: wf=${wf}, workspaceFolders=${JSON.stringify(vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath))}`);
+    console.log(`[R Lab] _buildWatcherRprofile: wf=${wf}, workspaceFolders=${JSON.stringify(vscode.workspace.workspaceFolders?.map(f => f.uri.fsPath))}`);
 
-    const outDir = path.join(wf, '.R-layout');
+    const outDir = path.join(wf, '.R-lab');
     if (!fs.existsSync(outDir)) {
         fs.mkdirSync(outDir, { recursive: true });
     }
-    const configPlotDir = vscode.workspace.getConfiguration('r-layout').get<string>('plotOutputDir') || '';
+    const configPlotDir = vscode.workspace.getConfiguration('r-lab').get<string>('plotOutputDir') || '';
     let plotsDir = path.join(outDir, 'plots');
     if (configPlotDir.trim()) {
         const resolved = configPlotDir.replace('~', os.homedir());
@@ -2181,7 +2181,7 @@ function _buildWatcherRprofile(): string | undefined {
     }
 
     const scriptPath = path.join(outDir, '.workspace_watcher.R');
-    console.log(`[R Layout] _buildWatcherRprofile: scriptPath=${scriptPath}`);
+    console.log(`[R Lab] _buildWatcherRprofile: scriptPath=${scriptPath}`);
 
     // Absolute paths injected into the R script so it works regardless of R's cwd.
     // On Windows, backslashes must be escaped for R string literals.
@@ -2201,7 +2201,7 @@ function _buildWatcherRprofile(): string | undefined {
     unlink("${absVarsMeta}")
     dir.create("${absPlotsDir}", showWarnings = FALSE, recursive = TRUE)
     .vars <- ls(envir = .GlobalEnv)
-    .vars <- .vars[!grepl("^\\\\.rlayout_|^\\\\.r_layout|^null_dev$|^\\\\.First$|^\\\\.Last$|^\\\\.r_layout_view_data$|^View$", .vars)]
+    .vars <- .vars[!grepl("^\\\\.rlab_|^\\\\.r_lab|^null_dev$|^\\\\.First$|^\\\\.Last$|^\\\\.r_lab_view_data$|^View$", .vars)]
     .info <- if (length(.vars) == 0) character(0) else vapply(.vars, function(nm) {
       obj <- get(nm, envir = .GlobalEnv)
       cls_vec <- class(obj)
@@ -2302,7 +2302,7 @@ function _buildWatcherRprofile(): string | undefined {
             .h <- as.numeric(.req[4])
             .unit <- .req[5]
             .dest <- .req[6]
-            .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
+            .out_dir <- getOption(".rlab_plot_dir", "${absPlotsDir}")
             .rds_file <- file.path(.out_dir, paste0(.pid, ".rds"))
             if (file.exists(.rds_file)) {
               .p_obj <- readRDS(.rds_file)
@@ -2356,16 +2356,16 @@ function _buildWatcherRprofile(): string | undefined {
           if (length(.dir_req) > 0) {
             .target_dir <- trimws(.dir_req[1])
             if (identical(.target_dir, "__DEFAULT__") || !nzchar(.target_dir)) {
-              options(.rlayout_plot_dir = NULL)
+              options(.rlab_plot_dir = NULL)
             } else {
               .target_dir <- path.expand(.target_dir)
               dir.create(.target_dir, showWarnings = FALSE, recursive = TRUE)
-              options(.rlayout_plot_dir = .target_dir)
+              options(.rlab_plot_dir = .target_dir)
             }
-            .rlayout_current_plot_id <<- 0
-            .rlayout_last_plot_hash <<- NULL
-            .rlayout_advance_next_plot <<- TRUE
-            .rlayout_skip_stale_plot_once <<- TRUE
+            .rlab_current_plot_id <<- 0
+            .rlab_last_plot_hash <<- NULL
+            .rlab_advance_next_plot <<- TRUE
+            .rlab_skip_stale_plot_once <<- TRUE
           }
           unlink(.plot_dir_req_path)
         }, silent = TRUE)
@@ -2373,13 +2373,13 @@ function _buildWatcherRprofile(): string | undefined {
     `;
 
     const rCode = `
-# R Layout workspace watcher - auto-loaded via R_PROFILE_USER
+# R Lab workspace watcher - auto-loaded via R_PROFILE_USER
 #
-# Only the interactive R Layout console should install these hooks. If this
+# Only the interactive R Lab console should install these hooks. If this
 # profile is inherited by vscode-R, languageserver, callr, Rscript, or package
 # child processes, restore normal user-profile behavior and stop here.
-.rlayout_is_console <- identical(Sys.getenv("R_LAYOUT_SESSION", unset = ""), "1") && interactive()
-if (!isTRUE(.rlayout_is_console)) {
+.rlab_is_console <- identical(Sys.getenv("R_LAB_SESSION", unset = ""), "1") && interactive()
+if (!isTRUE(.rlab_is_console)) {
   local({
     orig <- Sys.getenv("R_PROFILE_USER_ORIG", unset = "")
     if (nchar(orig) > 0 && file.exists(orig)) {
@@ -2389,7 +2389,7 @@ if (!isTRUE(.rlayout_is_console)) {
       if (file.exists(home_prof)) try(source(home_prof, echo = FALSE), silent = TRUE)
     }
   })
-  rm(.rlayout_is_console)
+  rm(.rlab_is_console)
 } else {
 
 # 1. Source the standard user profile (~/.Rprofile).
@@ -2406,24 +2406,24 @@ local({
 })
 
 # 3. Pre-set fixed Data Viewer temp paths (absolute paths injected by extension).
-.rlayout_csv  <- "${absDvCsv}"
-.rlayout_meta <- "${absDvMeta}"
-.rlayout_active_df_to_export <- NULL
-.rlayout_active_df_slice <- 1
-.rlayout_last_plot_hash <- NULL
-.rlayout_current_plot_id <- 0
-.rlayout_skip_stale_plot_once <- FALSE
+.rlab_csv  <- "${absDvCsv}"
+.rlab_meta <- "${absDvMeta}"
+.rlab_active_df_to_export <- NULL
+.rlab_active_df_slice <- 1
+.rlab_last_plot_hash <- NULL
+.rlab_current_plot_id <- 0
+.rlab_skip_stale_plot_once <- FALSE
 
 # Default plot output directory (absolute path injected by extension).
-options(.rlayout_plot_dir = "${absPlotsDir}")
+options(.rlab_plot_dir = "${absPlotsDir}")
 
 # Set default device to null pdf to enable invisible plot recording
 options(device = function(...) { pdf(file=NULL, ...); dev.control("enable") })
 
 # Flush any pending plot before an interactive widget takes over the Viewer.
-.rlayout_emit_interactive_placeholder <- function() {
+.rlab_emit_interactive_placeholder <- function() {
   ${plotDirRequestCode}
-  tryCatch(.rlayout_force_save_plot(), error = function(e) {})
+  tryCatch(.rlab_force_save_plot(), error = function(e) {})
 }
 
 # Hook HTML/Shiny viewer
@@ -2433,7 +2433,7 @@ options(viewer = function(url, height = NULL) {
 
   # Only emit placeholder for htmlwidgets (which print to tempdir/viewhtml.../index.html)
   if (grepl("viewhtml.*(/|\\\\\\\\)index\\\\.html$", url)) {
-    .rlayout_emit_interactive_placeholder()
+    .rlab_emit_interactive_placeholder()
   }
 })
 options(page_viewer = function(url) {
@@ -2446,32 +2446,32 @@ options(browser = function(url) {
 })
 
 # Hook plot.new to increment plot ID safely by scanning directory
-.rlayout_advance_next_plot <- FALSE
-.rlayout_force_save_plot <- function() {
+.rlab_advance_next_plot <- FALSE
+.rlab_force_save_plot <- function() {
   if (dev.cur() > 1) {
     .p <- recordPlot()
     if (!is.null(.p) && length(.p[[1]]) > 0) {
       .hash <- sum(as.numeric(serialize(.p, NULL)))
-      if (!identical(.hash, .rlayout_last_plot_hash)) {
-        .rlayout_last_plot_hash <<- .hash
+      if (!identical(.hash, .rlab_last_plot_hash)) {
+        .rlab_last_plot_hash <<- .hash
 
-        .out_dir <- getOption(".rlayout_plot_dir", "${absPlotsDir}")
+        .out_dir <- getOption(".rlab_plot_dir", "${absPlotsDir}")
         dir.create(.out_dir, showWarnings = FALSE, recursive = TRUE)
 
-        if (.rlayout_advance_next_plot || .rlayout_current_plot_id == 0) {
+        if (.rlab_advance_next_plot || .rlab_current_plot_id == 0) {
           files <- list.files(.out_dir, pattern = "^plot_[0-9]{5}.*\\\\.(png|svg)$")
           if (length(files) == 0) {
-            .rlayout_current_plot_id <<- 1
+            .rlab_current_plot_id <<- 1
           } else {
             nums <- as.numeric(sub("^plot_([0-9]{5}).*$", "\\\\1", files))
-            .rlayout_current_plot_id <<- max(nums, na.rm = TRUE) + 1
+            .rlab_current_plot_id <<- max(nums, na.rm = TRUE) + 1
           }
-          .rlayout_advance_next_plot <<- FALSE
+          .rlab_advance_next_plot <<- FALSE
         }
 
-        .file <- file.path(.out_dir, sprintf("plot_%05d.png", .rlayout_current_plot_id))
-        .rds_file <- file.path(.out_dir, sprintf("plot_%05d.rds", .rlayout_current_plot_id))
-        .tmp_file <- tempfile("rlayout_plot_", tmpdir = .out_dir, fileext = ".tmp")
+        .file <- file.path(.out_dir, sprintf("plot_%05d.png", .rlab_current_plot_id))
+        .rds_file <- file.path(.out_dir, sprintf("plot_%05d.rds", .rlab_current_plot_id))
+        .tmp_file <- tempfile("rlab_plot_", tmpdir = .out_dir, fileext = ".tmp")
         png(filename = .tmp_file, width = 1600, height = 1200, res = 200, bg = "white")
         try(replayPlot(.p), silent = TRUE)
         dev.off()
@@ -2485,48 +2485,48 @@ options(browser = function(url) {
           }
         } else {
           unlink(.tmp_file)
-          .rlayout_last_plot_hash <<- NULL
+          .rlab_last_plot_hash <<- NULL
         }
       }
     }
   }
 }
 
-.rlayout_update_plot_id_base <- function() {
+.rlab_update_plot_id_base <- function() {
   if (dev.cur() > 1 && !isTRUE(par("page"))) return()
-  if (isTRUE(.rlayout_skip_stale_plot_once)) {
-    .rlayout_skip_stale_plot_once <<- FALSE
-    .rlayout_last_plot_hash <<- NULL
-    .rlayout_advance_next_plot <<- TRUE
+  if (isTRUE(.rlab_skip_stale_plot_once)) {
+    .rlab_skip_stale_plot_once <<- FALSE
+    .rlab_last_plot_hash <<- NULL
+    .rlab_advance_next_plot <<- TRUE
     return()
   }
   # Force save the previous plot before a new page clears it.
-  # .rlayout_force_save_plot renders to a temp PNG first and rejects blank
+  # .rlab_force_save_plot renders to a temp PNG first and rejects blank
   # device captures, which Windows can expose as non-empty display lists.
-  tryCatch(.rlayout_force_save_plot(), error = function(e) {})
-  .rlayout_advance_next_plot <<- TRUE
+  tryCatch(.rlab_force_save_plot(), error = function(e) {})
+  .rlab_advance_next_plot <<- TRUE
 }
-.rlayout_update_plot_id_grid <- function() {
-  if (isTRUE(.rlayout_skip_stale_plot_once)) {
-    .rlayout_skip_stale_plot_once <<- FALSE
-    .rlayout_last_plot_hash <<- NULL
-    .rlayout_advance_next_plot <<- TRUE
+.rlab_update_plot_id_grid <- function() {
+  if (isTRUE(.rlab_skip_stale_plot_once)) {
+    .rlab_skip_stale_plot_once <<- FALSE
+    .rlab_last_plot_hash <<- NULL
+    .rlab_advance_next_plot <<- TRUE
     return()
   }
-  tryCatch(.rlayout_force_save_plot(), error = function(e) {})
-  .rlayout_advance_next_plot <<- TRUE
+  tryCatch(.rlab_force_save_plot(), error = function(e) {})
+  .rlab_advance_next_plot <<- TRUE
 }
-setHook("before.plot.new", .rlayout_update_plot_id_base)
-setHook("before.grid.newpage", .rlayout_update_plot_id_grid)
+setHook("before.plot.new", .rlab_update_plot_id_base)
+setHook("before.grid.newpage", .rlab_update_plot_id_grid)
 
-# 4. Wipe stale R Layout data at startup and shutdown so previous sessions don't bleed over.
+# 4. Wipe stale R Lab data at startup and shutdown so previous sessions don't bleed over.
 #    We hook into .First and .Last.
 if (exists(".First", envir = .GlobalEnv)) {
-  .rlayout_orig_First <- get(".First", envir = .GlobalEnv)
+  .rlab_orig_First <- get(".First", envir = .GlobalEnv)
   .First <- function() {
     unlink("${absVarsTsv}")
     unlink(file.path("${absPlotsDir}", "*"))
-    tryCatch(.rlayout_orig_First(), error = function(e) {})
+    tryCatch(.rlab_orig_First(), error = function(e) {})
     ${snapshotCode}
   }
 } else {
@@ -2538,22 +2538,22 @@ if (exists(".First", envir = .GlobalEnv)) {
 }
 
 if (exists(".Last", envir = .GlobalEnv)) {
-  .rlayout_orig_Last <- get(".Last", envir = .GlobalEnv)
+  .rlab_orig_Last <- get(".Last", envir = .GlobalEnv)
   .Last <- function() {
     unlink("${absVarsTsv}")
     unlink(file.path("${absPlotsDir}", "*"))
-    .out_dir <- getOption(".rlayout_plot_dir")
+    .out_dir <- getOption(".rlab_plot_dir")
     if (!is.null(.out_dir) && .out_dir != "${absPlotsDir}") {
       .rds_files <- list.files(.out_dir, pattern = "^plot_[0-9]{5}\\\\.rds$", full.names = TRUE)
       if (length(.rds_files) > 0) unlink(.rds_files)
     }
-    tryCatch(.rlayout_orig_Last(), error = function(e) {})
+    tryCatch(.rlab_orig_Last(), error = function(e) {})
   }
 } else {
   .Last <- function() {
     unlink("${absVarsTsv}")
     unlink(file.path("${absPlotsDir}", "*"))
-    .out_dir <- getOption(".rlayout_plot_dir")
+    .out_dir <- getOption(".rlab_plot_dir")
     if (!is.null(.out_dir) && .out_dir != "${absPlotsDir}") {
       .rds_files <- list.files(.out_dir, pattern = "^plot_[0-9]{5}\\\\.rds$", full.names = TRUE)
       if (length(.rds_files) > 0) unlink(.rds_files)
@@ -2562,16 +2562,16 @@ if (exists(".Last", envir = .GlobalEnv)) {
 }
 
 # 5. Data Viewer export function.
-#    .rlayout_csv and .rlayout_meta are already set above - no paths needed at call time.
-.r_layout_protected_objects <- "^\\\\.rlayout_|^\\\\.r_layout|^\\\\.rm$|^null_dev$|^\\\\.First$|^\\\\.Last$|^View$"
+#    .rlab_csv and .rlab_meta are already set above - no paths needed at call time.
+.r_lab_protected_objects <- "^\\\\.rlab_|^\\\\.r_lab|^\\\\.rm$|^null_dev$|^\\\\.First$|^\\\\.Last$|^View$"
 
 .rm <- function(..., list = character(), pos = -1, envir = as.environment(pos), inherits = FALSE) {
   targets <- c(as.character(substitute(list(...))[-1L]), list)
   if (identical(envir, .GlobalEnv)) {
-    protected <- if (exists(".r_layout_protected_objects", envir = .GlobalEnv)) {
-      get(".r_layout_protected_objects", envir = .GlobalEnv)
+    protected <- if (exists(".r_lab_protected_objects", envir = .GlobalEnv)) {
+      get(".r_lab_protected_objects", envir = .GlobalEnv)
     } else {
-      "^\\\\.rlayout_|^\\\\.r_layout|^\\\\.rm$|^null_dev$|^\\\\.First$|^\\\\.Last$|^View$"
+      "^\\\\.rlab_|^\\\\.r_lab|^\\\\.rm$|^null_dev$|^\\\\.First$|^\\\\.Last$|^View$"
     }
     targets <- grep(protected, targets, value = TRUE, invert = TRUE)
   }
@@ -2581,11 +2581,11 @@ if (exists(".Last", envir = .GlobalEnv)) {
   invisible()
 }
 
-.r_layout_view_data <- function(varName, rowLimit = 1000) {
-  .rlayout_active_df_to_export <<- varName
+.r_lab_view_data <- function(varName, rowLimit = 1000) {
+  .rlab_active_df_to_export <<- varName
   tryCatch({
-    unlink(.rlayout_meta)
-    unlink(.rlayout_csv)
+    unlink(.rlab_meta)
+    unlink(.rlab_csv)
     obj <- get(varName, envir = .GlobalEnv)
     rowLimit <- suppressWarnings(as.integer(rowLimit))
     if (is.na(rowLimit) || rowLimit < 1) rowLimit <- 1000
@@ -2619,7 +2619,7 @@ if (exists(".Last", envir = .GlobalEnv)) {
     is3D <- is.array(obj) && length(dim(obj)) == 3
     if (is3D) {
       nslices <- dim(obj)[3]
-      unlink(file.path(dirname(.rlayout_csv), "dv_slice_*.csv"))
+      unlink(file.path(dirname(.rlab_csv), "dv_slice_*.csv"))
 
       slice_labels <- dimnames(obj)[[3]]
       if (is.null(slice_labels)) {
@@ -2633,7 +2633,7 @@ if (exists(".Last", envir = .GlobalEnv)) {
         if (!is.data.frame(slice_obj)) {
           slice_obj <- as.data.frame(slice_obj, check.names = FALSE)
         }
-        write.csv(head(slice_obj, rowLimit), file.path(dirname(.rlayout_csv), sprintf("dv_slice_%d.csv", i)), row.names = TRUE, na = "NA")
+        write.csv(head(slice_obj, rowLimit), file.path(dirname(.rlab_csv), sprintf("dv_slice_%d.csv", i)), row.names = TRUE, na = "NA")
       }
 
       writeLines(c(
@@ -2643,20 +2643,20 @@ if (exists(".Last", envir = .GlobalEnv)) {
         as.character(nslices),
         slice_labels,
         varName
-      ), .rlayout_meta)
+      ), .rlab_meta)
 
     } else {
       if (!is.data.frame(obj)) {
 
         obj <- as.data.frame(obj, check.names = FALSE)
       }
-      write.csv(head(obj, rowLimit), .rlayout_csv, row.names = TRUE, na = "NA")
-      writeLines(c(as.character(nrow(obj)), as.character(ncol(obj)), "2D", varName), .rlayout_meta)
+      write.csv(head(obj, rowLimit), .rlab_csv, row.names = TRUE, na = "NA")
+      writeLines(c(as.character(nrow(obj)), as.character(ncol(obj)), "2D", varName), .rlab_meta)
     }
   }, error = function(e) {
     message("Error in View: ", conditionMessage(e))
-    writeLines(paste0("ERROR:", conditionMessage(e)), .rlayout_meta)
-    .rlayout_active_df_to_export <<- NULL
+    writeLines(paste0("ERROR:", conditionMessage(e)), .rlab_meta)
+    .rlab_active_df_to_export <<- NULL
   })
   invisible(NULL)
 }
@@ -2667,17 +2667,17 @@ View <- function(x, title) {
   if (length(var_name) > 1) var_name <- paste(var_name, collapse = "")
 
   if (exists(var_name, envir = .GlobalEnv)) {
-    .r_layout_view_data(var_name)
+    .r_lab_view_data(var_name)
   } else {
     # If the user typed an expression like View(mtcars[1:5,]), store it temporarily
-    assign(".rlayout_temp_view", x, envir = .GlobalEnv)
-    .r_layout_view_data(".rlayout_temp_view")
+    assign(".rlab_temp_view", x, envir = .GlobalEnv)
+    .r_lab_view_data(".rlab_temp_view")
   }
 }
 
 # 6. Install the task callback. It fires after every top-level R command.
 invisible(local({
-  if (!any(vapply(getTaskCallbackNames(), function(n) n == ".r_layout.watcher", logical(1)))) {
+  if (!any(vapply(getTaskCallbackNames(), function(n) n == ".r_lab.watcher", logical(1)))) {
     addTaskCallback(function(expr, value, ok, visible) {
       # Data Viewer auto-update was removed to conserve resources.
       # Users must click the Refresh button to manually re-load variables.
@@ -2691,7 +2691,7 @@ invisible(local({
              .row_limit <- if (length(.var_req) >= 2) suppressWarnings(as.integer(.var_req[2])) else 1000
              if (is.na(.row_limit) || .row_limit < 1) .row_limit <- 1000
              if (exists(.var_req[1], envir = .GlobalEnv)) {
-               .r_layout_view_data(.var_req[1], .row_limit)
+               .r_lab_view_data(.var_req[1], .row_limit)
              }
           }
           unlink(.view_req_path)
@@ -2702,16 +2702,16 @@ invisible(local({
       ${plotExportCode}
 
       # 2. Capture plots quietly
-      if (isTRUE(.rlayout_skip_stale_plot_once)) {
-        .rlayout_last_plot_hash <<- NULL
+      if (isTRUE(.rlab_skip_stale_plot_once)) {
+        .rlab_last_plot_hash <<- NULL
       } else {
-        tryCatch(.rlayout_force_save_plot(), error = function(e) {})
+        tryCatch(.rlab_force_save_plot(), error = function(e) {})
       }
 
       # 3. Snapshot Workspace
       ${snapshotCode}
       TRUE
-    }, name = ".r_layout.watcher")
+    }, name = ".r_lab.watcher")
   }
 }))
 
@@ -2720,7 +2720,7 @@ invisible(local({
   .has_later_file <- file.path("${absOutDir}", ".has_later")
   if (requireNamespace("later", quietly = TRUE)) {
     file.create(.has_later_file)
-    .rlayout_loop <- function() {
+    .rlab_loop <- function() {
       if (!"later" %in% loadedNamespaces()) {
         if (file.exists(.has_later_file)) unlink(.has_later_file)
         return(invisible())
@@ -2733,7 +2733,7 @@ invisible(local({
              .row_limit <- if (length(.var_req) >= 2) suppressWarnings(as.integer(.var_req[2])) else 1000
              if (is.na(.row_limit) || .row_limit < 1) .row_limit <- 1000
              if (exists(.var_req[1], envir = .GlobalEnv)) {
-               .r_layout_view_data(.var_req[1], .row_limit)
+               .r_lab_view_data(.var_req[1], .row_limit)
              }
           }
           unlink(.view_req_path)
@@ -2743,12 +2743,12 @@ invisible(local({
       ${plotDirRequestCode}
       ${plotExportCode}
       if ("later" %in% loadedNamespaces()) {
-        try(later::later(.rlayout_loop, 0.2), silent = TRUE)
+        try(later::later(.rlab_loop, 0.2), silent = TRUE)
       } else {
         if (file.exists(.has_later_file)) unlink(.has_later_file)
       }
     }
-    .rlayout_loop()
+    .rlab_loop()
   } else {
     if (file.exists(.has_later_file)) unlink(.has_later_file)
   }
@@ -2836,7 +2836,7 @@ function getConfigTarget(): vscode.ConfigurationTarget {
 /**
  * Returns the effective workspace root: the first workspace folder if available,
  * otherwise falls back to the user's home directory. This ensures all features
- * (R watcher, .R-layout directory, plots, workspace panel) work in no-workspace mode.
+ * (R watcher, .R-lab directory, plots, workspace panel) work in no-workspace mode.
  */
 export function getEffectiveWorkspaceRoot(): string {
     return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
@@ -2855,18 +2855,18 @@ function getWorkspaceRootsForCleanup(): string[] {
 }
 
 /**
- * Deletes the .R-layout temporary directory in the current workspace.
+ * Deletes the .R-lab temporary directory in the current workspace.
  */
-function deleteRLayoutDir() {
+function deleteRLabDir() {
     // Collect all roots: workspace folders (current + cached) AND home directory fallback
     const roots = new Set<string>(getWorkspaceRootsForCleanup());
     roots.add(os.homedir());
 
     for (const root of roots) {
-        const rLayoutDir = path.join(root, '.R-layout');
+        const rLabDir = path.join(root, '.R-lab');
         try {
-            if (fs.existsSync(rLayoutDir)) {
-                fs.rmSync(rLayoutDir, {
+            if (fs.existsSync(rLabDir)) {
+                fs.rmSync(rLabDir, {
                     recursive: true,
                     force: true,
                     maxRetries: 3,
@@ -2874,7 +2874,7 @@ function deleteRLayoutDir() {
                 });
             }
         } catch (e) {
-            console.error('[R Layout] Failed to delete .R-layout directory', e);
+            console.error('[R Lab] Failed to delete .R-lab directory', e);
         }
     }
 }

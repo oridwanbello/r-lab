@@ -1,9 +1,9 @@
 {
   "name": "r-layout",
-  "displayName": "R Layout",
+  "displayName": "R Lab",
   "preview": true,
-  "description": "RStudio-inspired multi-pane layout orchestrator for VS Code",
-  "version": "0.3.7",
+  "description": "RStudio-inspired development environment for R in VS Code",
+  "version": "0.4.0",
   "publisher": "oridwanbello",
   "icon": "resources/r_logo.png",
   "engines": {
@@ -18,7 +18,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/oridwanbello/r-layout.git"
+    "url": "https://github.com/oridwanbello/r-lab.git"
   },
   "license": "MIT",
   "activationEvents": [
@@ -32,54 +32,58 @@
   },
   "contributes": {
     "configuration": {
-      "title": "R Layout",
+      "title": "R Lab",
       "properties": {
-        "r-layout.rConsoleType": {
+        "r-lab.rConsoleType": {
           "type": "string",
-          "enum": ["Auto Detect", "Standard R", "Radian"],
+          "enum": [
+            "Auto Detect",
+            "Standard R",
+            "Radian"
+          ],
           "default": "Auto Detect",
           "description": "Select the type of R console you are using. 'Auto Detect' will guess based on the path. Set explicitly to 'Radian' to enforce bracketed paste (required if you use shell aliases)."
         },
-        "r-layout.rConsolePath": {
+        "r-lab.rConsolePath": {
           "type": "string",
           "default": "R",
           "description": "Path or command for the R Console terminal. Examples: 'R' or 'radian'."
         },
-        "r-layout.restoreCustomPanelPositions": {
+        "r-lab.restoreCustomPanelPositions": {
           "type": "boolean",
           "default": false,
           "description": "When activating the layout, restore webview panels (Plots, Workspace, etc.) to custom locations where they were dragged in the previous session. If false, activating the layout strictly re-enforces the standard 3-pane arrangement."
         },
-        "r-layout.protectLayoutTabs": {
+        "r-lab.protectLayoutTabs": {
           "type": "boolean",
           "default": true,
-          "description": "Automatically restore R Layout webview tabs and the owned shell Terminal when they are accidentally closed while the layout is active. This does not protect R Console, source files, Settings, or extension pages."
+          "description": "Automatically restore R Lab webview tabs and the owned shell Terminal when they are accidentally closed while the layout is active. This does not protect R Console, source files, Settings, or extension pages."
         },
-        "r-layout.plotOutputDir": {
+        "r-lab.plotOutputDir": {
           "type": "string",
           "default": "",
-          "description": "A custom directory path where R Layout should silently write plot images. If left blank, it uses the default temporary folder (.R-layout/plots in the workspace root, or your home directory if no workspace is open)."
+          "description": "A custom directory path where R Lab should silently write plot images. If left blank, it uses the default temporary folder (.R-lab/plots in the workspace root, or your home directory if no workspace is open)."
         }
       }
     },
     "commands": [
       {
-        "command": "r-layout.toggleLayout",
-        "title": "Toggle R Layout",
+        "command": "r-lab.toggleLayout",
+        "title": "Toggle R Lab",
         "category": "View"
       },
       {
-        "command": "r-layout.maximizeTopRight",
+        "command": "r-lab.maximizeTopRight",
         "title": "Maximize Top Pane",
         "icon": "$(screen-full)"
       },
       {
-        "command": "r-layout.restoreRightSplit",
+        "command": "r-lab.restoreRightSplit",
         "title": "Restore Pane Split",
         "icon": "$(screen-normal)"
       },
       {
-        "command": "r-layout.sourceFile",
+        "command": "r-lab.sourceFile",
         "title": "Source File to R Console",
         "icon": {
           "light": "resources/run_source_light.svg",
@@ -87,7 +91,7 @@
         }
       },
       {
-        "command": "r-layout.runSelection",
+        "command": "r-lab.runSelection",
         "title": "Run Selection in R Console",
         "icon": {
           "light": "resources/run_source_light.svg",
@@ -95,7 +99,7 @@
         }
       },
       {
-        "command": "r-layout.runSmart",
+        "command": "r-lab.runSmart",
         "title": "Run Source / Selection",
         "icon": {
           "light": "resources/run_source_light.svg",
@@ -107,61 +111,61 @@
       {
         "command": "workbench.action.focusSecondEditorGroup",
         "key": "cmd+j",
-        "when": "r-layout.layoutActive"
+        "when": "r-lab.layoutActive"
       },
       {
         "command": "workbench.action.focusThirdEditorGroup",
         "key": "cmd+alt+b",
-        "when": "r-layout.layoutActive"
+        "when": "r-lab.layoutActive"
       },
       {
-        "command": "r-layout.noop",
+        "command": "r-lab.noop",
         "key": "cmd+shift+i",
-        "when": "r-layout.layoutActive"
+        "when": "r-lab.layoutActive"
       },
       {
-        "command": "r-layout.runSmart",
+        "command": "r-lab.runSmart",
         "key": "cmd+shift+s",
-        "when": "r-layout.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-layout\\./ || terminalFocus)"
+        "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
       },
       {
-        "command": "r-layout.runSmart",
+        "command": "r-lab.runSmart",
         "key": "ctrl+shift+s",
-        "when": "r-layout.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-layout\\./ || terminalFocus)"
+        "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
       },
       {
-        "command": "r-layout.runSelection",
+        "command": "r-lab.runSelection",
         "key": "cmd+enter",
-        "when": "r-layout.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-layout\\./ || terminalFocus)"
+        "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
       },
       {
-        "command": "r-layout.runSelection",
+        "command": "r-lab.runSelection",
         "key": "ctrl+enter",
-        "when": "r-layout.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-layout\\./ || terminalFocus)"
+        "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
       }
     ],
     "menus": {
       "editor/title": [
         {
-          "command": "r-layout.maximizeTopRight",
-          "when": "r-layout.layoutActive && !r-layout.isTopRightMaximized && activeEditorGroupIndex != 1",
+          "command": "r-lab.maximizeTopRight",
+          "when": "r-lab.layoutActive && !r-lab.isTopRightMaximized && activeEditorGroupIndex != 1",
           "group": "navigation@1"
         },
         {
-          "command": "r-layout.restoreRightSplit",
-          "when": "r-layout.layoutActive && r-layout.isTopRightMaximized && activeEditorGroupIndex != 1",
+          "command": "r-lab.restoreRightSplit",
+          "when": "r-lab.layoutActive && r-lab.isTopRightMaximized && activeEditorGroupIndex != 1",
           "group": "navigation@1"
         },
         {
-          "command": "r-layout.runSmart",
-          "when": "r-layout.layoutActive && resourceLangId =~ /^(r|rmd|quarto)$/ && activeEditorGroupIndex == 1",
+          "command": "r-lab.runSmart",
+          "when": "r-lab.layoutActive && resourceLangId =~ /^(r|rmd|quarto)$/ && activeEditorGroupIndex == 1",
           "group": "navigation@-100"
         }
       ],
       "editor/context": [
         {
-          "command": "r-layout.runSelection",
-          "when": "r-layout.layoutActive && resourceLangId =~ /^(r|rmd|quarto)$/ && editorHasSelection",
+          "command": "r-lab.runSelection",
+          "when": "r-lab.layoutActive && resourceLangId =~ /^(r|rmd|quarto)$/ && editorHasSelection",
           "group": "navigation@-100"
         }
       ]

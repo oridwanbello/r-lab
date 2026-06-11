@@ -12,7 +12,7 @@ import { recordLayoutFocus } from '../layout/layoutManager';
  */
 export class ProblemsPanel {
     public static currentPanel: ProblemsPanel | undefined;
-    public static readonly viewType = 'r-layout.problemsPanel';
+    public static readonly viewType = 'r-lab.problemsPanel';
 
     private readonly _panel: vscode.WebviewPanel;
     private _diagnosticsListener?: vscode.Disposable;

@@ -2,7 +2,7 @@
 
 ## 1. High-Level Concept
 
-The R Layout extension orchestrates a 3-pane layout within VS Code tailored for R development, visually mirroring the standard RStudio interface. Rather than relying on standard VS Code sidebar views, it implements all major UI components (Workspace, Visuals, Data Viewer, and Tools) as WebviewPanels integrated directly into the editor grid.
+The R Lab extension orchestrates a 3-pane layout within VS Code tailored for R development, visually mirroring the standard RStudio interface. Rather than relying on standard VS Code sidebar views, it implements all major UI components (Workspace, Visuals, Data Viewer, and Tools) as WebviewPanels integrated directly into the editor grid.
 
 ## 2. Core Modules
 
@@ -27,7 +27,7 @@ When a user triggers the layout:
    - Group 1 (Left): Receives the user's active source files.
    - Group 2 (Top-Right): Populated with the R Console, standard Terminal, and Tools panel.
    - Group 3 (Bottom-Right): Populated with the Workspace Explorer, Visuals panel, and Data Viewer.
-5. Layout Tab Protection: When `r-layout.protectLayoutTabs` is enabled, accidental closure of R Layout webview tabs and the owned shell Terminal recreates them in their architectural pane and then re-stamps the full strict tab order. R Console is excluded because closing it represents session termination.
+5. Layout Tab Protection: When `r-lab.protectLayoutTabs` is enabled, accidental closure of R Lab webview tabs and the owned shell Terminal recreates them in their architectural pane and then re-stamps the full strict tab order. R Console is excluded because closing it represents session termination.
 
 ### Deactivation Sequence
 
@@ -45,7 +45,7 @@ Each tool is implemented as a WebviewPanel managed by a singleton class pattern.
 Reads live R session state to display active variables and loaded packages. It operates with a 3-tier fallback priority:
 
 1. Native `vscode-R` session watcher state files (`globalenv.json`, `search.json`).
-2. R Layout's custom atomic file-watcher logs (`.workspace_meta.txt` and `.tsv` dumps).
+2. R Lab's custom atomic file-watcher logs (`.workspace_meta.txt` and `.tsv` dumps).
 3. A fallback background `Rscript` process that parses `.RData`.
 It renders the results in a custom HTML webview table, allowing users to view data frames or inspect package attachment states.
 
@@ -55,7 +55,7 @@ Receives data frame, matrix, and 3D array inspection requests from the Workspace
 
 ### VisualsPanel
 
-Hosts the Plots and Viewer surfaces inside one editor tab. The Plots subtab monitors the plot directory (default: `.R-layout/plots/`) and displays the latest R graphics. The Viewer subtab renders R `viewer()` output, HTML widgets, Shiny apps, package help pages, and Quarto previews.
+Hosts the Plots and Viewer surfaces inside one editor tab. The Plots subtab monitors the plot directory (default: `.R-lab/plots/`) and displays the latest R graphics. The Viewer subtab renders R `viewer()` output, HTML widgets, Shiny apps, package help pages, and Quarto previews.
 
 ### ToolsPanel
 

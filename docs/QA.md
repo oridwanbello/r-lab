@@ -1,4 +1,4 @@
-# R Layout: QA Runbook
+# R Lab: QA Runbook
 
 This document outlines the essential manual testing steps that should be performed before releasing a new version of the extension. Because many of the core features involve complex webviews, inter-process communication with R, and OS-specific terminal handling, automated tests cannot catch everything.
 
@@ -40,7 +40,7 @@ Goal: Ensure environment variables track perfectly.
 - [ ] Variable Detection: Create `x <- 5` and `df <- data.frame(a=1)`. Ensure both appear in the Workspace panel.
 - [ ] Quick Viewer Launch: Click the eye icon next to `df`. Ensure the Data Viewer opens for that specific data frame.
 - [ ] Variable Removal: Remove a single variable with the trash icon. Verify the loading spinner appears and only that variable is removed.
-- [ ] Clear Workspace: Click the broom icon. Verify user variables are cleared while R Layout internals such as `View`, `.r_layout_view_data`, and `.rlayout_*` objects are preserved.
+- [ ] Clear Workspace: Click the broom icon. Verify user variables are cleared while R Lab internals such as `View`, `.r_lab_view_data`, and `.rlab_*` objects are preserved.
 - [ ] Package Attach/Detach: Attach and detach a package from the Packages tab. Verify `later` can be detached without unloading/crashing the R session.
 
 ### 5. HTML Widgets & Visuals Viewer
@@ -57,5 +57,5 @@ Goal: Ensure webviews can float and restore without breaking VS Code execution c
 
 - [ ] Pop-out Panel: In the Data Viewer pane or Visuals tab, click the `Pop-out to Main Editor` button. Verify it moves to the large Group 1 pane.
 - [ ] Restore Panel: Click the `Restore to Side Panel` button. Verify it correctly returns to Group 3 and maintains the strict architectural tab order (`Workspace > Visuals > Data Viewer`).
-- [ ] Protected Layout Tabs: With `r-layout.protectLayoutTabs` enabled, close Tools, Workspace, Visuals, Data Viewer, and the owned shell Terminal one at a time. Verify each reappears in its correct pane and strict tab position (`R Console -> Terminal -> Tools`; `Workspace -> Visuals -> Data Viewer`). Verify source files, Settings, extension pages, and R Console remain closeable.
+- [ ] Protected Layout Tabs: With `r-lab.protectLayoutTabs` enabled, close Tools, Workspace, Visuals, Data Viewer, and the owned shell Terminal one at a time. Verify each reappears in its correct pane and strict tab position (`R Console -> Terminal -> Tools`; `Workspace -> Visuals -> Data Viewer`). Verify source files, Settings, extension pages, and R Console remain closeable.
 - [ ] Focus Stealing Prevention: After generating a plot or popping a panel out, immediately press `Cmd+Enter` (or `Ctrl+Enter`) on a line of code. Ensure `vscode-R` executes the code and does NOT throw a "No active Text editor" error.

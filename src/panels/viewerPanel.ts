@@ -16,7 +16,7 @@ import { recordLayoutFocus, suppressGuardForPanelMove } from '../layout/layoutMa
  */
 export class ViewerPanel {
     public static currentPanel: ViewerPanel | undefined;
-    public static readonly viewType = 'r-layout.viewerPanel';
+    public static readonly viewType = 'r-lab.viewerPanel';
     public static lastClosedState: any | undefined;
 
     private readonly _panel: vscode.WebviewPanel;
@@ -297,7 +297,7 @@ export class ViewerPanel {
                 const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
                 const requestPath = parsedUrl.pathname;
 
-                if (requestPath === '/__rlayout_html2canvas.min.js') {
+                if (requestPath === '/__rlab_html2canvas.min.js') {
                     const h2cPath = path.join(this._extensionUri.fsPath, 'resources', 'html2canvas.min.js');
                     fs.readFile(h2cPath, (err, data) => {
                         if (err) {
@@ -403,7 +403,7 @@ export class ViewerPanel {
                                             doHtml2Canvas();
                                         } else {
                                             var script = document.createElement('script');
-                                            script.src = '/__rlayout_html2canvas.min.js';
+                                            script.src = '/__rlab_html2canvas.min.js';
                                             script.onload = doHtml2Canvas;
                                             document.head.appendChild(script);
                                         }
@@ -527,13 +527,13 @@ export class ViewerPanel {
     }
 
     private _syncWidgetPlaceholder(): void {
-        vscode.commands.executeCommand('r-layout.syncWidgetPlaceholder');
+        vscode.commands.executeCommand('r-lab.syncWidgetPlaceholder');
     }
 
     private _cleanupWidgetPlaceholders(): void {
         // Find and delete all _interactive.svg files in the plots directory
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
-        const plotsDir = path.join(wf, '.R-layout', 'plots');
+        const plotsDir = path.join(wf, '.R-lab', 'plots');
         try {
             if (fs.existsSync(plotsDir)) {
                 const files = fs.readdirSync(plotsDir);

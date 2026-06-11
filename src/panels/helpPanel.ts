@@ -16,7 +16,7 @@ import { getRscriptPath } from '../utils/rPathResolver';
  */
 export class HelpPanel {
     public static currentPanel: HelpPanel | undefined;
-    public static readonly viewType = 'r-layout.helpPanel';
+    public static readonly viewType = 'r-lab.helpPanel';
     public static lastClosedState: any | undefined;
 
     private readonly _panel: vscode.WebviewPanel;

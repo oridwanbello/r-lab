@@ -14,7 +14,7 @@ vsc-extension-quickstart.md
 **/.vscode-test.*
 .r_layout/**
 .tmp/**
-resources/r_layout_showcase.png
+resources/r_lab_showcase.png
 resources/archive/**
 docs/**
 .github/**

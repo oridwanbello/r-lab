@@ -30,7 +30,7 @@ export interface WorkspaceState {
 
 export class WorkspacePanel {
     public static currentPanel: WorkspacePanel | undefined;
-    public static readonly viewType = 'r-layout.workspacePanel';
+    public static readonly viewType = 'r-lab.workspacePanel';
     public static lastClosedState: WorkspaceState | undefined;
 
     private readonly _panel: vscode.WebviewPanel;
@@ -214,9 +214,9 @@ export class WorkspacePanel {
     }
 
     // ----- Internal R variable filter -----
-    private static readonly INTERNAL_VAR_PATTERN = /^\.rlayout_|^\.r_layout|^\.rm$|^null_dev$|^\.First$|^\.Last$|^View$/;
+    private static readonly INTERNAL_VAR_PATTERN = /^\.rlab_|^\.r_lab|^\.rm$|^null_dev$|^\.First$|^\.Last$|^View$/;
 
-    /** Filter out internal R Layout variables so they never appear in the Environment tab */
+    /** Filter out internal R Lab variables so they never appear in the Environment tab */
     private _filterInternalVars(variables: VariableInfo[]): VariableInfo[] {
         return variables.filter(v => !WorkspacePanel.INTERNAL_VAR_PATTERN.test(v.name));
     }
@@ -450,7 +450,7 @@ tryCatch({
     } | null {
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
 
-        const outDir = path.join(wf, '.R-layout');
+        const outDir = path.join(wf, '.R-lab');
         const metaFile = path.join(outDir, '.workspace_meta.txt');
         const varsFile = path.join(outDir, '.workspace_vars.tsv');
         const loadedFile = path.join(outDir, '.workspace_loaded.tsv');
@@ -873,10 +873,10 @@ tryCatch({
             border: 2px solid currentColor;
             border-right-color: transparent;
             border-radius: 50%;
-            animation: rlayout-spin 0.65s linear infinite;
+            animation: rlab-spin 0.65s linear infinite;
             box-sizing: border-box;
         }
-        @keyframes rlayout-spin {
+        @keyframes rlab-spin {
             to { transform: rotate(360deg); }
         }
 

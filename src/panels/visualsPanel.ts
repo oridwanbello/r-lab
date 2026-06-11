@@ -139,8 +139,8 @@ class HostedPanel {
 
 export class VisualsPanel {
     public static currentPanel: VisualsPanel | undefined;
-    public static readonly viewType = 'r-layout.visualsPanel';
-    public static readonly legacyViewType = 'r-layout.visualizationsPanel';
+    public static readonly viewType = 'r-lab.visualsPanel';
+    public static readonly legacyViewType = 'r-lab.visualizationsPanel';
     public static lastClosedState: any | undefined;
 
     private readonly _panel: vscode.WebviewPanel;

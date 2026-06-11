@@ -17,7 +17,7 @@ interface ToolsState {
 
 export class ToolsPanel {
     public static currentPanel: ToolsPanel | undefined;
-    public static readonly viewType = 'r-layout.toolsPanel';
+    public static readonly viewType = 'r-lab.toolsPanel';
     public static lastClosedState: ToolsState | undefined;
 
     private readonly _panel: vscode.WebviewPanel;

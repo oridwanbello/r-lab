@@ -1,6 +1,6 @@
 # Change Log
 
-All notable changes to the R Layout extension will be documented in this file.
+All notable changes to the R Lab extension will be documented in this file.
 
 ## [0.3.7] - 2026-06-09
 
@@ -10,8 +10,8 @@ All notable changes to the R Layout extension will be documented in this file.
 - Visuals Viewer: Added a Viewer subtab inside the combined Visuals tab for R `viewer()` outputs (Shiny, htmlwidgets, package vignettes) with history navigation, delete/clear actions, dark mode, and workspace integration.
 - Plot Zoom & Pan: Added interactive zoom (scroll, pinch, buttons) and drag-to-pan support in the Visuals tab's Plots subtab.
 - Plot Export: Added export settings for PDF, SVG, EPS, PNG, and JPG with configurable width, height, and units.
-- Settings Expansion: Added `r-layout.restoreCustomPanelPositions` to preserve moved panels, `r-layout.protectLayoutTabs` to restore accidentally closed R Layout webviews and the owned shell Terminal, and `r-layout.plotOutputDir` for explicit plot directories.
-- Console Type Selector: Added `r-layout.rConsoleType` setting (Auto Detect, Standard R, Radian) to explicitly enforce bracketed paste for Radian users utilizing shell aliases, preventing multiline execution errors.
+- Settings Expansion: Added `r-lab.restoreCustomPanelPositions` to preserve moved panels, `r-lab.protectLayoutTabs` to restore accidentally closed R Lab webviews and the owned shell Terminal, and `r-lab.plotOutputDir` for explicit plot directories.
+- Console Type Selector: Added `r-lab.rConsoleType` setting (Auto Detect, Standard R, Radian) to explicitly enforce bracketed paste for Radian users utilizing shell aliases, preventing multiline execution errors.
 - QA Runbook: Added an extensive manual testing guide (`docs/QA.md`) to establish standard pre-release testing procedures.
 
 ### Changed
@@ -40,7 +40,7 @@ All notable changes to the R Layout extension will be documented in this file.
 - Pre-Release Hardening: Safely quote R commands generated from file paths, custom plot directories, package names, and variable names.
 - Viewer Server Security: Hardened the local Viewer file server against path traversal.
 - Watcher Lifecycle: Dispose Viewer and Data Viewer filesystem watchers on layout deactivation so they cannot retain stale workspace roots.
-- Documentation Hygiene: Corrected `.R-layout` naming and removed raw non-ASCII characters from source files.
+- Documentation Hygiene: Corrected `.R-lab` naming and removed raw non-ASCII characters from source files.
 
 ## [0.3.6] - 2026-05-30
 
@@ -129,7 +129,7 @@ All notable changes to the R Layout extension will be documented in this file.
 - Webview Architecture: Migrated all sidebar panels (Environment Explorer, Data Viewer, Plots) from Activity Bar WebviewViews to Editor Grid WebviewPanels for deep layout integration.
 - Terminal Management: Implemented robust terminal reuse and vanishing console protection.
 - Settings Preservation: The layout toggle now meticulously saves and restores global VS Code settings (`closeEmptyGroups`, `terminal.integrated.defaultLocation`) to avoid destructive overwrites.
-- Cleanup Logic: The `.R-layout` directory is now cleaned up unconditionally on shutdown.
+- Cleanup Logic: The `.R-lab` directory is now cleaned up unconditionally on shutdown.
 - UI Polish: Updated plot gallery with theme-responsive backgrounds and refined rounding.
 
 ## [0.2.0] - 2026-04-15

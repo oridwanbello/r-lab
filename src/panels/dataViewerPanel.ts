@@ -17,7 +17,7 @@ import { getEffectiveWorkspaceRoot, recordLayoutFocus, suppressGuardForPanelMove
  */
 export class DataViewerPanel {
     public static currentPanel: DataViewerPanel | undefined;
-    public static readonly viewType = 'r-layout.dataViewerPanel';
+    public static readonly viewType = 'r-lab.dataViewerPanel';
     public static lastClosedState: { varName: string } | undefined;
 
     private readonly _panel: vscode.WebviewPanel;
@@ -205,7 +205,7 @@ export class DataViewerPanel {
 
     /** Load and display a variable from the LIVE R session.
      *
-     *  We send a single short command (.r_layout_view_data) to the R terminal,
+     *  We send a single short command (.r_lab_view_data) to the R terminal,
      *  which avoids polluting the user's history with massive chunks of code.
      */
     public async loadVariable(varName: string, isAutoRefresh: boolean = false, sliceIndex?: number): Promise<void> {
@@ -217,7 +217,7 @@ export class DataViewerPanel {
         this._panel.title = 'Data Viewer';
 
         const wf = getEffectiveWorkspaceRoot();
-        const outDir = nodePath.join(wf, '.R-layout');
+        const outDir = nodePath.join(wf, '.R-lab');
         const tmpMeta = nodePath.join(outDir, 'dv-meta.txt');
 
         // If sliceIndex is provided and we are already viewing a 3D matrix,
@@ -251,7 +251,7 @@ export class DataViewerPanel {
 
             const rTerminal = require('../layout/layoutManager').getRConsoleTerminal();
             if (!rTerminal) {
-                this._errorMessage = 'No R Console terminal found. Activate the R Layout layout first.';
+                this._errorMessage = 'No R Console terminal found. Activate the R Lab layout first.';
                 this._isLoading = false;
                 this._render();
                 return;
@@ -263,7 +263,7 @@ export class DataViewerPanel {
 
             const hasLaterFile = nodePath.join(outDir, '.has_later');
             if (!nodeFs.existsSync(hasLaterFile)) {
-                rTerminal.sendText(`.r_layout_view_data(${JSON.stringify(varName)}, ${this._rowLimit})`, true);
+                rTerminal.sendText(`.r_lab_view_data(${JSON.stringify(varName)}, ${this._rowLimit})`, true);
             }
         }
 

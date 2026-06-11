@@ -1,10 +1,10 @@
-# R Layout
+# R Lab
 
 [![VS Marketplace](https://img.shields.io/visual-studio-marketplace/i/oridwanbello.r-layout?label=VS%20Marketplace&logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=oridwanbello.r-layout) [![Visual Studio Marketplace Installs](https://vsmarketplacebadges.dev/installs/oridwanbello.r-layout.svg)](https://marketplace.visualstudio.com/items?itemName=oridwanbello.r-layout) [![Open VSX Downloads](https://img.shields.io/open-vsx/dt/oridwanbello/r-layout?label=Open%20VSX%20Downloads&logo=eclipseide)](https://open-vsx.org/extension/oridwanbello/r-layout)
 
-An RStudio-inspired multi-pane layout orchestrator for VS Code.
+An RStudio-inspired development environment for R in VS Code.
 
-![R Layout Showcase](https://raw.githubusercontent.com/oridwanbello/assets/main/images/r_layout_showcase.png)
+![R Lab Showcase](https://raw.githubusercontent.com/oridwanbello/assets/main/images/r_lab_showcase.png)
 
 > [!NOTE]
 > This extension is currently in preview. We are actively refining the layout and feature set. Please report any issues on GitHub!
@@ -22,19 +22,19 @@ Transform your editor into an RStudio-inspired 3-pane grid with a single click. 
 ## Getting Started
 
 1. Prerequisite: Ensure you have the official [vscode-R](https://marketplace.visualstudio.com/items?itemName=REditorSupport.r) extension installed.
-2. Open a workspace and click "R Layout" in the Status Bar, or run `Toggle R Layout` from the Command Palette.
+2. Open a workspace and click "R Lab" in the Status Bar, or run `Toggle R Lab` from the Command Palette.
 3. Open an `.R` file and click the source icon in the editor title bar. For `.Rmd`, `.qmd`, or Markdown files, select a code chunk or line and run the selection.
 
 ## Key Settings & Commands
 
 | Feature | Description |
 | ------- | ----------- |
-| `r-layout.rConsoleType` | Select console type (`Auto Detect`, `Standard R`, `Radian`) to enforce bracketed paste. |
-| `r-layout.rConsolePath` | Path or command for the R Console terminal (default: `"R"`). |
-| `r-layout.restoreCustomPanelPositions` | If true, restores panels to custom dragged locations instead of strict 3-pane. |
-| `r-layout.protectLayoutTabs` | Automatically restores accidentally closed R Layout webview tabs and the owned shell Terminal while the layout is active. Defaults to true. |
-| `r-layout.plotOutputDir` | Custom directory for R Layout plot images. Defaults to `.R-layout/plots` in the workspace or home directory. |
-| `Toggle R Layout` | Snap the editor into or out of the 3-pane grid. |
+| `r-lab.rConsoleType` | Select console type (`Auto Detect`, `Standard R`, `Radian`) to enforce bracketed paste. |
+| `r-lab.rConsolePath` | Path or command for the R Console terminal (default: `"R"`). |
+| `r-lab.restoreCustomPanelPositions` | If true, restores panels to custom dragged locations instead of strict 3-pane. |
+| `r-lab.protectLayoutTabs` | Automatically restores accidentally closed R Lab webview tabs and the owned shell Terminal while the layout is active. Defaults to true. |
+| `r-lab.plotOutputDir` | Custom directory for R Lab plot images. Defaults to `.R-lab/plots` in the workspace or home directory. |
+| `Toggle R Lab` | Snap the editor into or out of the 3-pane grid. |
 | `Maximize Top Pane` | Expand the top-right pane; minimizes bottom panes. |
 
 ## Contributing

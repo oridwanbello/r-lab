@@ -16,7 +16,7 @@ import { getRscriptPath } from '../utils/rPathResolver';
  */
 export class PlotsPanel {
     public static currentPanel: PlotsPanel | undefined;
-    public static readonly viewType = 'r-layout.plotsPanel';
+    public static readonly viewType = 'r-lab.plotsPanel';
 
     private static _sessionCustomPlotDir: string | undefined;
     private static _sessionLastDirAction: 'outview' | undefined;
@@ -115,7 +115,7 @@ export class PlotsPanel {
         this._extensionUri = extensionUri;
 
         // Restore persisted state from static session memory, falling back to VS Code settings
-        const configPlotDir = vscode.workspace.getConfiguration('r-layout').get<string>('plotOutputDir');
+        const configPlotDir = vscode.workspace.getConfiguration('r-lab').get<string>('plotOutputDir');
         if (PlotsPanel._sessionCustomPlotDir === undefined && configPlotDir && configPlotDir.trim() !== '') {
             this._customPlotDir = configPlotDir.trim();
         } else {
@@ -209,7 +209,7 @@ export class PlotsPanel {
                         this._handleSetCustomDir((msg as any).path);
                         break;
                     case 'openViewer':
-                        vscode.commands.executeCommand('r-layout.focusViewer');
+                        vscode.commands.executeCommand('r-lab.focusViewer');
                         break;
                     case 'copyImage':
                         this._handleCopyImage();
@@ -273,7 +273,7 @@ export class PlotsPanel {
         this.clear(); // Clear existing plots
         this._startWatcher(); // Restart watcher on new dir
         this.syncPlots(); // Load existing plots from new dir
-        vscode.commands.executeCommand('r-layout.syncWidgetPlaceholder');
+        vscode.commands.executeCommand('r-lab.syncWidgetPlaceholder');
     }
 
     private async _handleBrowseCustomDir(): Promise<void> {
@@ -294,7 +294,7 @@ export class PlotsPanel {
     }
 
     private _defaultPlotDir(): string {
-        return path.join(getEffectiveWorkspaceRoot(), '.R-layout', 'plots');
+        return path.join(getEffectiveWorkspaceRoot(), '.R-lab', 'plots');
     }
 
     private _resolvePlotDir(dirPath: string | undefined): string {
@@ -307,7 +307,7 @@ export class PlotsPanel {
     }
 
     private _writePlotDirRequest(dirPath: string | undefined): void {
-        const outDir = path.join(getEffectiveWorkspaceRoot(), '.R-layout');
+        const outDir = path.join(getEffectiveWorkspaceRoot(), '.R-lab');
         fs.mkdirSync(outDir, { recursive: true });
         const reqPath = path.join(outDir, '.plot_dir_req');
         const tmpPath = `${reqPath}.tmp`;
@@ -327,15 +327,15 @@ export class PlotsPanel {
             return;
         }
 
-        // Only allow physical deletion for files inside the .R-layout directory.
+        // Only allow physical deletion for files inside the .R-lab directory.
         // User-specified directories must not be modified - we only display them.
         const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
-        const rLayoutDir = path.join(wf, '.R-layout');
-        const relative = path.relative(rLayoutDir, uri.fsPath);
+        const rLabDir = path.join(wf, '.R-lab');
+        const relative = path.relative(rLabDir, uri.fsPath);
         const isInside = relative && !relative.startsWith('..') && !path.isAbsolute(relative);
         if (!isInside) {
             vscode.window.showWarningMessage(
-                'Deletion is only permitted for plots in the .R-layout directory. ' +
+                'Deletion is only permitted for plots in the .R-lab directory. ' +
                 'To remove plots from a custom folder, delete them manually.'
             );
             return;
@@ -427,7 +427,7 @@ tryCatch({
 
         childProcess.execFile(rscriptPath, ['-e', script], { encoding: 'utf8' }, (error) => {
             if (error) {
-                console.error('[R Layout] Dynamic resize re-rendering failed:', error);
+                console.error('[R Lab] Dynamic resize re-rendering failed:', error);
                 try { if (fs.existsSync(tmpPngPath)) { fs.unlinkSync(tmpPngPath); } } catch {}
                 return;
             }
@@ -446,7 +446,7 @@ tryCatch({
                 fs.renameSync(tmpPngPath, sourceUri.fsPath);
                 this._lastRenderedDims.set(cacheKey, { w, h, res, renderScale });
             } catch (err) {
-                console.error('[R Layout] Dynamic resize replacement failed:', err);
+                console.error('[R Lab] Dynamic resize replacement failed:', err);
                 try { if (fs.existsSync(tmpPngPath)) { fs.unlinkSync(tmpPngPath); } } catch {}
             }
             // If successful, the file watcher picks up the modified PNG and automatically calls _render().
@@ -576,7 +576,7 @@ tryCatch({
                         fs.renameSync(tmpTargetTempPath, targetTempPath);
                     }
                 } catch (err) {
-                    console.error('[R Layout] Preview render replacement failed:', err);
+                    console.error('[R Lab] Preview render replacement failed:', err);
                     cleanupTemps();
                     return;
                 }
