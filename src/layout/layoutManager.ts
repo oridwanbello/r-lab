@@ -2845,7 +2845,7 @@ function disposeLayoutGuards(): void {
  * After each successful placement, the new tab is moved left past Help so
  * the order is always Chat(s) -> Help per the AGENTS.md spec.
  *
- * IMPORTANT: Caller must create HelpPanel in Group 3 BEFORE calling this.
+ * IMPORTANT: Caller must create a Group 3 panel (WorkspacePanel, VisualsPanel, or DataViewerPanel) BEFORE calling this.
  * focusThirdEditorGroup silently no-ops on an empty group - Group 3 must
  * already have content for the focus (and thus placement) to be reliable.
  */
