@@ -1,11 +1,14 @@
-import * as vscode from 'vscode';
-import { getNonce, escapeHtml } from '../utils/webviewUtils';
-import { execFile } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import { getRConsoleTerminal, recordLayoutFocus } from '../layout/layoutManager';
-import { getRscriptPath } from '../utils/rPathResolver';
+import * as vscode from "vscode";
+import { getNonce, escapeHtml } from "../utils/webviewUtils";
+import { execFile } from "child_process";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
+import {
+    getRConsoleTerminal,
+    recordLayoutFocus,
+} from "../layout/layoutManager";
+import { getRscriptPath } from "../utils/rPathResolver";
 
 /**
  * Help Panel - runs R help lookups in a background `Rscript` process
@@ -16,13 +19,13 @@ import { getRscriptPath } from '../utils/rPathResolver';
  */
 export class HelpPanel {
     public static currentPanel: HelpPanel | undefined;
-    public static readonly viewType = 'r-lab.helpPanel';
+    public static readonly viewType = "r-lab.helpPanel";
     public static lastClosedState: any | undefined;
 
     private readonly _panel: vscode.WebviewPanel;
     private _recentSearches: string[] = [];
-    private _helpText = '';
-    private _lastQuery = '';
+    private _helpText = "";
+    private _lastQuery = "";
     private _isLoading = false;
     private _disposables: vscode.Disposable[] = [];
 
@@ -39,7 +42,7 @@ export class HelpPanel {
 
         const panel = vscode.window.createWebviewPanel(
             HelpPanel.viewType,
-            'R Help',
+            "R Help",
             { viewColumn: column, preserveFocus: true },
             {
                 enableScripts: true,
@@ -48,7 +51,11 @@ export class HelpPanel {
                 retainContextWhenHidden: true,
             }
         );
-        panel.iconPath = vscode.Uri.joinPath(extensionUri, 'resources', 'blank.svg');
+        panel.iconPath = vscode.Uri.joinPath(
+            extensionUri,
+            "resources",
+            "blank.svg"
+        );
 
         HelpPanel.currentPanel = new HelpPanel(panel, extensionUri);
         return HelpPanel.currentPanel;
@@ -57,7 +64,10 @@ export class HelpPanel {
     public reveal(column?: vscode.ViewColumn, preserveFocus?: boolean): void {
         if (!this._panel.visible) {
             const activeEditor = vscode.window.activeTextEditor;
-            if (activeEditor && activeEditor.viewColumn === this._panel.viewColumn) {
+            if (
+                activeEditor &&
+                activeEditor.viewColumn === this._panel.viewColumn
+            ) {
                 return;
             }
             this._panel.reveal(column, preserveFocus);
@@ -70,15 +80,15 @@ export class HelpPanel {
         return {
             recentSearches: this._recentSearches,
             helpText: this._helpText,
-            lastQuery: this._lastQuery
+            lastQuery: this._lastQuery,
         };
     }
 
     public loadState(state: any): void {
         if (state) {
             this._recentSearches = state.recentSearches || [];
-            this._helpText = state.helpText || '';
-            this._lastQuery = state.lastQuery || '';
+            this._helpText = state.helpText || "";
+            this._lastQuery = state.lastQuery || "";
             this._render();
         }
     }
@@ -98,7 +108,7 @@ export class HelpPanel {
         this._panel.onDidChangeViewState(
             (e) => {
                 if (e.webviewPanel.active) {
-                    recordLayoutFocus('R Help', e.webviewPanel.viewColumn);
+                    recordLayoutFocus("R Help", e.webviewPanel.viewColumn);
                 }
             },
             null,
@@ -108,31 +118,33 @@ export class HelpPanel {
         this._panel.webview.onDidReceiveMessage(
             async (msg: { type: string; query?: string }) => {
                 switch (msg.type) {
-                    case 'search':
+                    case "search":
                         if (msg.query) {
                             await this._searchHelp(msg.query);
                         }
                         break;
-                    case 'goHome':
-                        this._helpText = '';
-                        this._lastQuery = '';
+                    case "goHome":
+                        this._helpText = "";
+                        this._lastQuery = "";
                         this._render();
                         break;
-                    case 'openLink':
+                    case "openLink":
                         if (msg.query) {
                             await vscode.env.openExternal(
                                 vscode.Uri.parse(msg.query)
                             );
                         }
                         break;
-                    case 'runCode':
+                    case "runCode":
                         if (msg.query) {
                             const term = getRConsoleTerminal();
                             if (term) {
                                 term.show(false);
                                 term.sendText(msg.query);
                             } else {
-                                vscode.window.showErrorMessage('R Console terminal not found. Please activate the layout first.');
+                                vscode.window.showErrorMessage(
+                                    "R Console terminal not found. Please activate the layout first."
+                                );
                             }
                         }
                         break;
@@ -154,14 +166,18 @@ export class HelpPanel {
 
         this._lastQuery = query;
         this._isLoading = true;
-        this._helpText = '';
+        this._helpText = "";
         this._render();
 
         // Use intToUtf8(c(...)) to safely inject arbitrary strings into R script
         // without risking Windows command line quoting nightmares.
         const toRString = (str: string) => {
-            if (!str) {return '""';}
-            const codes = Array.from(str).map(c => c.charCodeAt(0)).join(',');
+            if (!str) {
+                return '""';
+            }
+            const codes = Array.from(str)
+                .map((c) => c.charCodeAt(0))
+                .join(",");
             return `intToUtf8(c(${codes}))`;
         };
 
@@ -169,8 +185,8 @@ export class HelpPanel {
 
         // Build the R expression
         let helpExpr: string;
-        if (query.includes('::')) {
-            const [pkg, func] = query.split('::');
+        if (query.includes("::")) {
+            const [pkg, func] = query.split("::");
             helpExpr = `help(${toRString(func)}, package=${toRString(pkg)})`;
         } else {
             helpExpr = `help(${rQuery}, package = .packages(all.available = TRUE))`;
@@ -233,8 +249,8 @@ export class HelpPanel {
             `       cat(paste0("<div class='status-msg'>No documentation found for: <code>", query, "</code></div>"))`,
             `    }`,
             `  }`,
-            `}`
-        ].join('\n');
+            `}`,
+        ].join("\n");
 
         try {
             const rscriptPath = await getRscriptPath();
@@ -256,7 +272,8 @@ export class HelpPanel {
             content = content.replace(
                 /<img\s[^>]*src="[^"]*lifecycle[- _]([a-z-]+)\.svg"[^>]*>/gi,
                 (_match, stage: string) => {
-                    const label = stage.charAt(0).toUpperCase() + stage.slice(1);
+                    const label =
+                        stage.charAt(0).toUpperCase() + stage.slice(1);
                     return `<span class="lifecycle-badge lifecycle-${stage.toLowerCase()}">${label}</span>`;
                 }
             );
@@ -265,7 +282,7 @@ export class HelpPanel {
             // that can't resolve in the webview.
             content = content.replace(
                 /<img\s[^>]*src="(?!https?:\/\/|data:)[^"]*"[^>]*>/gi,
-                ''
+                ""
             );
 
             this._helpText = content;
@@ -285,11 +302,13 @@ export class HelpPanel {
         return new Promise((resolve, reject) => {
             execFile(
                 rscriptPath,
-                ['-e', script],
+                ["-e", script],
                 {
                     timeout: 15000, // 15s timeout
                     maxBuffer: 1024 * 1024, // 1 MB
-                    cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir(),
+                    cwd:
+                        vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ??
+                        os.homedir(),
                 },
                 (error, stdout, stderr) => {
                     if (error) {
@@ -300,7 +319,7 @@ export class HelpPanel {
                         reject(new Error(detail));
                         return;
                     }
-                    resolve(stdout || stderr || 'No output');
+                    resolve(stdout || stderr || "No output");
                 }
             );
         });
@@ -316,24 +335,43 @@ export class HelpPanel {
         const nonce = getNonce();
         const cspSource = this._panel.webview.cspSource;
 
-        const rdocIconUri = this._panel.webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'resources', 'rdocumentation.svg'));
-        const rLogoUri = this._panel.webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'resources', 'r_logo.svg'));
+        const rdocIconUri = this._panel.webview.asWebviewUri(
+            vscode.Uri.joinPath(
+                this._extensionUri,
+                "resources",
+                "rdocumentation.svg"
+            )
+        );
+        const rLogoUri = this._panel.webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, "resources", "r_logo.svg")
+        );
 
-        const tidyverseSvgPath = vscode.Uri.joinPath(this._extensionUri, 'resources', 'tidyverse.svg').fsPath;
-        let tidyverseSvg = fs.readFileSync(tidyverseSvgPath, 'utf8');
+        const tidyverseSvgPath = vscode.Uri.joinPath(
+            this._extensionUri,
+            "resources",
+            "tidyverse.svg"
+        ).fsPath;
+        let tidyverseSvg = fs.readFileSync(tidyverseSvgPath, "utf8");
         // Make it responsive and secure
-        tidyverseSvg = tidyverseSvg.replace('<svg ', '<svg class="icon" ');
-        tidyverseSvg = tidyverseSvg.replace('<style>', `<style nonce="${nonce}">`);
+        tidyverseSvg = tidyverseSvg.replace("<svg ", '<svg class="icon" ');
+        tidyverseSvg = tidyverseSvg.replace(
+            "<style>",
+            `<style nonce="${nonce}">`
+        );
 
-        const bioconductorSvgPath = vscode.Uri.joinPath(this._extensionUri, 'resources', 'bioconductor.svg').fsPath;
-        const bioconductorSvg = fs.readFileSync(bioconductorSvgPath, 'utf8');
+        const bioconductorSvgPath = vscode.Uri.joinPath(
+            this._extensionUri,
+            "resources",
+            "bioconductor.svg"
+        ).fsPath;
+        const bioconductorSvg = fs.readFileSync(bioconductorSvgPath, "utf8");
 
         const recentItems = this._recentSearches
             .map(
                 (s) =>
                     `<a href="#" class="recent-link" data-query="${escapeHtml(s)}">?${escapeHtml(s)}</a>`
             )
-            .join('');
+            .join("");
 
         // Determine what to show in the main area
         let mainContent: string;
@@ -352,7 +390,7 @@ export class HelpPanel {
                                    <h2>Recent</h2>
                                    <div class="recent-links">${recentItems}</div>
                                </div>`
-                            : ''
+                            : ""
                     }
                     <div class="quick-links">
                         <h2>External Resources</h2>
@@ -750,17 +788,37 @@ export class HelpPanel {
             }
 
             function highlightR(code) {
-                const escaped = escapeHtml(code);
-                const regex = /(#[^\\n]*)|((["'])(?:(?=(\\\\?))\\4.)*?\\3)|\\b(if|else|repeat|while|function|for|in|next|break|TRUE|FALSE|NULL|Inf|NaN|NA)\\b|\\b(\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\b|\\b([a-zA-Z._][a-zA-Z0-9._]*\\b)(?=\\s*\\()|(\\+|\\-|\\*|\\/|\\^|%%|%\\/%|%\\*%|%o%|%x%|%in%|&lt;-|&lt;&lt;-|-&gt;|-&gt;&gt;|=|==|!=|&lt;=|&gt;=|&lt;|&gt;|!|&|&&|\\||\\|\\|)/g;
-                return escaped.replace(regex, (match, comment, string, q1, q2, keyword, number, func, operator) => {
-                    if (comment) return '<span class="token comment">' + comment + '</span>';
-                    if (string) return '<span class="token string">' + string + '</span>';
-                    if (keyword) return '<span class="token keyword">' + keyword + '</span>';
-                    if (number) return '<span class="token number">' + number + '</span>';
-                    if (func) return '<span class="token function">' + func + '</span>';
-                    if (operator) return '<span class="token operator">' + operator + '</span>';
-                    return match;
-                });
+                const regex = /(#[^\\n]*)|((["'])(?:(?=(\\\\?))\\4.)*?\\3)|\\b(if|else|repeat|while|function|for|in|next|break|TRUE|FALSE|NULL|Inf|NaN|NA)\\b|\\b(\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\b|\\b([a-zA-Z._][a-zA-Z0-9._]*\\b)(?=\\s*\\()|(\\+|\\-|\\*|\\/|\\^|%%|%\\/%|%\\*%|%o%|%x%|%in%|<<-|<-|->>|->|==|!=|<=|>=|=|<|>|!|&&|&|\\|\\||\\|)/g;
+                let html = '';
+                let lastIndex = 0;
+                let match;
+                while ((match = regex.exec(code)) !== null) {
+                    if (match.index > lastIndex) {
+                        html += escapeHtml(code.slice(lastIndex, match.index));
+                    }
+                    const [fullMatch, comment, string, q1, q2, keyword, number, func, operator] = match;
+                    const esc = escapeHtml(fullMatch);
+                    if (comment) {
+                        html += '<span class="token comment">' + esc + '</span>';
+                    } else if (string) {
+                        html += '<span class="token string">' + esc + '</span>';
+                    } else if (keyword) {
+                        html += '<span class="token keyword">' + esc + '</span>';
+                    } else if (number) {
+                        html += '<span class="token number">' + esc + '</span>';
+                    } else if (func) {
+                        html += '<span class="token function">' + esc + '</span>';
+                    } else if (operator) {
+                        html += '<span class="token operator">' + esc + '</span>';
+                    } else {
+                        html += esc;
+                    }
+                    lastIndex = regex.lastIndex;
+                }
+                if (lastIndex < code.length) {
+                    html += escapeHtml(code.slice(lastIndex));
+                }
+                return html;
             }
 
             document.querySelectorAll('pre:not(.package-index)').forEach((block) => {
@@ -770,7 +828,7 @@ export class HelpPanel {
             });
 
             // Smart Parser: Turn text-based package index into clickable links and URLs
-            const currentPkg = ${JSON.stringify(this._lastQuery).replace(/</g, '\\u003c')};
+            const currentPkg = ${JSON.stringify(this._lastQuery).replace(/</g, "\\u003c")};
             const urlRegex = /(https?:\\/\\/[^\\s>)]+)/g;
 
             // Linkify URLs in the plain text description block
@@ -992,7 +1050,9 @@ export class HelpPanel {
         this._panel.dispose();
         while (this._disposables.length) {
             const d = this._disposables.pop();
-            if (d) { d.dispose(); }
+            if (d) {
+                d.dispose();
+            }
         }
     }
 }
@@ -1010,17 +1070,19 @@ export class HelpPanel {
  * We strip both forms and also remove any remaining bare ANSI escape codes.
  */
 function stripTerminalFormatting(text: string): string {
-    return text
-        // Remove overstrike: "X\bX" (bold) -> "X"
-        .replace(/.\x08/g, '')
-        // Remove underscore-letter overstrike remnants: "_L" style headers
-        // Pattern: repeated _CHAR sequence like _L_o_a_d_i_n_g
-        .replace(/(?:_([A-Za-z\/]))+/g, (match) => {
-            // Extract just the letters/slashes
-            return match.replace(/_/g, '');
-        })
-        // Remove ANSI escape codes
-        .replace(/\x1b\[[0-9;]*m/g, '')
-        // Normalize any remaining stray backspaces
-        .replace(/\x08/g, '');
+    return (
+        text
+            // Remove overstrike: "X\bX" (bold) -> "X"
+            .replace(/.\x08/g, "")
+            // Remove underscore-letter overstrike remnants: "_L" style headers
+            // Pattern: repeated _CHAR sequence like _L_o_a_d_i_n_g
+            .replace(/(?:_([A-Za-z\/]))+/g, (match) => {
+                // Extract just the letters/slashes
+                return match.replace(/_/g, "");
+            })
+            // Remove ANSI escape codes
+            .replace(/\x1b\[[0-9;]*m/g, "")
+            // Normalize any remaining stray backspaces
+            .replace(/\x08/g, "")
+    );
 }

@@ -1,12 +1,15 @@
-import * as vscode from 'vscode';
-import { execFile } from 'child_process';
-import * as fs from 'fs';
-import * as os from 'os';
-import { getNonce, escapeHtml } from '../utils/webviewUtils';
-import { getRConsoleTerminal, recordLayoutFocus } from '../layout/layoutManager';
-import { getRscriptPath } from '../utils/rPathResolver';
+import * as vscode from "vscode";
+import { execFile } from "child_process";
+import * as fs from "fs";
+import * as os from "os";
+import { getNonce, escapeHtml } from "../utils/webviewUtils";
+import {
+    getRConsoleTerminal,
+    recordLayoutFocus,
+} from "../layout/layoutManager";
+import { getRscriptPath } from "../utils/rPathResolver";
 
-type ToolTab = 'problems' | 'help';
+type ToolTab = "problems" | "help";
 
 interface ToolsState {
     activeTab?: ToolTab;
@@ -17,15 +20,15 @@ interface ToolsState {
 
 export class ToolsPanel {
     public static currentPanel: ToolsPanel | undefined;
-    public static readonly viewType = 'r-lab.toolsPanel';
+    public static readonly viewType = "r-lab.toolsPanel";
     public static lastClosedState: ToolsState | undefined;
 
     private readonly _panel: vscode.WebviewPanel;
     private readonly _extensionUri: vscode.Uri;
-    private _activeTab: ToolTab = 'help';
+    private _activeTab: ToolTab = "help";
     private _recentSearches: string[] = [];
-    private _helpText = '';
-    private _lastQuery = '';
+    private _helpText = "";
+    private _lastQuery = "";
     private _isLoading = false;
     private _disposables: vscode.Disposable[] = [];
 
@@ -40,7 +43,7 @@ export class ToolsPanel {
 
         const panel = vscode.window.createWebviewPanel(
             ToolsPanel.viewType,
-            'Tools',
+            "Tools",
             { viewColumn: column, preserveFocus: true },
             {
                 enableScripts: true,
@@ -49,7 +52,11 @@ export class ToolsPanel {
                 retainContextWhenHidden: true,
             }
         );
-        panel.iconPath = vscode.Uri.joinPath(extensionUri, 'resources', 'blank.svg');
+        panel.iconPath = vscode.Uri.joinPath(
+            extensionUri,
+            "resources",
+            "blank.svg"
+        );
 
         ToolsPanel.currentPanel = new ToolsPanel(panel, extensionUri);
         return ToolsPanel.currentPanel;
@@ -65,29 +72,37 @@ export class ToolsPanel {
         this._panel.onDidChangeViewState(
             (e) => {
                 if (e.webviewPanel.active) {
-                    recordLayoutFocus('Tools', e.webviewPanel.viewColumn);
+                    recordLayoutFocus("Tools", e.webviewPanel.viewColumn);
                 }
             },
             null,
             this._disposables
         );
 
-        this._disposables.push(vscode.languages.onDidChangeDiagnostics(() => {
-            if (this._activeTab === 'problems') {
-                this._render();
-            }
-        }));
+        this._disposables.push(
+            vscode.languages.onDidChangeDiagnostics(() => {
+                if (this._activeTab === "problems") {
+                    this._render();
+                }
+            })
+        );
 
         this._panel.webview.onDidReceiveMessage(
-            async (msg: { type: string; tab?: ToolTab; file?: string; line?: number; query?: string }) => {
+            async (msg: {
+                type: string;
+                tab?: ToolTab;
+                file?: string;
+                line?: number;
+                query?: string;
+            }) => {
                 switch (msg.type) {
-                    case 'switchTab':
-                        if (msg.tab === 'problems' || msg.tab === 'help') {
+                    case "switchTab":
+                        if (msg.tab === "problems" || msg.tab === "help") {
                             this._activeTab = msg.tab;
                             this._render();
                         }
                         break;
-                    case 'openFile':
+                    case "openFile":
                         if (msg.file) {
                             const uri = vscode.Uri.parse(msg.file);
                             const line = msg.line ?? 0;
@@ -98,30 +113,34 @@ export class ToolsPanel {
                             });
                         }
                         break;
-                    case 'search':
+                    case "search":
                         if (msg.query) {
                             await this._searchHelp(msg.query);
                         }
                         break;
-                    case 'goHome':
-                        this._helpText = '';
-                        this._lastQuery = '';
-                        this._activeTab = 'help';
+                    case "goHome":
+                        this._helpText = "";
+                        this._lastQuery = "";
+                        this._activeTab = "help";
                         this._render();
                         break;
-                    case 'openLink':
+                    case "openLink":
                         if (msg.query) {
-                            await vscode.env.openExternal(vscode.Uri.parse(msg.query));
+                            await vscode.env.openExternal(
+                                vscode.Uri.parse(msg.query)
+                            );
                         }
                         break;
-                    case 'runCode':
+                    case "runCode":
                         if (msg.query) {
                             const term = getRConsoleTerminal();
                             if (term) {
                                 term.show(false);
                                 term.sendText(msg.query);
                             } else {
-                                vscode.window.showErrorMessage('R Console terminal not found. Please activate the layout first.');
+                                vscode.window.showErrorMessage(
+                                    "R Console terminal not found. Please activate the layout first."
+                                );
                             }
                         }
                         break;
@@ -132,11 +151,18 @@ export class ToolsPanel {
         );
     }
 
-    public reveal(column?: vscode.ViewColumn, preserveFocus: boolean = true): void {
+    public reveal(
+        column?: vscode.ViewColumn,
+        preserveFocus: boolean = true
+    ): void {
         this._panel.reveal(column, preserveFocus);
     }
 
-    public revealTool(tab: ToolTab, column?: vscode.ViewColumn, preserveFocus: boolean = true): void {
+    public revealTool(
+        tab: ToolTab,
+        column?: vscode.ViewColumn,
+        preserveFocus: boolean = true
+    ): void {
         this._activeTab = tab;
         this._render();
         this._panel.reveal(column, preserveFocus);
@@ -152,11 +178,13 @@ export class ToolsPanel {
     }
 
     public loadState(state: ToolsState | undefined): void {
-        if (!state) { return; }
-        this._activeTab = state.activeTab === 'problems' ? 'problems' : 'help';
+        if (!state) {
+            return;
+        }
+        this._activeTab = state.activeTab === "problems" ? "problems" : "help";
         this._recentSearches = state.recentSearches || [];
-        this._helpText = state.helpText || '';
-        this._lastQuery = state.lastQuery || '';
+        this._helpText = state.helpText || "";
+        this._lastQuery = state.lastQuery || "";
         this._render();
     }
 
@@ -166,22 +194,26 @@ export class ToolsPanel {
             ...this._recentSearches.filter((s) => s !== query),
         ].slice(0, 8);
 
-        this._activeTab = 'help';
+        this._activeTab = "help";
         this._lastQuery = query;
         this._isLoading = true;
-        this._helpText = '';
+        this._helpText = "";
         this._render();
 
         const toRString = (str: string) => {
-            if (!str) { return '""'; }
-            const codes = Array.from(str).map(c => c.charCodeAt(0)).join(',');
+            if (!str) {
+                return '""';
+            }
+            const codes = Array.from(str)
+                .map((c) => c.charCodeAt(0))
+                .join(",");
             return `intToUtf8(c(${codes}))`;
         };
 
         const rQuery = toRString(query);
         let helpExpr: string;
-        if (query.includes('::')) {
-            const [pkg, func] = query.split('::');
+        if (query.includes("::")) {
+            const [pkg, func] = query.split("::");
             helpExpr = `help(${toRString(func)}, package=${toRString(pkg)})`;
         } else {
             helpExpr = `help(${rQuery}, package = .packages(all.available = TRUE))`;
@@ -241,8 +273,8 @@ export class ToolsPanel {
             `       cat(paste0("<div class='status-msg'>No documentation found for: <code>", query, "</code></div>"))`,
             `    }`,
             `  }`,
-            `}`
-        ].join('\n');
+            `}`,
+        ].join("\n");
 
         try {
             const rscriptPath = await getRscriptPath();
@@ -257,13 +289,14 @@ export class ToolsPanel {
             content = content.replace(
                 /<img\s[^>]*src="[^"]*lifecycle[- _]([a-z-]+)\.svg"[^>]*>/gi,
                 (_match, stage: string) => {
-                    const label = stage.charAt(0).toUpperCase() + stage.slice(1);
+                    const label =
+                        stage.charAt(0).toUpperCase() + stage.slice(1);
                     return `<span class="lifecycle-badge lifecycle-${stage.toLowerCase()}">${label}</span>`;
                 }
             );
             content = content.replace(
                 /<img\s[^>]*src="(?!https?:\/\/|data:)[^"]*"[^>]*>/gi,
-                ''
+                ""
             );
 
             this._helpText = content;
@@ -280,19 +313,23 @@ export class ToolsPanel {
         return new Promise((resolve, reject) => {
             execFile(
                 rscriptPath,
-                ['-e', script],
+                ["-e", script],
                 {
                     timeout: 15000,
                     maxBuffer: 1024 * 1024,
-                    cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir(),
+                    cwd:
+                        vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ??
+                        os.homedir(),
                 },
                 (error, stdout, stderr) => {
                     if (error) {
-                        const detail = stderr ? `${error.message}\n\n${stderr}` : error.message;
+                        const detail = stderr
+                            ? `${error.message}\n\n${stderr}`
+                            : error.message;
                         reject(new Error(detail));
                         return;
                     }
-                    resolve(stdout || stderr || 'No output');
+                    resolve(stdout || stderr || "No output");
                 }
             );
         });
@@ -305,13 +342,15 @@ export class ToolsPanel {
     private _getHtml(): string {
         const nonce = getNonce();
         const cspSource = this._panel.webview.cspSource;
-        const codicons = this._activeTab === 'problems'
-            ? '<link href="https://cdn.jsdelivr.net/npm/@vscode/codicons@0.0.36/dist/codicon.min.css" rel="stylesheet">'
-            : '';
-        const katex = this._activeTab === 'help'
-            ? `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+        const codicons =
+            this._activeTab === "problems"
+                ? '<link href="https://cdn.jsdelivr.net/npm/@vscode/codicons@0.0.36/dist/codicon.min.css" rel="stylesheet">'
+                : "";
+        const katex =
+            this._activeTab === "help"
+                ? `<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
                <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>`
-            : '';
+                : "";
 
         return /* html */ `<!DOCTYPE html>
 <html lang="en">
@@ -743,11 +782,11 @@ export class ToolsPanel {
 </head>
 <body>
     <div class="tabs">
-        <button class="tab ${this._activeTab === 'help' ? 'active' : ''}" data-tab="help"><span class="tab-label">R Help</span></button>
-        <button class="tab ${this._activeTab === 'problems' ? 'active' : ''}" data-tab="problems"><span class="tab-label">Problems</span></button>
+        <button class="tab ${this._activeTab === "help" ? "active" : ""}" data-tab="help"><span class="tab-label">R Help</span></button>
+        <button class="tab ${this._activeTab === "problems" ? "active" : ""}" data-tab="problems"><span class="tab-label">Problems</span></button>
     </div>
     <div class="tool-body">
-        ${this._activeTab === 'problems' ? this._getProblemsBody() : this._getHelpBody(nonce)}
+        ${this._activeTab === "problems" ? this._getProblemsBody() : this._getHelpBody(nonce)}
     </div>
     <script nonce="${nonce}">
         (function() {
@@ -757,7 +796,7 @@ export class ToolsPanel {
                     vscode.postMessage({ type: 'switchTab', tab: tab.getAttribute('data-tab') });
                 });
             });
-            ${this._activeTab === 'problems' ? this._getProblemsScript() : this._getHelpScript()}
+            ${this._activeTab === "problems" ? this._getProblemsScript() : this._getHelpScript()}
         })();
     </script>
 </body>
@@ -772,7 +811,9 @@ export class ToolsPanel {
         const fileGroups: string[] = [];
 
         for (const [uri, diagnostics] of allDiagnostics) {
-            if (diagnostics.length === 0) { continue; }
+            if (diagnostics.length === 0) {
+                continue;
+            }
 
             const fileName = vscode.workspace.asRelativePath(uri);
             const rows = diagnostics
@@ -781,11 +822,17 @@ export class ToolsPanel {
                     const icon = severityIcon(d.severity);
                     const line = d.range.start.line + 1;
                     const col = d.range.start.character + 1;
-                    const src = d.source ? `[${escapeHtml(d.source)}] ` : '';
+                    const src = d.source ? `[${escapeHtml(d.source)}] ` : "";
 
-                    if (d.severity === vscode.DiagnosticSeverity.Error) { errorCount++; }
-                    else if (d.severity === vscode.DiagnosticSeverity.Warning) { warningCount++; }
-                    else { infoCount++; }
+                    if (d.severity === vscode.DiagnosticSeverity.Error) {
+                        errorCount++;
+                    } else if (
+                        d.severity === vscode.DiagnosticSeverity.Warning
+                    ) {
+                        warningCount++;
+                    } else {
+                        infoCount++;
+                    }
 
                     return `<tr class="diag-row" data-file="${escapeHtml(uri.toString())}" data-line="${d.range.start.line}">
                         <td class="icon-col">${icon}</td>
@@ -793,7 +840,7 @@ export class ToolsPanel {
                         <td class="msg-col">${src}${escapeHtml(d.message)}</td>
                     </tr>`;
                 })
-                .join('');
+                .join("");
 
             fileGroups.push(`
                 <div class="file-group expanded">
@@ -811,38 +858,73 @@ export class ToolsPanel {
 
         const totalCount = errorCount + warningCount + infoCount;
         const summaryParts: string[] = [];
-        if (errorCount > 0) { summaryParts.push(`${errorCount} error${errorCount !== 1 ? 's' : ''}`); }
-        if (warningCount > 0) { summaryParts.push(`${warningCount} warning${warningCount !== 1 ? 's' : ''}`); }
-        if (infoCount > 0) { summaryParts.push(`${infoCount} info`); }
-        const summary = summaryParts.length > 0 ? summaryParts.join(', ') : 'No problems';
+        if (errorCount > 0) {
+            summaryParts.push(
+                `${errorCount} error${errorCount !== 1 ? "s" : ""}`
+            );
+        }
+        if (warningCount > 0) {
+            summaryParts.push(
+                `${warningCount} warning${warningCount !== 1 ? "s" : ""}`
+            );
+        }
+        if (infoCount > 0) {
+            summaryParts.push(`${infoCount} info`);
+        }
+        const summary =
+            summaryParts.length > 0 ? summaryParts.join(", ") : "No problems";
 
         return `<div class="problems-view">
-            <div class="toolbar"><span class="summary">${totalCount > 0 ? summary : ''}</span></div>
+            <div class="toolbar"><span class="summary">${totalCount > 0 ? summary : ""}</span></div>
             <div class="content">
-                ${totalCount > 0
-                    ? fileGroups.join('')
-                    : `<div class="empty-state">
+                ${
+                    totalCount > 0
+                        ? fileGroups.join("")
+                        : `<div class="empty-state">
                            <svg viewBox="0 0 16 16"><path fill="currentColor" d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/></svg>
                            <p>No problems detected!</p>
-                       </div>`}
+                       </div>`
+                }
             </div>
         </div>`;
     }
 
     private _getHelpBody(nonce: string): string {
-        const rdocIconUri = this._panel.webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'resources', 'rdocumentation.svg'));
-        const rLogoUri = this._panel.webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'resources', 'r_logo.svg'));
-        const tidyverseSvgPath = vscode.Uri.joinPath(this._extensionUri, 'resources', 'tidyverse.svg').fsPath;
-        let tidyverseSvg = fs.readFileSync(tidyverseSvgPath, 'utf8');
-        tidyverseSvg = tidyverseSvg.replace('<svg ', '<svg class="icon" ');
-        tidyverseSvg = tidyverseSvg.replace('<style>', `<style nonce="${nonce}">`);
+        const rdocIconUri = this._panel.webview.asWebviewUri(
+            vscode.Uri.joinPath(
+                this._extensionUri,
+                "resources",
+                "rdocumentation.svg"
+            )
+        );
+        const rLogoUri = this._panel.webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, "resources", "r_logo.svg")
+        );
+        const tidyverseSvgPath = vscode.Uri.joinPath(
+            this._extensionUri,
+            "resources",
+            "tidyverse.svg"
+        ).fsPath;
+        let tidyverseSvg = fs.readFileSync(tidyverseSvgPath, "utf8");
+        tidyverseSvg = tidyverseSvg.replace("<svg ", '<svg class="icon" ');
+        tidyverseSvg = tidyverseSvg.replace(
+            "<style>",
+            `<style nonce="${nonce}">`
+        );
 
-        const bioconductorSvgPath = vscode.Uri.joinPath(this._extensionUri, 'resources', 'bioconductor.svg').fsPath;
-        const bioconductorSvg = fs.readFileSync(bioconductorSvgPath, 'utf8');
+        const bioconductorSvgPath = vscode.Uri.joinPath(
+            this._extensionUri,
+            "resources",
+            "bioconductor.svg"
+        ).fsPath;
+        const bioconductorSvg = fs.readFileSync(bioconductorSvgPath, "utf8");
 
         const recentItems = this._recentSearches
-            .map((s) => `<a href="#" class="recent-link" data-query="${escapeHtml(s)}">?${escapeHtml(s)}</a>`)
-            .join('');
+            .map(
+                (s) =>
+                    `<a href="#" class="recent-link" data-query="${escapeHtml(s)}">?${escapeHtml(s)}</a>`
+            )
+            .join("");
 
         let mainContent: string;
         if (this._isLoading) {
@@ -852,12 +934,14 @@ export class ToolsPanel {
         } else {
             mainContent = `
                 <div class="empty-help">
-                    ${this._recentSearches.length > 0
-                        ? `<div class="recent-section">
+                    ${
+                        this._recentSearches.length > 0
+                            ? `<div class="recent-section">
                                <h2>Recent</h2>
                                <div class="recent-links">${recentItems}</div>
                            </div>`
-                        : ''}
+                            : ""
+                    }
                     <div class="quick-links">
                         <h2>External Resources</h2>
                         <div class="links-grid">
@@ -916,24 +1000,44 @@ export class ToolsPanel {
                 return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
             }
             function highlightR(code) {
-                const escaped = escapeHtml(code);
-                const regex = /(#[^\\n]*)|((["'])(?:(?=(\\\\?))\\4.)*?\\3)|\\b(if|else|repeat|while|function|for|in|next|break|TRUE|FALSE|NULL|Inf|NaN|NA)\\b|\\b(\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\b|\\b([a-zA-Z._][a-zA-Z0-9._]*\\b)(?=\\s*\\()|(\\+|\\-|\\*|\\/|\\^|%%|%\\/%|%\\*%|%o%|%x%|%in%|&lt;-|&lt;&lt;-|-&gt;|-&gt;&gt;|=|==|!=|&lt;=|&gt;=|&lt;|&gt;|!|&|&&|\\||\\|\\|)/g;
-                return escaped.replace(regex, (match, comment, string, q1, q2, keyword, number, func, operator) => {
-                    if (comment) return '<span class="token comment">' + comment + '</span>';
-                    if (string) return '<span class="token string">' + string + '</span>';
-                    if (keyword) return '<span class="token keyword">' + keyword + '</span>';
-                    if (number) return '<span class="token number">' + number + '</span>';
-                    if (func) return '<span class="token function">' + func + '</span>';
-                    if (operator) return '<span class="token operator">' + operator + '</span>';
-                    return match;
-                });
+                const regex = /(#[^\\n]*)|((["'])(?:(?=(\\\\?))\\4.)*?\\3)|\\b(if|else|repeat|while|function|for|in|next|break|TRUE|FALSE|NULL|Inf|NaN|NA)\\b|\\b(\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)\\b|\\b([a-zA-Z._][a-zA-Z0-9._]*\\b)(?=\\s*\\()|(\\+|\\-|\\*|\\/|\\^|%%|%\\/%|%\\*%|%o%|%x%|%in%|<<-|<-|->>|->|==|!=|<=|>=|=|<|>|!|&&|&|\\|\\||\\|)/g;
+                let html = '';
+                let lastIndex = 0;
+                let match;
+                while ((match = regex.exec(code)) !== null) {
+                    if (match.index > lastIndex) {
+                        html += escapeHtml(code.slice(lastIndex, match.index));
+                    }
+                    const [fullMatch, comment, string, q1, q2, keyword, number, func, operator] = match;
+                    const esc = escapeHtml(fullMatch);
+                    if (comment) {
+                        html += '<span class="token comment">' + esc + '</span>';
+                    } else if (string) {
+                        html += '<span class="token string">' + esc + '</span>';
+                    } else if (keyword) {
+                        html += '<span class="token keyword">' + esc + '</span>';
+                    } else if (number) {
+                        html += '<span class="token number">' + esc + '</span>';
+                    } else if (func) {
+                        html += '<span class="token function">' + esc + '</span>';
+                    } else if (operator) {
+                        html += '<span class="token operator">' + esc + '</span>';
+                    } else {
+                        html += esc;
+                    }
+                    lastIndex = regex.lastIndex;
+                }
+                if (lastIndex < code.length) {
+                    html += escapeHtml(code.slice(lastIndex));
+                }
+                return html;
             }
             document.querySelectorAll('pre:not(.package-index)').forEach((block) => {
                 const raw = block.textContent || "";
                 block.innerHTML = highlightR(raw);
             });
 
-            const currentPkg = ${JSON.stringify(this._lastQuery).replace(/</g, '\\u003c')};
+            const currentPkg = ${JSON.stringify(this._lastQuery).replace(/</g, "\\u003c")};
             const urlRegex = /(https?:\\/\\/[^\\s>)]+)/g;
 
             document.querySelectorAll('pre.package-description').forEach((block) => {
@@ -1070,7 +1174,9 @@ export class ToolsPanel {
         this._panel.dispose();
         while (this._disposables.length) {
             const d = this._disposables.pop();
-            if (d) { d.dispose(); }
+            if (d) {
+                d.dispose();
+            }
         }
     }
 }

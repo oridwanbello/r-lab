@@ -2274,6 +2274,12 @@ async function recreateProtectedShellTerminal(): Promise<void> {
         return;
     }
 
+    const group2 = vscode.window.tabGroups.all.find(
+        (g) => g.viewColumn === vscode.ViewColumn.Two
+    );
+    const previousActiveTab = group2?.activeTab;
+    const previousActiveTabLabel = previousActiveTab?.label;
+
     panelMoveInProgress = true;
     try {
         await createShellTerminalInGroup2();
@@ -2282,17 +2288,48 @@ async function recreateProtectedShellTerminal(): Promise<void> {
             "Terminal",
             "Tools",
         ]);
-        const restoredTerminal = shellTerminal as vscode.Terminal | undefined;
-        restoredTerminal?.show(false);
-        setTimeout(() => {
+
+        if (
+            previousActiveTabLabel &&
+            !previousActiveTabLabel.includes("Terminal")
+        ) {
+            // Restore focus/visibility to the previously active tab in Group 2
             if (
-                restoredTerminal &&
-                isLayoutActive &&
-                getActiveTabLabel(vscode.ViewColumn.Two) === "Terminal"
+                previousActiveTabLabel.includes("R Console") &&
+                rConsoleTerminal
             ) {
-                restoredTerminal.show(false);
+                rConsoleTerminal.show(false);
+            } else if (
+                previousActiveTabLabel === "Tools" &&
+                ToolsPanel.currentPanel
+            ) {
+                ToolsPanel.currentPanel.reveal(vscode.ViewColumn.Two, true);
+            } else if (
+                previousActiveTabLabel === "R Help" &&
+                HelpPanel.currentPanel
+            ) {
+                HelpPanel.currentPanel.reveal(vscode.ViewColumn.Two, true);
+            } else if (
+                previousActiveTabLabel === "Problems" &&
+                ProblemsPanel.currentPanel
+            ) {
+                ProblemsPanel.currentPanel.reveal(vscode.ViewColumn.Two, true);
             }
-        }, 400);
+        } else {
+            const restoredTerminal = shellTerminal as
+                | vscode.Terminal
+                | undefined;
+            restoredTerminal?.show(false);
+            setTimeout(() => {
+                if (
+                    restoredTerminal &&
+                    isLayoutActive &&
+                    getActiveTabLabel(vscode.ViewColumn.Two) === "Terminal"
+                ) {
+                    restoredTerminal.show(false);
+                }
+            }, 400);
+        }
     } finally {
         setTimeout(() => {
             panelMoveInProgress = false;
