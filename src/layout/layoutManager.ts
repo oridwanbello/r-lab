@@ -3,8 +3,6 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { PlotsPanel } from "../panels/plotsPanel";
-import { HelpPanel } from "../panels/helpPanel";
-import { ProblemsPanel } from "../panels/problemsPanel";
 import { ToolsPanel } from "../panels/toolsPanel";
 import { WorkspacePanel } from "../panels/workspacePanel";
 import { DataViewerPanel } from "../panels/dataViewerPanel";
@@ -1689,12 +1687,6 @@ async function deactivateLayout(): Promise<void> {
                     "r-lab.helpState",
                     undefined
                 );
-            } else if (HelpPanel.currentPanel) {
-                savedHelpState = HelpPanel.currentPanel.saveState();
-                await extensionContext.workspaceState.update(
-                    "r-lab.helpState",
-                    undefined
-                );
             }
 
             // Save Data Viewer state to in-memory variable before disposing
@@ -1734,10 +1726,6 @@ async function deactivateLayout(): Promise<void> {
             // activeTextEditor after any individual webview closes, so restore the text
             // focus between disposals when needed.
             await disposePanelWithTextFocus(
-                () => HelpPanel.currentPanel?.dispose(),
-                sourceFiles
-            );
-            await disposePanelWithTextFocus(
                 () => VisualsPanel.currentPanel?.dispose(),
                 sourceFiles
             );
@@ -1747,10 +1735,6 @@ async function deactivateLayout(): Promise<void> {
             );
             await disposePanelWithTextFocus(
                 () => ViewerPanel.currentPanel?.dispose(),
-                sourceFiles
-            );
-            await disposePanelWithTextFocus(
-                () => ProblemsPanel.currentPanel?.dispose(),
                 sourceFiles
             );
             await disposePanelWithTextFocus(
@@ -2300,20 +2284,12 @@ async function recreateProtectedShellTerminal(): Promise<void> {
             ) {
                 rConsoleTerminal.show(false);
             } else if (
-                previousActiveTabLabel === "Tools" &&
+                (previousActiveTabLabel === "Tools" ||
+                    previousActiveTabLabel === "R Help" ||
+                    previousActiveTabLabel === "Problems") &&
                 ToolsPanel.currentPanel
             ) {
                 ToolsPanel.currentPanel.reveal(vscode.ViewColumn.Two, true);
-            } else if (
-                previousActiveTabLabel === "R Help" &&
-                HelpPanel.currentPanel
-            ) {
-                HelpPanel.currentPanel.reveal(vscode.ViewColumn.Two, true);
-            } else if (
-                previousActiveTabLabel === "Problems" &&
-                ProblemsPanel.currentPanel
-            ) {
-                ProblemsPanel.currentPanel.reveal(vscode.ViewColumn.Two, true);
             }
         } else {
             const restoredTerminal = shellTerminal as
@@ -2887,10 +2863,12 @@ async function focusGroup3(): Promise<void> {
         );
         await delay(10);
 
-        // 2. Aggressive fallback: Force reveal the HelpPanel WITHOUT preserving focus.
+        // 2. Aggressive fallback: Force reveal a Group 3 panel WITHOUT preserving focus.
         // This is the most reliable way to force focus into Group 3 if it exists.
-        if (HelpPanel.currentPanel) {
-            HelpPanel.currentPanel.reveal(vscode.ViewColumn.Three, false);
+        if (WorkspacePanel.currentPanel) {
+            WorkspacePanel.currentPanel.reveal(vscode.ViewColumn.Three, false);
+        } else if (VisualsPanel.currentPanel) {
+            VisualsPanel.currentPanel.reveal(vscode.ViewColumn.Three, false);
         }
         await delay(10);
     } catch {
