@@ -18,8 +18,8 @@ Bring the cohesive development experience of RStudio to VS Code with a single cl
 
 ## Getting Started
 
-1. Prerequisites: Ensure you have the official [vscode-R](https://marketplace.visualstudio.com/items?itemName=REditorSupport.r) extension installed and configured on your system. Follow the `vscode-R` setup guide to ensure key dependencies are properly set up.
-2. Installation: Install R Lab from the VS Code Marketplace.
+1. Prerequisites: Ensure you have the official [vscode-R](https://marketplace.visualstudio.com/items?itemName=REditorSupport.r) extension installed and configured on your system. R Lab leverages `vscode-R` strictly for static editor features (syntax highlighting, autocompletion, and diagnostics). R Lab's execution runtime, console, and session watchers are completely decoupled from `vscode-R` to maximize performance and ensure stability against external updates.
+2. Installation: Install R Lab from the VS Code Marketplace or the Open VSX Registry.
 3. Activation: Open a workspace and click "R Lab" in the Status Bar, or run `Toggle R Lab` from the Command Palette.
 4. Execution: Open a `.R` file and click the source icon in the editor title bar. For `.Rmd`, `.qmd`, or Markdown files, select a code chunk or line and run the selection.
 
