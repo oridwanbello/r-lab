@@ -7,7 +7,7 @@ import {
     getRConsoleTerminal,
     recordLayoutFocus,
 } from "../layout/layoutManager";
-import { getRscriptPath } from "../utils/rPathResolver";
+import { getRscriptPath, getRPath } from "../utils/rPathResolver";
 
 type ToolTab = "problems" | "help";
 
@@ -136,7 +136,52 @@ export class ToolsPanel {
                             const term = getRConsoleTerminal();
                             if (term) {
                                 term.show(false);
-                                term.sendText(msg.query);
+
+                                let textToSend = msg.query;
+                                if (msg.package && msg.package !== "base") {
+                                    textToSend = `library(${msg.package})\n${textToSend}`;
+                                }
+
+                                const layoutConfig =
+                                    vscode.workspace.getConfiguration("r-lab");
+                                const rConsoleType = layoutConfig.get<string>(
+                                    "rConsoleType",
+                                    "Auto Detect"
+                                );
+                                const rConsolePath = layoutConfig.get<string>(
+                                    "rConsolePath",
+                                    "R"
+                                );
+
+                                let useBracketedPaste = false;
+                                if (rConsoleType === "arf/radian") {
+                                    useBracketedPaste = true;
+                                } else if (rConsoleType === "Standard R") {
+                                    useBracketedPaste = false;
+                                } else {
+                                    useBracketedPaste =
+                                        rConsolePath
+                                            .toLowerCase()
+                                            .includes("radian") ||
+                                        rConsolePath
+                                            .toLowerCase()
+                                            .includes("arf") ||
+                                        getRPath()
+                                            .toLowerCase()
+                                            .includes("radian") ||
+                                        getRPath()
+                                            .toLowerCase()
+                                            .includes("arf");
+                                }
+
+                                if (useBracketedPaste) {
+                                    term.sendText(
+                                        `\x1b[200~${textToSend}\x1b[201~`,
+                                        true
+                                    );
+                                } else {
+                                    term.sendText(textToSend);
+                                }
                             } else {
                                 vscode.window.showErrorMessage(
                                     "R Console terminal not found. Please activate the layout first."
@@ -1151,7 +1196,13 @@ export class ToolsPanel {
                             const btnInClone = clone.querySelector('.run-code-btn');
                             if (btnInClone) btnInClone.remove();
                             const codeText = clone.textContent || '';
-                            if (codeText) vscode.postMessage({ type: 'runCode', query: codeText });
+                            let pkgName = '';
+                            const titleEl = document.querySelector('.help-top-title');
+                            if (titleEl && titleEl.textContent) {
+                                const match = titleEl.textContent.match(/\\{([^}]+)\\}/);
+                                if (match) pkgName = match[1];
+                            }
+                            if (codeText) vscode.postMessage({ type: 'runCode', query: codeText, package: pkgName });
                         });
                         pre.appendChild(btn);
                     });

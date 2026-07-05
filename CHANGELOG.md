@@ -7,6 +7,12 @@ All notable changes to the R Lab extension will be documented in this file.
 ### Added
 
 - Console Type Selector: Added `arf` support to the `r-lab.rConsoleType` setting (now `arf/radian`) to explicitly enforce bracketed paste for arf users utilizing shell aliases, preventing multiline execution errors.
+- Settings Decoupling: The "Auto Detect" console logic is now 100% standalone and no longer relies on reading the `r.bracketedPaste` setting from the external `vscode-R` extension, preventing corrupted console states caused by leftover user configurations.
+
+### Fixed
+
+- Help Panel: The "Run" button in help documentation now automatically extracts and auto-loads the required package via `library()` before execution.
+- Help Panel: The "Run" button now perfectly mimics the terminal bracketed-paste configurations (including `arf/radian` settings) to safely wrap multi-line statements in ANSI escape sequences, preventing syntax errors in Python-based consoles.
 
 ## [0.4.0] - 2026-06-11
 

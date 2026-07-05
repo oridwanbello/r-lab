@@ -42,7 +42,7 @@
                         "arf/radian"
                     ],
                     "default": "Auto Detect",
-                    "description": "Select the type of R console you are using. 'Auto Detect' will check vscode-R's native 'r.bracketedPaste' setting and guess based on the path. Set explicitly to 'arf/radian' to enforce bracketed paste."
+                    "description": "Select the type of R console you are using. 'Auto Detect' will guess based on the path. Set explicitly to 'arf/radian' to enforce bracketed paste, or 'Standard R' to disable it."
                 },
                 "r-lab.rConsolePath": {
                     "type": "string",
