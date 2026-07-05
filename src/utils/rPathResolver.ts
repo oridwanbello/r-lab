@@ -153,7 +153,7 @@ function _setPaths(resolvedRPath: string) {
     } else if (/^R(\.exe)?$/i.test(exePath)) {
         cachedRscriptPath = exePath.replace(/^R(\.exe)?$/i, "Rscript$1");
     } else {
-        // If it's something like 'radian', we just fallback to Rscript
+        // If it's something like 'radian' or 'arf', we just fallback to Rscript
         cachedRscriptPath = "Rscript";
     }
 }

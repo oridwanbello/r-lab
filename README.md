@@ -26,16 +26,16 @@ Bring the cohesive development experience of RStudio to VS Code with a single cl
 
 ## Key Settings & Commands
 
-| Feature                             | Description                                                                                                                              |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `r-lab.rConsoleType`                | Select console type (`Auto Detect`, `Standard R`, `Radian`) to enforce bracketed paste.                                                  |
-| `r-lab.rConsolePath`                | Path or command for the R Console terminal (default: `"R"`).                                                                             |
-| `r-lab.restoreCustomPanelPositions` | If true, restores panels to custom dragged locations instead of strict 3-pane.                                                           |
-| `r-lab.protectLayoutTabs`           | Automatically restores accidentally closed R Lab webview tabs and the owned shell Terminal while the layout is active. Defaults to true. |
-| `r-lab.plotOutputDir`               | Custom directory for R Lab plot images. Defaults to `.R-lab/plots` in the workspace or home directory.                                   |
-| `Toggle R Lab`                      | Activate or deactivate the 3-pane development environment.                                                                               |
-| `Maximize Top Pane`                 | Maximize the R Console / Tools pane and minimize the bottom-right panels.                                                                |
-| `Restore Pane Split`                | Restore the standard split between the top-right and bottom-right panes.                                                                 |
+| Feature                             | Description                                                                                                                                                                                    |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `r-lab.rConsoleType`                | Select console type (`Auto Detect`, `Standard R`, `arf/radian`) to enforce bracketed paste.                                                                                                    |
+| `r-lab.rConsolePath`                | Command or full path for the R Console terminal. Supports names (if on PATH), absolute paths, and inline flags (e.g., `radian --no-history`, `arf --with-r-version 4.6.0`). Defaults to `"R"`. |
+| `r-lab.restoreCustomPanelPositions` | If true, restores panels to custom dragged locations instead of strict 3-pane.                                                                                                                 |
+| `r-lab.protectLayoutTabs`           | Automatically restores accidentally closed R Lab webview tabs and the owned shell Terminal while the layout is active. Defaults to true.                                                       |
+| `r-lab.plotOutputDir`               | Custom directory for R Lab plot images. Defaults to `.R-lab/plots` in the workspace or home directory.                                                                                         |
+| `Toggle R Lab`                      | Activate or deactivate the 3-pane development environment.                                                                                                                                     |
+| `Maximize Top Pane`                 | Maximize the R Console / Tools pane and minimize the bottom-right panels.                                                                                                                      |
+| `Restore Pane Split`                | Restore the standard split between the top-right and bottom-right panes.                                                                                                                       |
 
 ## Contributing
 

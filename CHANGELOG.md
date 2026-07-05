@@ -2,6 +2,12 @@
 
 All notable changes to the R Lab extension will be documented in this file.
 
+## [0.4.1] - Unreleased
+
+### Added
+
+- Console Type Selector: Added `arf` support to the `r-lab.rConsoleType` setting (now `arf/radian`) to explicitly enforce bracketed paste for arf users utilizing shell aliases, preventing multiline execution errors.
+
 ## [0.4.0] - 2026-06-11
 
 ### Added
@@ -33,8 +39,8 @@ All notable changes to the R Lab extension will be documented in this file.
 - Multi-Pane Plots: Fixed an issue where complex Base R plots using `layout()` (like `filled.contour`) were improperly split and saved as multiple partial plots by implementing a strict `par("page")` check in the plot device hook.
 - Windows Blank Plot: Fixed a bug where the very first plot generated on Windows would often render as a blank white screen by switching the internal background device router to `pdf(file=NULL)`.
 - Race Conditions: Resolved latent race conditions in the file watchers:
-  - Added deterministic file sorting and double duplicate-guards to the Visuals tab's Plots subtab to prevent out-of-order histories and duplicate entries on fast filesystems.
-  - Implemented an atomic `.workspace_meta.txt` completion signal to prevent the Workspace Panel from attempting to read partially-flushed R data files.
+    - Added deterministic file sorting and double duplicate-guards to the Visuals tab's Plots subtab to prevent out-of-order histories and duplicate entries on fast filesystems.
+    - Implemented an atomic `.workspace_meta.txt` completion signal to prevent the Workspace Panel from attempting to read partially-flushed R data files.
 - Interactive Widgets & Plots Sync: Fixed skipped plot indexing. Widgets now use a single placeholder in the Plot Gallery and are deleted only from the Viewer tab.
 - Layout Robustness: Fixed "No text editor active" errors during panel moves, and ensured popped-out panels return exactly to their original grid slots.
 - Viewer History: Fixed a UI state bug causing the Viewer tab to display blank frames when scrolling through history.
