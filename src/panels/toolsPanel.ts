@@ -94,6 +94,7 @@ export class ToolsPanel {
                 file?: string;
                 line?: number;
                 query?: string;
+                package?: string;
             }) => {
                 switch (msg.type) {
                     case "switchTab":
@@ -139,7 +140,7 @@ export class ToolsPanel {
 
                                 let textToSend = msg.query;
                                 if (msg.package && msg.package !== "base") {
-                                    textToSend = `library(${msg.package})\n${textToSend}`;
+                                    textToSend = `suppressPackageStartupMessages(require(${msg.package}, quietly = TRUE))\n${textToSend}`;
                                 }
 
                                 const layoutConfig =
