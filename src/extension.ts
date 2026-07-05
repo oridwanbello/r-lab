@@ -1,10 +1,16 @@
-import * as vscode from 'vscode';
-import { registerLayoutCommand, resetStaleLayout, fireImmediateLayoutReset, collapseLayoutForShutdown } from './layout/layoutManager';
-import { initializeRPathResolver } from './utils/rPathResolver';
-import { PlotsPanel } from './panels/plotsPanel';
+import * as vscode from "vscode";
+import {
+    registerLayoutCommand,
+    resetStaleLayout,
+    fireImmediateLayoutReset,
+    collapseLayoutForShutdown,
+    getRConsoleTerminal,
+} from "./layout/layoutManager";
+import { initializeRPathResolver } from "./utils/rPathResolver";
+import { PlotsPanel } from "./panels/plotsPanel";
 
 export async function activate(context: vscode.ExtensionContext) {
-    console.log('R Lab extension is now active.');
+    console.log("R Lab extension is now active.");
 
     // Immediate layout guard (fire-and-forget)
     fireImmediateLayoutReset(context);
@@ -14,9 +20,28 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Re-resolve if R configuration changes
     context.subscriptions.push(
-        vscode.workspace.onDidChangeConfiguration(e => {
-            if (e.affectsConfiguration('r-lab.rConsolePath') || e.affectsConfiguration('r')) {
+        vscode.workspace.onDidChangeConfiguration(async (e) => {
+            const pathChanged =
+                e.affectsConfiguration("r-lab.rConsolePath") ||
+                e.affectsConfiguration("r");
+            const typeChanged = e.affectsConfiguration("r-lab.rConsoleType");
+
+            if (pathChanged) {
                 initializeRPathResolver();
+            }
+
+            if ((pathChanged || typeChanged) && getRConsoleTerminal()) {
+                const selection = await vscode.window.showInformationMessage(
+                    "R Console settings have changed. Restart R Lab to apply immediately?",
+                    "Restart Now",
+                    "Apply Next Session"
+                );
+                if (selection === "Restart Now") {
+                    await vscode.commands.executeCommand("r-lab.toggleLayout");
+                    setTimeout(() => {
+                        vscode.commands.executeCommand("r-lab.toggleLayout");
+                    }, 500);
+                }
             }
         })
     );
@@ -26,9 +51,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Register Webview Serializers to support tearing off tabs into native OS floating windows
     vscode.window.registerWebviewPanelSerializer(PlotsPanel.viewType, {
-        async deserializeWebviewPanel(webviewPanel: vscode.WebviewPanel, state: any) {
+        async deserializeWebviewPanel(
+            webviewPanel: vscode.WebviewPanel,
+            state: any
+        ) {
             PlotsPanel.revive(webviewPanel, context.extensionUri);
-        }
+        },
     });
 
     // Full async stale layout cleanup

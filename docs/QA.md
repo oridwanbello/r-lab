@@ -65,3 +65,9 @@ Goal: Ensure webviews can float and restore without breaking VS Code execution c
 - [ ] Focus Stealing Prevention: After generating a plot or popping a panel out, immediately press `Cmd+Enter` (or `Ctrl+Enter`) on a line of code. Ensure `vscode-R` executes the code and does NOT throw a "No active Text editor" error.
 - [ ] Subtab State Retention: Open the Visuals tab and switch the subtab to 'Viewer'. Close the Workspace tab to trigger a partial layout respawn (`ensureLayoutCompleteness`). Verify the Visuals tab remains active on the 'Viewer' subtab and does not reset to 'Plots'.
 - [ ] Pop-out/Restore Button Sync: Open the Visuals tab. Click 'Pop-out to Main Editor'. Switch between the 'Plots' and 'Viewer' subtabs in the popped-out editor tab, and verify that the restoration/pop-out action button icon and tooltips are correctly synchronized on both subtabs.
+
+### 7. Tools Panel
+
+Goal: Ensure tools and help features load correctly and execute code blocks successfully.
+
+- [ ] Help Panel Bracketed Paste & Autoload: Set `r-lab.rConsoleType` to `arf/radian`. Open the Tools panel, switch to the R Help tab, and search for `filter` (select the `dplyr` package). Scroll down to the Examples section and click the `Run` button on a multi-line code block. Verify that `suppressPackageStartupMessages(require(dplyr, quietly = TRUE))` is prepended to the command, the text is wrapped in bracketed paste escape sequences, and it executes in the console without a syntax error.

@@ -2,7 +2,7 @@
 
 All notable changes to the R Lab extension will be documented in this file.
 
-## [0.4.1] - Unreleased
+## [0.4.1] - 2026-07-05
 
 ### Added
 
