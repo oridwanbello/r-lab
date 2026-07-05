@@ -1,11 +1,11 @@
-import * as vscode from 'vscode';
-import { getNonce } from '../utils/webviewUtils';
-import { recordLayoutFocus } from '../layout/layoutManager';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import { execFile } from 'child_process';
-import { getRscriptPath } from '../utils/rPathResolver';
+import * as vscode from "vscode";
+import { getNonce } from "../utils/webviewUtils";
+import { recordLayoutFocus } from "../layout/layoutManager";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
+import { execFile } from "child_process";
+import { getRscriptPath } from "../utils/rPathResolver";
 
 interface VariableInfo {
     name: string;
@@ -19,10 +19,10 @@ interface PackageInfo {
     name: string;
     title: string;
     version: string;
-    status: 'attached' | 'loaded' | 'none';
+    status: "attached" | "loaded" | "none";
 }
 
-export type WorkspaceTab = 'env' | 'packages' | 'attached';
+export type WorkspaceTab = "env" | "packages" | "attached";
 
 export interface WorkspaceState {
     activeTab?: WorkspaceTab;
@@ -30,7 +30,7 @@ export interface WorkspaceState {
 
 export class WorkspacePanel {
     public static currentPanel: WorkspacePanel | undefined;
-    public static readonly viewType = 'r-lab.workspacePanel';
+    public static readonly viewType = "r-lab.workspacePanel";
     public static lastClosedState: WorkspaceState | undefined;
 
     private readonly _panel: vscode.WebviewPanel;
@@ -39,12 +39,12 @@ export class WorkspacePanel {
     private _attachedNamespaces: string[] = [];
     private _packages: PackageInfo[] = [];
     private _isLoading = false;
-    private _errorMessage = '';
+    private _errorMessage = "";
     private _autoRefreshInterval?: ReturnType<typeof setInterval>;
     private _disposables: vscode.Disposable[] = [];
     private _onRequestDataView?: (varName: string) => void;
     private _htmlSet = false;
-    private _activeTab: WorkspaceTab = 'env';
+    private _activeTab: WorkspaceTab = "env";
 
     public static createOrShow(
         extensionUri: vscode.Uri,
@@ -60,7 +60,7 @@ export class WorkspacePanel {
 
         const panel = vscode.window.createWebviewPanel(
             WorkspacePanel.viewType,
-            'Workspace',
+            "Workspace",
             { viewColumn: column, preserveFocus: true },
             {
                 enableScripts: true,
@@ -69,7 +69,11 @@ export class WorkspacePanel {
                 retainContextWhenHidden: true,
             }
         );
-        panel.iconPath = vscode.Uri.joinPath(extensionUri, 'resources', 'blank.svg');
+        panel.iconPath = vscode.Uri.joinPath(
+            extensionUri,
+            "resources",
+            "blank.svg"
+        );
 
         WorkspacePanel.currentPanel = new WorkspacePanel(panel);
         return WorkspacePanel.currentPanel;
@@ -84,29 +88,40 @@ export class WorkspacePanel {
         this._panel.onDidChangeViewState(
             (e) => {
                 if (e.webviewPanel.active) {
-                    recordLayoutFocus('Workspace', e.webviewPanel.viewColumn);
+                    recordLayoutFocus("Workspace", e.webviewPanel.viewColumn);
                 }
                 this._updateMinimizedState();
-                if (e.webviewPanel.visible) { this._refreshWorkspace(); }
+                if (e.webviewPanel.visible) {
+                    this._refreshWorkspace();
+                }
             },
             null,
             this._disposables
         );
 
         this._panel.webview.onDidReceiveMessage(
-            async (msg: { type: string; varName?: string; pkgName?: string; tab?: WorkspaceTab }) => {
+            async (msg: {
+                type: string;
+                varName?: string;
+                pkgName?: string;
+                tab?: WorkspaceTab;
+            }) => {
                 switch (msg.type) {
-                    case 'switchTab':
-                        if (msg.tab === 'env' || msg.tab === 'packages' || msg.tab === 'attached') {
+                    case "switchTab":
+                        if (
+                            msg.tab === "env" ||
+                            msg.tab === "packages" ||
+                            msg.tab === "attached"
+                        ) {
                             this._activeTab = msg.tab;
                         }
                         break;
-                    case 'ready':
+                    case "ready":
                         this._updateMinimizedState();
-                        if (this._activeTab !== 'env') {
+                        if (this._activeTab !== "env") {
                             this._panel.webview.postMessage({
-                                command: 'restoreTab',
-                                activeTab: this._activeTab
+                                command: "restoreTab",
+                                activeTab: this._activeTab,
                             });
                         }
                         await this._refreshWorkspace();
@@ -114,38 +129,50 @@ export class WorkspacePanel {
                             this._fetchInstalledPackages();
                         }
                         break;
-                    case 'refresh':
+                    case "refresh":
                         await this._refreshWorkspace();
                         break;
-                    case 'viewData':
+                    case "viewData":
                         if (msg.varName && this._onRequestDataView) {
                             this._onRequestDataView(msg.varName);
                         }
                         break;
-                    case 'attachPackage':
-                        if (msg.pkgName) { this._sendToRConsole(`library(${JSON.stringify(msg.pkgName)}, character.only = TRUE)`); }
-                        break;
-                    case 'detachPackage':
+                    case "attachPackage":
                         if (msg.pkgName) {
-                            const packageName = JSON.stringify(`package:${msg.pkgName}`);
-                            if (msg.pkgName === 'later') {
+                            this._sendToRConsole(
+                                `library(${JSON.stringify(msg.pkgName)}, character.only = TRUE)`
+                            );
+                        }
+                        break;
+                    case "detachPackage":
+                        if (msg.pkgName) {
+                            const packageName = JSON.stringify(
+                                `package:${msg.pkgName}`
+                            );
+                            if (msg.pkgName === "later") {
                                 this._sendToRConsole(`detach(${packageName})`);
                             } else {
-                                this._sendToRConsole(`detach(${packageName}, unload = TRUE)`);
+                                this._sendToRConsole(
+                                    `detach(${packageName}, unload = TRUE)`
+                                );
                             }
                         }
                         break;
-                    case 'removeVariable':
+                    case "removeVariable":
                         if (msg.varName) {
-                            this._sendToRConsole(`rm(list = ${JSON.stringify(msg.varName)}, envir = .GlobalEnv)`);
+                            this._sendToRConsole(
+                                `rm(list = ${JSON.stringify(msg.varName)}, envir = .GlobalEnv)`
+                            );
                             await this._refreshWorkspace();
                         }
                         break;
-                    case 'clearWorkspace':
-                        this._sendToRConsole('.rm(list = ls(envir = .GlobalEnv, all.names = TRUE), envir = .GlobalEnv)');
+                    case "clearWorkspace":
+                        this._sendToRConsole(
+                            ".rm(list = ls(envir = .GlobalEnv, all.names = TRUE), envir = .GlobalEnv)"
+                        );
                         await this._refreshWorkspace();
                         break;
-                    case 'refreshPackages':
+                    case "refreshPackages":
                         await this._fetchInstalledPackages();
                         break;
                 }
@@ -172,16 +199,26 @@ export class WorkspacePanel {
 
     public saveState(): WorkspaceState {
         return {
-            activeTab: this._activeTab
+            activeTab: this._activeTab,
         };
     }
 
     public loadState(state: WorkspaceState | undefined): void {
-        if (!state) { return; }
-        this._activeTab = state.activeTab === 'packages' ? 'packages' : (state.activeTab === 'attached' ? 'attached' : 'env');
+        if (!state) {
+            return;
+        }
+        this._activeTab =
+            state.activeTab === "packages"
+                ? "packages"
+                : state.activeTab === "attached"
+                  ? "attached"
+                  : "env";
     }
 
-    public reveal(column?: vscode.ViewColumn, preserveFocus: boolean = true): void {
+    public reveal(
+        column?: vscode.ViewColumn,
+        preserveFocus: boolean = true
+    ): void {
         this._panel.reveal(column, preserveFocus);
     }
 
@@ -193,9 +230,14 @@ export class WorkspacePanel {
     }
 
     private _updateMinimizedState(): void {
-        const isPoppedOut = this._panel.viewColumn !== vscode.ViewColumn.Three && this._panel.viewColumn !== undefined;
+        const isPoppedOut =
+            this._panel.viewColumn !== vscode.ViewColumn.Three &&
+            this._panel.viewColumn !== undefined;
         const actualMinimized = isPoppedOut ? false : this._isMinimized;
-        this._panel.webview.postMessage({ command: 'setMinimized', minimized: actualMinimized });
+        this._panel.webview.postMessage({
+            command: "setMinimized",
+            minimized: actualMinimized,
+        });
     }
 
     public forceRefresh(): void {
@@ -205,7 +247,7 @@ export class WorkspacePanel {
     /** Send a command to the R Console terminal */
     private _sendToRConsole(command: string): void {
         try {
-            const { getRConsoleTerminal } = require('../layout/layoutManager');
+            const { getRConsoleTerminal } = require("../layout/layoutManager");
             const terminal = getRConsoleTerminal();
             if (terminal) {
                 terminal.sendText(command, true);
@@ -214,40 +256,35 @@ export class WorkspacePanel {
     }
 
     // ----- Internal R variable filter -----
-    private static readonly INTERNAL_VAR_PATTERN = /^\.rlab_|^\.r_lab|^\.rm$|^null_dev$|^\.First$|^\.Last$|^View$/;
+    private static readonly INTERNAL_VAR_PATTERN =
+        /^\.rlab_|^\.r_lab|^\.rm$|^null_dev$|^\.First$|^\.Last$|^View$/;
 
     /** Filter out internal R Lab variables so they never appear in the Environment tab */
     private _filterInternalVars(variables: VariableInfo[]): VariableInfo[] {
-        return variables.filter(v => !WorkspacePanel.INTERNAL_VAR_PATTERN.test(v.name));
+        return variables.filter(
+            (v) => !WorkspacePanel.INTERNAL_VAR_PATTERN.test(v.name)
+        );
     }
 
-    // ----- Refresh logic (3-tier priority) -----
+    // ----- Refresh logic (2-tier priority) -----
 
     private async _refreshWorkspace(): Promise<void> {
-        if (this._variables.length === 0 && this._loadedNamespaces.length === 0) {
+        if (
+            this._variables.length === 0 &&
+            this._loadedNamespaces.length === 0
+        ) {
             this._isLoading = true;
             this._render();
         }
 
-        this._errorMessage = '';
+        this._errorMessage = "";
 
-        // Priority 1: Try the vscode-R session watcher
-        const vscodeRData = this._pollVscodeR();
-
-        if (vscodeRData && vscodeRData.variables.length > 0) {
-            this._variables = this._filterInternalVars(vscodeRData.variables);
-            this._loadedNamespaces = vscodeRData.loadedNamespaces;
-            this._attachedNamespaces = vscodeRData.attachedNamespaces;
-            this._updatePackageStatuses();
-            this._isLoading = false;
-            this._render();
-            return;
-        }
-
-        // Priority 2: Read the auto-updated watcher file
+        // Priority 1: Read the auto-updated watcher file (R Lab custom watcher)
         const watcherResult = this._readWatcherFile();
         if (watcherResult) {
-            this._variables = this._filterInternalVars(watcherResult.variables || []);
+            this._variables = this._filterInternalVars(
+                watcherResult.variables || []
+            );
             this._loadedNamespaces = watcherResult.loadedNamespaces || [];
             this._attachedNamespaces = watcherResult.attachedNamespaces || [];
             this._updatePackageStatuses();
@@ -349,33 +386,37 @@ tryCatch({
         try {
             const raw = await this._runRscript(rscriptPath, rScript);
             // Extract JSON from potential R warnings
-            const jsonStart = raw.indexOf('{');
-            const jsonEnd = raw.lastIndexOf('}');
-            if (jsonStart === -1 || jsonEnd === -1) { throw new Error('Invalid JSON response'); }
+            const jsonStart = raw.indexOf("{");
+            const jsonEnd = raw.lastIndexOf("}");
+            if (jsonStart === -1 || jsonEnd === -1) {
+                throw new Error("Invalid JSON response");
+            }
             const cleanJson = raw.substring(jsonStart, jsonEnd + 1);
             const parsed = JSON.parse(cleanJson);
 
-            if (parsed.error === 'waiting_for_live_session') {
-                this._errorMessage = '';
+            if (parsed.error === "waiting_for_live_session") {
+                this._errorMessage = "";
             } else if (parsed.error) {
                 this._errorMessage = parsed.error;
             } else {
-                this._variables = this._filterInternalVars(parsed.variables || []);
+                this._variables = this._filterInternalVars(
+                    parsed.variables || []
+                );
                 this._loadedNamespaces = parsed.loadedNamespaces || [];
                 this._attachedNamespaces = parsed.attachedNamespaces || [];
                 this._updatePackageStatuses();
             }
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : String(err);
-            if (msg.includes('waiting_for_live_session')) {
+            if (msg.includes("waiting_for_live_session")) {
                 // Ignore gracefully
-            } else if (msg.includes('jsonlite')) {
-                this._errorMessage = 'R package "jsonlite" is required for static loading.\nRun: install.packages("jsonlite")';
-            } else if (msg.includes('ENOENT') || msg.includes('not found')) {
+            } else if (msg.includes("jsonlite")) {
                 this._errorMessage =
-                    'Could not find Rscript on PATH.\n' +
-                    'Enable the vscode-R session watcher for live environment data,\n' +
-                    'or ensure Rscript is available on your system PATH.';
+                    'R package "jsonlite" is required for static loading.\nRun: install.packages("jsonlite")';
+            } else if (msg.includes("ENOENT") || msg.includes("not found")) {
+                this._errorMessage =
+                    "Could not find Rscript on PATH.\n" +
+                    "Ensure Rscript is available on your system PATH to enable the static environment viewer.";
             } else {
                 this._errorMessage = msg;
             }
@@ -387,23 +428,27 @@ tryCatch({
 
     /** Update package statuses from loaded/attached namespace lists */
     private _updatePackageStatuses(): void {
-        if (this._packages.length === 0) { return; }
+        if (this._packages.length === 0) {
+            return;
+        }
 
         const attachedSet = new Set<string>();
         for (const ns of this._attachedNamespaces) {
             const m = ns.match(/^package:(.+)$/);
-            if (m) { attachedSet.add(m[1]); }
+            if (m) {
+                attachedSet.add(m[1]);
+            }
         }
 
         const loadedSet = new Set(this._loadedNamespaces);
 
         for (const pkg of this._packages) {
             if (attachedSet.has(pkg.name)) {
-                pkg.status = 'attached';
+                pkg.status = "attached";
             } else if (loadedSet.has(pkg.name)) {
-                pkg.status = 'loaded';
+                pkg.status = "loaded";
             } else {
-                pkg.status = 'none';
+                pkg.status = "none";
             }
         }
     }
@@ -420,16 +465,19 @@ tryCatch({
 
         try {
             const raw = await this._runRscript(rscriptPath, script);
-            const lines = raw.trim().split('\n').filter(l => l.trim());
+            const lines = raw
+                .trim()
+                .split("\n")
+                .filter((l) => l.trim());
             const pkgs: PackageInfo[] = [];
             for (const line of lines) {
-                const parts = line.split('\t');
+                const parts = line.split("\t");
                 if (parts.length >= 2) {
                     pkgs.push({
                         name: parts[0].trim(),
                         version: parts[1].trim(),
-                        title: (parts[2] || '').trim(),
-                        status: 'none'
+                        title: (parts[2] || "").trim(),
+                        status: "none",
                     });
                 }
             }
@@ -448,38 +496,43 @@ tryCatch({
         loadedNamespaces: string[];
         attachedNamespaces: string[];
     } | null {
-        const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
+        const wf =
+            vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir();
 
-        const outDir = path.join(wf, '.R-lab');
-        const metaFile = path.join(outDir, '.workspace_meta.txt');
-        const varsFile = path.join(outDir, '.workspace_vars.tsv');
-        const loadedFile = path.join(outDir, '.workspace_loaded.tsv');
-        const attachedFile = path.join(outDir, '.workspace_attached.tsv');
+        const outDir = path.join(wf, ".R-lab");
+        const metaFile = path.join(outDir, ".workspace_meta.txt");
+        const varsFile = path.join(outDir, ".workspace_vars.tsv");
+        const loadedFile = path.join(outDir, ".workspace_loaded.tsv");
+        const attachedFile = path.join(outDir, ".workspace_attached.tsv");
 
         // Check for the atomic signal file first. If it's missing, R is actively writing the TSVs.
         if (!fs.existsSync(metaFile)) {
             return null;
         }
 
-        if (!fs.existsSync(varsFile) && !fs.existsSync(loadedFile) && !fs.existsSync(attachedFile)) {
+        if (
+            !fs.existsSync(varsFile) &&
+            !fs.existsSync(loadedFile) &&
+            !fs.existsSync(attachedFile)
+        ) {
             return null;
         }
 
         try {
             const variables: VariableInfo[] = [];
             if (fs.existsSync(varsFile)) {
-                const varsRaw = fs.readFileSync(varsFile, 'utf8').trim();
+                const varsRaw = fs.readFileSync(varsFile, "utf8").trim();
                 if (varsRaw) {
-                    const lines = varsRaw.replace(/\r/g, '').split('\n');
+                    const lines = varsRaw.replace(/\r/g, "").split("\n");
                     for (const line of lines) {
-                        const parts = line.split('\t');
+                        const parts = line.split("\t");
                         if (parts.length >= 5) {
                             variables.push({
                                 name: parts[0],
                                 type: parts[1],
                                 size: parts[2],
                                 preview: parts[3],
-                                isDataFrame: parts[4] === 'true'
+                                isDataFrame: parts[4] === "true",
                             });
                         }
                     }
@@ -488,17 +541,23 @@ tryCatch({
 
             const loadedNamespaces: string[] = [];
             if (fs.existsSync(loadedFile)) {
-                const loadedRaw = fs.readFileSync(loadedFile, 'utf8').trim();
+                const loadedRaw = fs.readFileSync(loadedFile, "utf8").trim();
                 if (loadedRaw) {
-                    loadedNamespaces.push(...loadedRaw.replace(/\r/g, '').split('\n'));
+                    loadedNamespaces.push(
+                        ...loadedRaw.replace(/\r/g, "").split("\n")
+                    );
                 }
             }
 
             const attachedNamespaces: string[] = [];
             if (fs.existsSync(attachedFile)) {
-                const attachedRaw = fs.readFileSync(attachedFile, 'utf8').trim();
+                const attachedRaw = fs
+                    .readFileSync(attachedFile, "utf8")
+                    .trim();
                 if (attachedRaw) {
-                    attachedNamespaces.push(...attachedRaw.replace(/\r/g, '').split('\n'));
+                    attachedNamespaces.push(
+                        ...attachedRaw.replace(/\r/g, "").split("\n")
+                    );
                 }
             }
 
@@ -508,102 +567,17 @@ tryCatch({
         }
     }
 
-    private _pollVscodeR(): {
-        variables: VariableInfo[];
-        loadedNamespaces: string[];
-        attachedNamespaces: string[];
-    } | null {
-        const wf = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        if (!wf) {return null;}
-
-        const vsRDir = path.join(wf, '.vscode', 'vscode-R');
-        if (!fs.existsSync(vsRDir)) {return null;}
-
-        try {
-            const activeJsonPath = path.join(vsRDir, 'active.json');
-            let sessionDir = '';
-
-            if (fs.existsSync(activeJsonPath)) {
-                const activeData = JSON.parse(fs.readFileSync(activeJsonPath, 'utf8'));
-                if (activeData.pid) {
-                    sessionDir = path.join(vsRDir, activeData.pid.toString());
-                }
-            } else {
-                const dirs = fs.readdirSync(vsRDir, { withFileTypes: true })
-                    .filter(d => d.isDirectory())
-                    .map(d => ({
-                        name: d.name,
-                        time: fs.statSync(path.join(vsRDir, d.name)).mtimeMs
-                    }))
-                    .sort((a, b) => b.time - a.time);
-
-                if (dirs.length > 0) {
-                    sessionDir = path.join(vsRDir, dirs[0].name);
-                }
-            }
-
-            if (!sessionDir || !fs.existsSync(sessionDir)) {return null;}
-
-            const variables: VariableInfo[] = [];
-            const globalEnvPath = path.join(sessionDir, 'globalenv.json');
-            if (fs.existsSync(globalEnvPath)) {
-                const rawEnv = fs.readFileSync(globalEnvPath, 'utf8');
-                const env = JSON.parse(rawEnv);
-
-                for (const key of Object.keys(env)) {
-                    const item = env[key];
-                    variables.push({
-                        name: key,
-                        type: item.class ? (Array.isArray(item.class) ? item.class.join(', ') : item.class) : 'unknown',
-                        size: item.dim ? item.dim.join(' x ') : (item.length ? String(item.length) : '1'),
-                        preview: item.str || '',
-                        isDataFrame: item.class && (item.class.includes('data.frame') || item.class.includes('matrix') || (item.class.includes('array') && item.dim && item.dim.length === 3))
-                    });
-                }
-            }
-
-            let loadedNamespaces: string[] = [];
-            const loadedPath = path.join(sessionDir, 'loaded_namespaces.json');
-            if (fs.existsSync(loadedPath)) {
-                try {
-                    const raw = fs.readFileSync(loadedPath, 'utf8');
-                    const parsed = JSON.parse(raw);
-                    if (Array.isArray(parsed)) {
-                        loadedNamespaces = parsed;
-                    }
-                } catch {}
-            }
-
-            let attachedNamespaces: string[] = [];
-            const searchPath = path.join(sessionDir, 'search.json');
-            if (fs.existsSync(searchPath)) {
-                try {
-                    const raw = fs.readFileSync(searchPath, 'utf8');
-                    const parsed = JSON.parse(raw);
-                    if (Array.isArray(parsed)) {
-                        attachedNamespaces = parsed;
-                    }
-                } catch {}
-            }
-
-            if (variables.length > 0 || loadedNamespaces.length > 0 || attachedNamespaces.length > 0) {
-                return { variables, loadedNamespaces, attachedNamespaces };
-            }
-        } catch {
-            // Ignore parse errors
-        }
-        return null;
-    }
-
     private _runRscript(rscriptPath: string, script: string): Promise<string> {
         return new Promise((resolve, reject) => {
             execFile(
                 rscriptPath,
-                ['-e', script],
+                ["-e", script],
                 {
                     timeout: 30000,
                     maxBuffer: 1024 * 1024,
-                    cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? os.homedir(),
+                    cwd:
+                        vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ??
+                        os.homedir(),
                 },
                 (error, stdout, stderr) => {
                     if (error) {
@@ -613,7 +587,7 @@ tryCatch({
                         reject(new Error(detail));
                         return;
                     }
-                    resolve(stdout || '{}');
+                    resolve(stdout || "{}");
                 }
             );
         });
@@ -630,16 +604,20 @@ tryCatch({
         }
 
         // Sort variables alphabetically to prevent jitter from R's random ordering
-        const sortedVars = [...this._variables].sort((a, b) => a.name.localeCompare(b.name));
+        const sortedVars = [...this._variables].sort((a, b) =>
+            a.name.localeCompare(b.name)
+        );
 
         // Filter attached objects: exclude internal R environments
-        const attachedObjects = this._attachedNamespaces.filter(ns => {
-            return !ns.match(/^\.GlobalEnv$/) &&
-                   !ns.match(/^package:/) &&
-                   !ns.match(/^Autoloads$/) &&
-                   !ns.match(/^tools:/) &&
-                   !ns.match(/^org:/) &&
-                   !ns.match(/^CheckExEnv$/);
+        const attachedObjects = this._attachedNamespaces.filter((ns) => {
+            return (
+                !ns.match(/^\.GlobalEnv$/) &&
+                !ns.match(/^package:/) &&
+                !ns.match(/^Autoloads$/) &&
+                !ns.match(/^tools:/) &&
+                !ns.match(/^org:/) &&
+                !ns.match(/^CheckExEnv$/)
+            );
         });
 
         const stateToHash = JSON.stringify({
@@ -658,7 +636,7 @@ tryCatch({
         this._lastRenderHash = stateToHash;
 
         this._panel.webview.postMessage({
-            command: 'update',
+            command: "update",
             variables: sortedVars,
             packages: this._packages,
             attachedObjects,
@@ -671,21 +649,29 @@ tryCatch({
         const nonce = getNonce();
 
         // Checkbox SVGs as specified
-        const ICON_UNCHECKED = '<svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>';
-        const ICON_ATTACHED = '<svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="2" fill="currentColor"/><path fill="none" stroke="var(--vscode-editor-background)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M5.5 8.5l2 2 3.5-4"/></svg>';
-        const ICON_LOADED = '<svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="5" y="5" width="6" height="6" rx="1" fill="currentColor"/></svg>';
+        const ICON_UNCHECKED =
+            '<svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>';
+        const ICON_ATTACHED =
+            '<svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="2" fill="currentColor"/><path fill="none" stroke="var(--vscode-editor-background)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M5.5 8.5l2 2 3.5-4"/></svg>';
+        const ICON_LOADED =
+            '<svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="5" y="5" width="6" height="6" rx="1" fill="currentColor"/></svg>';
 
         // Refresh icon (same as Data Viewer)
-        const REFRESH_ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M13.29 8.69a5.33 5.33 0 1 1 -6.62 -5.86c2.6-.67 5.29.67 6.28 3.16" /><path d="M13.33 2.67v3.33h-3.33" /></svg>';
+        const REFRESH_ICON =
+            '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M13.29 8.69a5.33 5.33 0 1 1 -6.62 -5.86c2.6-.67 5.29.67 6.28 3.16" /><path d="M13.33 2.67v3.33h-3.33" /></svg>';
 
         // Eye icon (pristine Feather Icons)
-        const EYE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+        const EYE_ICON =
+            '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
 
-        const TRASH_ICON = '<svg viewBox="0 0 16 16"><path fill="none" d="M9.25,2H6.75a0.25,0.25,0,0,0-0.25,0.25V3h3V2.25A0.25,0.25,0,0,0,9.25,2Z"/><path fill="currentColor" d="M13.5,3H10.5V2.25A1.25,1.25,0,0,0,9.25,1H6.75A1.25,1.25,0,0,0,5.5,2.25V3H2.5a0.5,0.5,0,0,0,0,1H3L3.63,13.53C3.67,14.37,4.31,15,5.13,15h5.75c0.82,0,1.45-.62,1.5-1.47L13,4h0.5a0.5,0.5,0,0,0,0-1ZM6,13H6a0.5,0.5,0,0,1-.5-.48l-0.25-7a0.5,0.5,0,1,1,1-.04l0.25,7A0.5,0.5,0,0,1,6,13ZM8.5,12.5a0.5,0.5,0,0,1-1,0V5.5a0.5,0.5,0,0,1,1,0ZM9.5,3H6.5V2.25a0.25,0.25,0,0,1,.25-.25h2.5a0.25,0.25,0,0,1,.25.25Zm1,9.55a0.5,0.5,0,0,1-.5.45H10a0.5,0.5,0,0,1-.5-.52l0.25-7a0.5,0.5,0,1,1,1,.04Z"/></svg>';
-        const BROOM_ICON = '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.91,1.81L13.85,2.76L10.04,6.57C10.75,7.59 10.85,8.83 10.25,9.63L6.04,5.41C6.84,4.81 8.07,4.91 9.1,5.63L12.91,1.81M3.95,11.71C2.61,10.37 1.79,8.77 1.57,7.28L4.82,5.89L9.78,10.85L8.39,14.1C6.89,13.87 5.29,13.05 3.95,11.71Z"/></svg>';
+        const TRASH_ICON =
+            '<svg viewBox="0 0 16 16"><path fill="none" d="M9.25,2H6.75a0.25,0.25,0,0,0-0.25,0.25V3h3V2.25A0.25,0.25,0,0,0,9.25,2Z"/><path fill="currentColor" d="M13.5,3H10.5V2.25A1.25,1.25,0,0,0,9.25,1H6.75A1.25,1.25,0,0,0,5.5,2.25V3H2.5a0.5,0.5,0,0,0,0,1H3L3.63,13.53C3.67,14.37,4.31,15,5.13,15h5.75c0.82,0,1.45-.62,1.5-1.47L13,4h0.5a0.5,0.5,0,0,0,0-1ZM6,13H6a0.5,0.5,0,0,1-.5-.48l-0.25-7a0.5,0.5,0,1,1,1-.04l0.25,7A0.5,0.5,0,0,1,6,13ZM8.5,12.5a0.5,0.5,0,0,1-1,0V5.5a0.5,0.5,0,0,1,1,0ZM9.5,3H6.5V2.25a0.25,0.25,0,0,1,.25-.25h2.5a0.25,0.25,0,0,1,.25.25Zm1,9.55a0.5,0.5,0,0,1-.5.45H10a0.5,0.5,0,0,1-.5-.52l0.25-7a0.5,0.5,0,1,1,1,.04Z"/></svg>';
+        const BROOM_ICON =
+            '<svg viewBox="0 0 16 16"><path fill="currentColor" d="M12.91,1.81L13.85,2.76L10.04,6.57C10.75,7.59 10.85,8.83 10.25,9.63L6.04,5.41C6.84,4.81 8.07,4.91 9.1,5.63L12.91,1.81M3.95,11.71C2.61,10.37 1.79,8.77 1.57,7.28L4.82,5.89L9.78,10.85L8.39,14.1C6.89,13.87 5.29,13.05 3.95,11.71Z"/></svg>';
 
         // Paperclip icon (pristine Feather Icons) for attached objects
-        const PAPERCLIP_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-paperclip"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
+        const PAPERCLIP_ICON =
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-paperclip"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -1467,7 +1453,9 @@ tryCatch({
         this._panel.dispose();
         while (this._disposables.length) {
             const d = this._disposables.pop();
-            if (d) { d.dispose(); }
+            if (d) {
+                d.dispose();
+            }
         }
     }
 }

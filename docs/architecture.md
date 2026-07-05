@@ -42,11 +42,10 @@ Each tool is implemented as a WebviewPanel managed by a singleton class pattern.
 
 ### WorkspacePanel
 
-Reads live R session state to display active variables and loaded packages. It operates with a 3-tier fallback priority:
+Reads live R session state to display active variables and loaded packages. It operates with a 2-tier fallback priority:
 
-1. Native `vscode-R` session watcher state files (`globalenv.json`, `search.json`).
-2. R Lab's custom atomic file-watcher logs (`.workspace_meta.txt` and `.tsv` dumps).
-3. A fallback background `Rscript` process that parses `.RData`.
+1. R Lab's custom atomic file-watcher logs (`.workspace_meta.txt` and `.tsv` dumps).
+2. A fallback background `Rscript` process that parses `.RData`.
    It renders the results in a custom HTML webview table, allowing users to view data frames or inspect package attachment states.
 
 ### DataViewerPanel
@@ -64,3 +63,10 @@ Hosts the R Help and Problems surfaces inside one editor tab. The Help subtab ru
 ### Legacy Panels
 
 `PlotsPanel` and `ViewerPanel` still exist as hosted implementation classes inside `VisualsPanel`. The legacy standalone `HelpPanel` and `ProblemsPanel` have been removed, and their logic has been consolidated directly inside `ToolsPanel`. Local HTML widgets are served through an internal localhost file server with path containment checks.
+
+## 5. Dependency Model (vscode-R)
+
+R Lab implements a **soft dependency** architecture with the official `vscode-R` extension:
+
+- **Static Editor Support:** We delegate syntax highlighting, Language Server Protocol (LSP) code intelligence (autocompletion, hover cards, parameter hints), and document diagnostics (Problem markers) to `vscode-R`. This ensures a feature-rich R coding environment in Group 1 without code duplication.
+- **Runtime Session Decoupling:** R Lab is completely independent of `vscode-R`'s active session state and runtime watchers. We run our own R console terminal process and custom `.Rprofile` callbacks, storing state locally (and streaming it in-memory via TCP sockets in v0.5.0). We do not attach to `vscode-R`'s WebSocket connection or parse its JSON-RPC payload, ensuring that future updates to `vscode-R` never break R Lab's session synchronization.

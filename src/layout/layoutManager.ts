@@ -252,21 +252,17 @@ export function registerLayoutCommand(context: vscode.ExtensionContext): void {
         const rConsolePath = layoutConfig.get<string>("rConsolePath", "R");
 
         let useBracketedPaste = false;
-        if (rConsoleType === "Radian") {
+        if (rConsoleType === "arf/radian") {
             useBracketedPaste = true;
         } else if (rConsoleType === "Standard R") {
             useBracketedPaste = false;
         } else {
-            // Auto Detect: check vscode-R's native setting, then fallback to checking path
-            const rConfig = vscode.workspace.getConfiguration("r");
-            const rBracketedPaste = rConfig.get<boolean>(
-                "bracketedPaste",
-                false
-            );
+            // Auto Detect: fallback to checking path
             useBracketedPaste =
-                rBracketedPaste ||
                 rConsolePath.toLowerCase().includes("radian") ||
-                getRPath().toLowerCase().includes("radian");
+                rConsolePath.toLowerCase().includes("arf") ||
+                getRPath().toLowerCase().includes("radian") ||
+                getRPath().toLowerCase().includes("arf");
         }
 
         if (useBracketedPaste) {

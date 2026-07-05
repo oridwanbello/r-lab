@@ -2,6 +2,8 @@
 
 Welcome to the project! This document outlines our development environment setup, codebase architecture, standard operating procedures, and Git workflow. Please read this carefully to ensure your local environment and pull requests meet our professional standards.
 
+Whether you are new to open source or a veteran contributor, please refer to the [How to Contribute to Open Source](https://opensource.guide/how-to-contribute/) guide for helpful tips and best practices.
+
 ---
 
 ## 1. Development Environment Setup
@@ -69,12 +71,12 @@ The project has been refactored into a modular architecture to support the 3-pan
 - `src/extension.ts`: The main entry point.
 - `src/layout/layoutManager.ts`: The core engine that orchestrates the VS Code layout, grid groups, terminal preservation, and protected tab restoration.
 - `src/panels/`: Contains the WebviewPanel singletons for the layout:
-  - `dataViewerPanel.ts`: Renders data frame and matrix tables.
-  - `toolsPanel.ts`: Hosts R Help and Problems in the top-right pane.
-  - `visualsPanel.ts`: Hosts Plots and Viewer in the bottom-right pane.
-  - `plotsPanel.ts`: Implements plot history, export, comparison, and plot image watching inside Visuals.
-  - `viewerPanel.ts`: Implements HTML widgets, Shiny apps, and other `viewer()` outputs inside Visuals.
-  - `workspacePanel.ts`: Renders Global Environment, Packages, and Attached Objects tabs.
+    - `dataViewerPanel.ts`: Renders data frame and matrix tables.
+    - `toolsPanel.ts`: Hosts R Help and Problems in the top-right pane.
+    - `visualsPanel.ts`: Hosts Plots and Viewer in the bottom-right pane.
+    - `plotsPanel.ts`: Implements plot history, export, comparison, and plot image watching inside Visuals.
+    - `viewerPanel.ts`: Implements HTML widgets, Shiny apps, and other `viewer()` outputs inside Visuals.
+    - `workspacePanel.ts`: Renders Global Environment, Packages, and Attached Objects tabs.
 - `src/utils/`: Helper utilities for webviews and R path resolution.
 
 ---
@@ -106,11 +108,11 @@ Our repository enforces strict branch protections on `dev`, `staging`, and `main
 
 To maintain a clean, readable, and verified Git history, we use specific merge strategies depending on the target branch:
 
-| Merge Path                         | Strategy             | Why?                                                                                                                                                     |
-| :--------------------------------- | :------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Feature -> `dev`        | Squash and Merge     | Keeps `dev` history atomic (one commit per feature), hides messy intermediate commits, and allows GitHub to automatically sign the final bundled commit. |
-| `dev` -> `staging`      | Rebase and Merge     | Promotes the exact, clean history from `dev` directly into `staging`.                                                                                    |
-| `staging` -> `main`     | Rebase and Merge     | Ensures `main` matches `staging` exactly.                                                                                                                |
+| Merge Path          | Strategy         | Why?                                                                                                                                                     |
+| :------------------ | :--------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Feature -> `dev`    | Squash and Merge | Keeps `dev` history atomic (one commit per feature), hides messy intermediate commits, and allows GitHub to automatically sign the final bundled commit. |
+| `dev` -> `staging`  | Rebase and Merge | Promotes the exact, clean history from `dev` directly into `staging`.                                                                                    |
+| `staging` -> `main` | Rebase and Merge | Ensures `main` matches `staging` exactly.                                                                                                                |
 
 _Note: Set your GitHub Squash merge message preference to "Pull request title and description" to ensure context is preserved in the commit body._
 
@@ -172,7 +174,7 @@ The Fix (Mac OS):
     ```
 
 3. Configure GPG Agent:
-    Open `~/.gnupg/gpg-agent.conf` and ensure it contains ONLY this line (use your exact path from step 2):
+   Open `~/.gnupg/gpg-agent.conf` and ensure it contains ONLY this line (use your exact path from step 2):
 
     ```text
     pinentry-program /opt/homebrew/bin/pinentry-mac
@@ -191,7 +193,7 @@ The Fix (Mac OS):
     ```
 
 6. Test and Save to Keychain:
-    Run the following in your terminal:
+   Run the following in your terminal:
 
     ```bash
     echo "test" | gpg --clearsign
