@@ -1,9 +1,9 @@
 {
     "name": "r-layout",
     "displayName": "R Lab",
-    "preview": true,
+    "preview": false,
     "description": "RStudio-inspired development environment for R in VS Code",
-    "version": "0.4.1",
+    "version": "0.5.0",
     "publisher": "oridwanbello",
     "icon": "resources/r_logo.png",
     "engines": {
