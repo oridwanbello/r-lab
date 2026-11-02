@@ -22,7 +22,7 @@ Bring the cohesive development experience of RStudio to VS Code with a single cl
 2. Installation: Install R Lab from the VS Code Marketplace or the Open VSX Registry.
 3. Activation & Reactivation: Open a workspace and click `R Lab` in the Status Bar, or run `Toggle R Lab` from the Command Palette to initialize (or return to) the 3-pane layout.
 4. Deactivation: To turn off R Lab and restore your standard editor layout, click `R Lab ●` (the active status indicator showing a filled circle) in the Status Bar, or run `Toggle R Lab` again from the Command Palette.
-5. Execution: For `.R` scripts, click the source icon in the editor title bar to run the entire file, or highlight and run a selected block of code. For `.Rmd`, `.qmd`, or Markdown files, select a code chunk or line and run the selection.
+5. Execution: For `.R` scripts, click the source icon in the editor title bar to run the entire file, or highlight and run a selected block of code. For `.Rmd` or `.qmd` files, select a code chunk or line and run the selection.
 
 ## Key Settings & Commands
 

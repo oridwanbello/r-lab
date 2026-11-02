@@ -1,9 +1,9 @@
 {
     "name": "r-layout",
     "displayName": "R Lab",
-    "preview": true,
+    "preview": false,
     "description": "RStudio-inspired development environment for R in VS Code",
-    "version": "0.4.1",
+    "version": "0.5.0",
     "publisher": "oridwanbello",
     "icon": "resources/r_logo.png",
     "engines": {
@@ -126,22 +126,22 @@
             {
                 "command": "r-lab.runSmart",
                 "key": "cmd+shift+s",
-                "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
+                "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
             },
             {
                 "command": "r-lab.runSmart",
                 "key": "ctrl+shift+s",
-                "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
+                "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
             },
             {
                 "command": "r-lab.runSelection",
                 "key": "cmd+enter",
-                "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
+                "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
             },
             {
                 "command": "r-lab.runSelection",
                 "key": "ctrl+enter",
-                "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto|markdown)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
+                "when": "r-lab.layoutActive && (editorLangId =~ /^(r|rmd|quarto)$/ || activeWebviewPanelId =~ /^r-lab\\./ || terminalFocus)"
             }
         ],
         "menus": {

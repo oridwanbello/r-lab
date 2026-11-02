@@ -316,7 +316,7 @@ export class ToolsPanel {
             `       print_pkg(h_pkg)`,
             `       cat("</main></div>")`,
             `    } else {`,
-            `       cat(paste0("<div class='status-msg'>No documentation found for: <code>", query, "</code></div>"))`,
+            `       cat(paste0("<div class='status-msg'><span>No documentation found for <code>", query, "</code></span></div>"))`,
             `    }`,
             `  }`,
             `}`,
